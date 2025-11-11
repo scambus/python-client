@@ -1,0 +1,110 @@
+site_name: Scambus Python Client
+site_description: Official Python client for Scambus - submit scam reports and subscribe to data streams
+site_author: Scambus Team
+site_url: https://scambus.github.io/scambus-python-client/
+
+repo_name: scambus/scambus-python-client
+repo_url: https://github.com/scambus/scambus-python-client
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
+      - Authentication: getting-started/authentication.md
+  - User Guide:
+      - Journal Entries: user-guide/journal-entries.md
+      - In-Progress Activities: user-guide/in-progress-activities.md
+      - Search: user-guide/search.md
+      - Export Streams: user-guide/streams.md
+      - Case Management: user-guide/cases.md
+      - Media & Evidence: user-guide/media.md
+      - Tags: user-guide/tags.md
+  - API Reference:
+      - ScambusClient: api-reference/client.md
+      - Models: api-reference/models.md
+      - Exceptions: api-reference/exceptions.md
+  - CLI Reference:
+      - Overview: cli-reference/overview.md
+      - Journal Commands: cli-reference/journal.md
+      - Search Commands: cli-reference/search.md
+      - Stream Commands: cli-reference/streams.md
+      - Case Commands: cli-reference/cases.md
+      - Profile Commands: cli-reference/profile.md
+  - Examples:
+      - Basic Usage: examples/basic-usage.md
+      - Advanced Features: examples/advanced.md
+  - Development:
+      - Contributing: development/contributing.md
+      - Testing: development/testing.md
+      - Release Process: development/releases.md
+  - Changelog: changelog.md
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            show_category_heading: true
+            members_order: source
+            merge_init_into_class: true
+  - autorefs
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+extra:
+  version:
+    provider: mike
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/scambus/scambus-python-client
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/scambus-client/
+
+copyright: Copyright &copy; 2025 Scambus Team

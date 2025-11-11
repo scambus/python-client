@@ -15,7 +15,7 @@ This guide explains how to install the SCAMBUS Python client directly from GitHu
 Install the latest version from the main branch:
 
 ```bash
-pip install git+https://github.com/scambus/scambus-python-client.git
+pip install git+https://github.com/scambus/python-client.git
 ```
 
 This command:
@@ -30,7 +30,7 @@ Install a specific release version:
 
 ```bash
 # Install version 0.1.0
-pip install git+https://github.com/scambus/scambus-python-client.git@v0.1.0
+pip install git+https://github.com/scambus/python-client.git@v0.1.0
 ```
 
 ### Method 3: Install from Specific Branch
@@ -39,7 +39,7 @@ Install from a feature branch:
 
 ```bash
 # Install from a feature branch
-pip install git+https://github.com/scambus/scambus-python-client.git@feature-branch-name
+pip install git+https://github.com/scambus/python-client.git@feature-branch-name
 ```
 
 ### Method 4: Clone and Install (For Development)
@@ -48,8 +48,8 @@ If you want to contribute or modify the code:
 
 ```bash
 # Clone the repository
-git clone https://github.com/scambus/scambus-python-client.git
-cd scambus-python-client
+git clone https://github.com/scambus/python-client.git
+cd python-client
 
 # Install in editable mode with development dependencies
 pip install -e ".[dev]"
@@ -62,7 +62,7 @@ pip install -e ".[dev]"
 Install with development dependencies (testing, linting, etc.):
 
 ```bash
-pip install "git+https://github.com/scambus/scambus-python-client.git#egg=scambus[dev]"
+pip install "git+https://github.com/scambus/python-client.git#egg=scambus[dev]"
 ```
 
 ## Verify Installation
@@ -86,10 +86,10 @@ To upgrade to the latest version from GitHub:
 
 ```bash
 # Upgrade to latest main branch
-pip install --upgrade git+https://github.com/scambus/scambus-python-client.git
+pip install --upgrade git+https://github.com/scambus/python-client.git
 
 # Force reinstall if needed
-pip install --force-reinstall git+https://github.com/scambus/scambus-python-client.git
+pip install --force-reinstall git+https://github.com/scambus/python-client.git
 ```
 
 ## Uninstalling
@@ -129,7 +129,7 @@ python -m site --user-base
 export PATH="$PATH:$(python -m site --user-base)/bin"
 
 # Or reinstall
-pip install --force-reinstall git+https://github.com/scambus/scambus-python-client.git
+pip install --force-reinstall git+https://github.com/scambus/python-client.git
 ```
 
 ### Issue: Permission denied
@@ -138,12 +138,12 @@ pip install --force-reinstall git+https://github.com/scambus/scambus-python-clie
 
 ```bash
 # Install for current user only
-pip install --user git+https://github.com/scambus/scambus-python-client.git
+pip install --user git+https://github.com/scambus/python-client.git
 
 # Or use virtual environment (recommended)
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install git+https://github.com/scambus/scambus-python-client.git
+pip install git+https://github.com/scambus/python-client.git
 ```
 
 ### Issue: Build fails
@@ -155,7 +155,7 @@ pip install git+https://github.com/scambus/scambus-python-client.git
 pip install --upgrade pip setuptools wheel
 
 # Try again
-pip install git+https://github.com/scambus/scambus-python-client.git
+pip install git+https://github.com/scambus/python-client.git
 ```
 
 ## Using in requirements.txt
@@ -164,13 +164,13 @@ Add to your project's `requirements.txt`:
 
 ```
 # Install from main branch
-git+https://github.com/scambus/scambus-python-client.git
+git+https://github.com/scambus/python-client.git
 
 # Install specific version
-git+https://github.com/scambus/scambus-python-client.git@v0.1.0
+git+https://github.com/scambus/python-client.git@v0.1.0
 
 # Install with extras
-git+https://github.com/scambus/scambus-python-client.git#egg=scambus[dev]
+git+https://github.com/scambus/python-client.git#egg=scambus[dev]
 ```
 
 Then install:
@@ -186,7 +186,7 @@ pip install -r requirements.txt
 ```toml
 [project]
 dependencies = [
-    "scambus @ git+https://github.com/scambus/scambus-python-client.git@v0.1.0"
+    "scambus @ git+https://github.com/scambus/python-client.git@v0.1.0"
 ]
 ```
 
@@ -196,7 +196,7 @@ dependencies = [
 setup(
     name="your-project",
     install_requires=[
-        "scambus @ git+https://github.com/scambus/scambus-python-client.git@v0.1.0"
+        "scambus @ git+https://github.com/scambus/python-client.git@v0.1.0"
     ]
 )
 ```
@@ -212,7 +212,7 @@ FROM python:3.11
 RUN apt-get update && apt-get install -y git
 
 # Install scambus from GitHub
-RUN pip install git+https://github.com/scambus/scambus-python-client.git
+RUN pip install git+https://github.com/scambus/python-client.git
 
 # Your application code
 COPY . /app
@@ -232,14 +232,14 @@ If the repository is private, you'll need authentication:
 export GITHUB_TOKEN="your_github_token"
 
 # Install with token
-pip install git+https://${GITHUB_TOKEN}@github.com/scambus/scambus-python-client.git
+pip install git+https://${GITHUB_TOKEN}@github.com/scambus/python-client.git
 ```
 
 ### Using SSH
 
 ```bash
 # Install via SSH (requires SSH key configured)
-pip install git+ssh://git@github.com/scambus/scambus-python-client.git
+pip install git+ssh://git@github.com/scambus/python-client.git
 ```
 
 ## Advantages of GitHub Installation
@@ -279,8 +279,8 @@ pip install scambus
 
 ## Support
 
-- **Repository**: https://github.com/scambus/scambus-python-client
-- **Issues**: https://github.com/scambus/scambus-python-client/issues
+- **Repository**: https://github.com/scambus/python-client
+- **Issues**: https://github.com/scambus/python-client/issues
 - **Documentation**: See README.md in the repository
 
 ---

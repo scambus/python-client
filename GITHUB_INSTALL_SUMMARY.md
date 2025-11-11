@@ -42,7 +42,7 @@ Created comprehensive guide covering:
 ### Simple Installation
 
 ```bash
-pip install git+https://github.com/scambus/scambus-python-client.git
+pip install git+https://github.com/scambus/python-client.git
 ```
 
 This single command:
@@ -57,16 +57,16 @@ This single command:
 
 ```bash
 # Latest from main branch
-pip install git+https://github.com/scambus/scambus-python-client.git
+pip install git+https://github.com/scambus/python-client.git
 
 # Specific version/tag
-pip install git+https://github.com/scambus/scambus-python-client.git@v0.1.0
+pip install git+https://github.com/scambus/python-client.git@v0.1.0
 
 # Specific branch
-pip install git+https://github.com/scambus/scambus-python-client.git@feature-branch
+pip install git+https://github.com/scambus/python-client.git@feature-branch
 
 # With development tools
-pip install "git+https://github.com/scambus/scambus-python-client.git#egg=scambus[dev]"
+pip install "git+https://github.com/scambus/python-client.git#egg=scambus[dev]"
 ```
 
 ## What Gets Installed
@@ -130,13 +130,13 @@ python -c "import scambus_client; print(scambus_client.__version__)"
 
 ### requirements.txt
 ```
-git+https://github.com/scambus/scambus-python-client.git@v0.1.0
+git+https://github.com/scambus/python-client.git@v0.1.0
 ```
 
 ### pyproject.toml
 ```toml
 dependencies = [
-    "scambus @ git+https://github.com/scambus/scambus-python-client.git@v0.1.0"
+    "scambus @ git+https://github.com/scambus/python-client.git@v0.1.0"
 ]
 ```
 
@@ -144,7 +144,7 @@ dependencies = [
 ```dockerfile
 FROM python:3.11
 RUN apt-get update && apt-get install -y git
-RUN pip install git+https://github.com/scambus/scambus-python-client.git
+RUN pip install git+https://github.com/scambus/python-client.git
 ```
 
 ## Advantages
@@ -234,7 +234,7 @@ scambus --help
 The package is now ready for users to install directly from GitHub. Share this command:
 
 ```bash
-pip install git+https://github.com/scambus/scambus-python-client.git
+pip install git+https://github.com/scambus/python-client.git
 ```
 
 When pushed to GitHub, users can start using it immediately!

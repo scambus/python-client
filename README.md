@@ -4,13 +4,13 @@ Official Python client for SCAMBUS - submit scam reports and subscribe to data s
 
 > **💡 Quick Start:** Install directly from GitHub before PyPI availability:
 > ```bash
-> pip install git+https://github.com/scambus/scambus-python-client.git
+> pip install git+https://github.com/scambus/python-client.git
 > ```
 
 [![PyPI version](https://badge.fury.io/py/scambus.svg)](https://badge.fury.io/py/scambus)
 [![Python Support](https://img.shields.io/pypi/pyversions/scambus.svg)](https://pypi.org/project/scambus/)
-[![Tests](https://github.com/scambus/scambus-python-client/workflows/Tests/badge.svg)](https://github.com/scambus/scambus-python-client/actions/workflows/test.yml)
-[![Lint](https://github.com/scambus/scambus-python-client/workflows/Lint/badge.svg)](https://github.com/scambus/scambus-python-client/actions/workflows/lint.yml)
+[![Tests](https://github.com/scambus/python-client/workflows/Tests/badge.svg)](https://github.com/scambus/python-client/actions/workflows/test.yml)
+[![Lint](https://github.com/scambus/python-client/workflows/Lint/badge.svg)](https://github.com/scambus/python-client/actions/workflows/lint.yml)
 [![codecov](https://codecov.io/gh/scambus/scambus-python-client/branch/main/graph/badge.svg)](https://codecov.io/gh/scambus/scambus-python-client)
 [![Documentation](https://img.shields.io/badge/docs-latest-brightgreen.svg)](https://scambus.github.io/scambus-python-client/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
@@ -43,13 +43,13 @@ Install directly from the GitHub repository:
 
 ```bash
 # Install latest from main branch
-pip install git+https://github.com/scambus/scambus-python-client.git
+pip install git+https://github.com/scambus/python-client.git
 
 # Install specific version/tag
-pip install git+https://github.com/scambus/scambus-python-client.git@v0.1.0
+pip install git+https://github.com/scambus/python-client.git@v0.1.0
 
 # Install specific branch
-pip install git+https://github.com/scambus/scambus-python-client.git@feature-branch
+pip install git+https://github.com/scambus/python-client.git@feature-branch
 ```
 
 📖 **See [INSTALL_FROM_GITHUB.md](INSTALL_FROM_GITHUB.md) for detailed instructions and troubleshooting.**
@@ -65,7 +65,7 @@ The package includes:
 pip install scambus[dev]
 
 # From GitHub
-pip install "git+https://github.com/scambus/scambus-python-client.git#egg=scambus[dev]"
+pip install "git+https://github.com/scambus/python-client.git#egg=scambus[dev]"
 ```
 
 ## Quick Start
@@ -473,7 +473,7 @@ See the [examples/](examples/) directory for complete examples:
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/scambus/scambus-python-client.git
+   git clone https://github.com/scambus/python-client.git
    cd scambus-python-client
    ```
 
@@ -586,8 +586,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Support
 
 - **Documentation**: [https://scambus.github.io/scambus-python-client/](https://scambus.github.io/scambus-python-client/)
-- **Issues**: [GitHub Issues](https://github.com/scambus/scambus-python-client/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/scambus/scambus-python-client/discussions)
+- **Issues**: [GitHub Issues](https://github.com/scambus/python-client/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/scambus/python-client/discussions)
 - **Security**: See [SECURITY.md](SECURITY.md)
 
 ## Changelog

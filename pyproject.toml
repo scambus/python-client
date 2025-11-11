@@ -51,11 +51,11 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/scambus/scambus-python-client"
+Homepage = "https://github.com/scambus/python-client"
 Documentation = "https://docs.scambus.net"
-Repository = "https://github.com/scambus/scambus-python-client"
-Issues = "https://github.com/scambus/scambus-python-client/issues"
-Changelog = "https://github.com/scambus/scambus-python-client/blob/main/CHANGELOG.md"
+Repository = "https://github.com/scambus/python-client"
+Issues = "https://github.com/scambus/python-client/issues"
+Changelog = "https://github.com/scambus/python-client/blob/main/CHANGELOG.md"
 
 [project.scripts]
 scambus = "scambus_cli.cli:main"

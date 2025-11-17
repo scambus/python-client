@@ -960,6 +960,7 @@ class ExportStream:
     is_active: bool = True
     consumer_key: Optional[str] = None
     retention_days: int = 30
+    filter_expression: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -1288,3 +1289,79 @@ class Passkey:
             updated_at=Identifier._parse_datetime(data.get("updated_at")),
             last_used_at=Identifier._parse_datetime(data.get("last_used_at")),
         )
+
+
+@dataclass
+class View:
+    """
+    View (saved query) from API response.
+
+    Attributes:
+        id: View UUID
+        name: View name
+        description: View description (optional)
+        alias: View alias for shortcuts (e.g., "my-journal-entries")
+        entity_type: Type of entities queried ("cases", "identifiers", "evidence", "journal")
+        filter_criteria: Saved filter/query criteria as dict
+        sort_order: Sort order configuration as dict
+        is_system: Whether this is a system view
+        visibility: View visibility ("private", "organization", "public")
+        view_type: View type ("standard", "journal_entry")
+        created_at: Creation timestamp
+        updated_at: Last update timestamp
+        created_by: User who created the view
+        organization_id: Organization ID
+    """
+
+    id: str
+    name: str
+    entity_type: str
+    visibility: str = "organization"
+    view_type: str = "standard"
+    description: Optional[str] = None
+    alias: Optional[str] = None
+    filter_criteria: Optional[Dict[str, Any]] = None
+    sort_order: Optional[Dict[str, Any]] = None
+    is_system: bool = False
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    created_by: Optional[str] = None
+    organization_id: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "View":
+        """Create from API response dictionary."""
+        return cls(
+            id=data["id"],
+            name=data["name"],
+            entity_type=data["entity_type"],
+            visibility=data.get("visibility", "organization"),
+            view_type=data.get("view_type", "standard"),
+            description=data.get("description"),
+            alias=data.get("alias"),
+            filter_criteria=data.get("filter_criteria"),
+            sort_order=data.get("sort_order"),
+            is_system=data.get("is_system", False),
+            created_at=Identifier._parse_datetime(data.get("created_at")),
+            updated_at=Identifier._parse_datetime(data.get("updated_at")),
+            created_by=data.get("created_by"),
+            organization_id=data.get("organization_id"),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for API request."""
+        data = {
+            "name": self.name,
+            "entity_type": self.entity_type,
+            "visibility": self.visibility,
+            "view_type": self.view_type,
+        }
+        if self.description:
+            data["description"] = self.description
+        if self.alias:
+            data["alias"] = self.alias
+        if self.filter_criteria:
+            data["filter_criteria"] = self.filter_criteria
+        if self.sort_order:
+            data["sort_order"] = self.sort_order
+        return data

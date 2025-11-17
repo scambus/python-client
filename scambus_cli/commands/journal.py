@@ -1196,3 +1196,63 @@ def complete(ctx, entry_id, end_time, reason, description, output_json):
     except Exception as e:
         print_error(f"Failed to complete activity: {e}")
         sys.exit(1)
+
+
+@journal.command("in-progress")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+@click.pass_context
+def in_progress(ctx, output_json):
+    """List journal entries that are currently in progress.
+
+    These are entries with a start_time but no end_time, representing
+    ongoing activities like phone calls or conversations.
+
+    Examples:
+        # List all in-progress activities
+        scambus journal in-progress
+
+        # Output as JSON
+        scambus journal in-progress --json
+    """
+    client = ctx.obj.get_client()
+
+    try:
+        entries = client.get_in_progress_activities()
+
+        if not entries:
+            print_info("No in-progress activities found")
+            return
+
+        if output_json:
+            print_json(
+                [
+                    {
+                        "id": e.id,
+                        "type": e.type,
+                        "description": e.description,
+                        "start_time": e.details.get("start_time") if e.details else None,
+                        "performed_at": e.performed_at.isoformat() if e.performed_at else None,
+                    }
+                    for e in entries
+                ]
+            )
+        else:
+            table_data = [
+                {
+                    "ID": e.id[:8],
+                    "Type": e.type.replace("_", " ").title(),
+                    "Description": (e.description or "")[:50],
+                    "Started": (
+                        e.details.get("start_time", "N/A")[:19]
+                        if e.details and e.details.get("start_time")
+                        else (e.performed_at.isoformat()[:19] if e.performed_at else "N/A")
+                    ),
+                }
+                for e in entries
+            ]
+
+            print_table(table_data, title=f"In-Progress Activities ({len(entries)})")
+
+    except Exception as e:
+        print_error(f"Failed to get in-progress activities: {e}")
+        sys.exit(1)

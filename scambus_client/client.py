@@ -49,7 +49,150 @@ from .models import (
     TextConversationDetails,
     UpdateDetails,
     ValidationDetails,
+    View,
 )
+
+
+def build_identifier_type_filter(identifier_types: Union[str, List[str]], data_type: str = "identifier") -> str:
+    """
+    Build a JSONPath filter expression for filtering by identifier type(s).
+
+    This is a helper function that generates the filter_expression parameter
+    for create_stream() to filter identifiers by type.
+
+    Args:
+        identifier_types: Single identifier type or list of types.
+                         Valid types: phone, email, url, bank_account,
+                         crypto_wallet, social_media, payment_token
+        data_type: Stream data type ("identifier" or "journal_entry").
+                  This affects the JSONPath expression structure.
+
+    Returns:
+        JSONPath filter expression string
+
+    Examples:
+        >>> build_identifier_type_filter("phone", data_type="identifier")
+        '$.type == "phone"'
+
+        >>> build_identifier_type_filter(["phone", "email"], data_type="identifier")
+        '$.type == "phone" || $.type == "email"'
+
+        >>> build_identifier_type_filter("phone", data_type="journal_entry")
+        'exists($.identifiers[*] ? (@.type == "phone"))'
+
+        >>> build_identifier_type_filter(["phone", "email"], data_type="journal_entry")
+        'exists($.identifiers[*] ? (@.type == "phone" || @.type == "email"))'
+    """
+    if isinstance(identifier_types, str):
+        identifier_types = [identifier_types]
+
+    if not identifier_types:
+        raise ValueError("identifier_types cannot be empty")
+
+    # Validate types
+    valid_types = {"phone", "email", "url", "bank_account", "crypto_wallet", "social_media", "payment_token"}
+    for itype in identifier_types:
+        if itype not in valid_types:
+            raise ValueError(
+                f"Invalid identifier type: {itype}. "
+                f"Valid types are: {', '.join(sorted(valid_types))}"
+            )
+
+    # Build filter expression based on data_type
+    if data_type == "identifier":
+        # For identifier streams: check top-level type field
+        if len(identifier_types) == 1:
+            return f'$.type == "{identifier_types[0]}"'
+        else:
+            conditions = [f'$.type == "{itype}"' for itype in identifier_types]
+            return " || ".join(conditions)
+    elif data_type == "journal_entry":
+        # For journal entry streams: check identifiers array
+        # Use SQL/JSON Path exists() predicate to check if any identifier matches
+        if len(identifier_types) == 1:
+            return f'exists($.identifiers[*] ? (@.type == "{identifier_types[0]}"))'
+        else:
+            conditions = [f'@.type == "{itype}"' for itype in identifier_types]
+            inner_condition = " || ".join(conditions)
+            return f'exists($.identifiers[*] ? ({inner_condition}))'
+    else:
+        raise ValueError(f"Invalid data_type: {data_type}. Valid types are: identifier, journal_entry")
+
+
+def build_combined_filter(
+    identifier_types: Optional[Union[str, List[str]]] = None,
+    min_confidence: Optional[float] = None,
+    max_confidence: Optional[float] = None,
+    custom_expression: Optional[str] = None,
+    data_type: str = "identifier"
+) -> Optional[str]:
+    """
+    Build a complex JSONPath filter expression combining multiple conditions.
+
+    This helper function makes it easy to create filter expressions that combine
+    identifier type filtering with confidence ranges and custom conditions.
+
+    Args:
+        identifier_types: Single type or list of types to filter by
+        min_confidence: Minimum confidence score (0.0 to 1.0)
+        max_confidence: Maximum confidence score (0.0 to 1.0)
+        custom_expression: Additional custom JSONPath expression to AND with other conditions
+        data_type: Stream data type ("identifier" or "journal_entry")
+
+    Returns:
+        Combined JSONPath filter expression, or None if no conditions specified
+
+    Examples:
+        >>> build_combined_filter(identifier_types="phone", min_confidence=0.8, data_type="identifier")
+        '$.type == "phone" && $.confidence >= 0.8'
+
+        >>> build_combined_filter(identifier_types=["phone", "email"], min_confidence=0.9, data_type="identifier")
+        '($.type == "phone" || $.type == "email") && $.confidence >= 0.9'
+
+        >>> build_combined_filter(identifier_types="phone", data_type="journal_entry")
+        'exists($.identifiers[*] ? (@.type == "phone"))'
+
+        >>> build_combined_filter(custom_expression='$.details.platform == "whatsapp"')
+        '$.details.platform == "whatsapp"'
+    """
+    conditions = []
+
+    # Add identifier type filter
+    if identifier_types:
+        type_filter = build_identifier_type_filter(identifier_types, data_type=data_type)
+        # Wrap in parentheses if multiple types (for proper AND precedence)
+        if isinstance(identifier_types, list) and len(identifier_types) > 1:
+            type_filter = f"({type_filter})"
+        conditions.append(type_filter)
+
+    # Add confidence filters
+    if min_confidence is not None:
+        if not 0 <= min_confidence <= 1:
+            raise ValueError("min_confidence must be between 0 and 1")
+        # For journal entry streams, confidence is stored in min_confidence field
+        if data_type == "journal_entry":
+            conditions.append(f"$.min_confidence >= {min_confidence}")
+        else:
+            conditions.append(f"$.confidence >= {min_confidence}")
+
+    if max_confidence is not None:
+        if not 0 <= max_confidence <= 1:
+            raise ValueError("max_confidence must be between 0 and 1")
+        # For journal entry streams, confidence is stored in min_confidence field
+        if data_type == "journal_entry":
+            conditions.append(f"$.min_confidence <= {max_confidence}")
+        else:
+            conditions.append(f"$.confidence <= {max_confidence}")
+
+    # Add custom expression
+    if custom_expression:
+        conditions.append(custom_expression)
+
+    if not conditions:
+        return None
+
+    # Combine all conditions with AND
+    return " && ".join(conditions)
 
 
 class ScambusClient:
@@ -1432,11 +1575,208 @@ class ScambusClient:
 
         # Parse response
         return {
-            "data": [JournalEntry.from_dict(entry) for entry in response.get("data", [])],
+            "data": [JournalEntry.from_dict(entry) for entry in (response.get("data") or [])],
             "nextCursor": response.get("nextCursor"),
             "hasMore": response.get("hasMore", False),
             "count": response.get("count", 0),
         }
+
+    def get_in_progress_activities(self) -> List[JournalEntry]:
+        """
+        Get journal entries that are currently in progress.
+
+        These are entries with a start_time but no end_time, representing
+        ongoing activities like phone calls or conversations.
+
+        Returns:
+            List of JournalEntry objects representing in-progress activities
+        """
+        response = self._request("GET", "/journal-entries/in-progress")
+
+        # Handle response
+        if isinstance(response, list):
+            return [JournalEntry.from_dict(entry) for entry in response]
+        return []
+
+    # View Methods
+
+    def list_views(self) -> List[View]:
+        """
+        List all available views (saved queries).
+
+        Returns:
+            List of View objects
+        """
+        response = self._request("GET", "/views")
+
+        if isinstance(response, list):
+            return [View.from_dict(view) for view in response]
+        return []
+
+    def get_view(self, view_id: str) -> View:
+        """
+        Get a specific view by ID.
+
+        Args:
+            view_id: View UUID or alias (e.g., "my-journal-entries")
+
+        Returns:
+            View object
+        """
+        response = self._request("GET", f"/views/{view_id}")
+        return View.from_dict(response)
+
+    def execute_view(
+        self,
+        view_id: str,
+        cursor: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """
+        Execute a saved view query.
+
+        Args:
+            view_id: View UUID or alias
+            cursor: Pagination cursor (optional)
+            limit: Results limit (optional)
+
+        Returns:
+            Dict with 'data', 'nextCursor', 'hasMore', 'count' keys
+            The 'data' field contains the appropriate model objects based on the view's entity_type
+        """
+        body = {}
+        if cursor:
+            body["cursor"] = cursor
+        if limit:
+            body["limit"] = limit
+
+        response = self._request("POST", f"/views/{view_id}/execute", json_data=body)
+
+        # Parse response based on entity type
+        # Note: The caller needs to know the entity_type to properly parse the data
+        return {
+            "data": response.get("data") or [],
+            "nextCursor": response.get("nextCursor"),
+            "hasMore": response.get("hasMore", False),
+            "count": response.get("count", 0),
+            "entity_type": response.get("entity_type", "journal"),
+        }
+
+    def create_view(
+        self,
+        name: str,
+        entity_type: str,
+        filter_criteria: Optional[Dict[str, Any]] = None,
+        sort_order: Optional[Dict[str, Any]] = None,
+        description: Optional[str] = None,
+        alias: Optional[str] = None,
+        visibility: str = "organization",
+        view_type: str = "standard",
+    ) -> View:
+        """
+        Create a new view (saved query).
+
+        Args:
+            name: View name
+            entity_type: Type of entities ("cases", "identifiers", "evidence", "journal")
+            filter_criteria: Filter criteria as dict (optional)
+            sort_order: Sort configuration as dict (optional)
+            description: View description (optional)
+            alias: Short alias for the view (optional)
+            visibility: "private", "organization", or "public" (default: "organization")
+            view_type: "standard" or "journal_entry" (default: "standard")
+
+        Returns:
+            Created View object
+        """
+        body = {
+            "name": name,
+            "entity_type": entity_type,
+            "visibility": visibility,
+            "view_type": view_type,
+        }
+
+        if description:
+            body["description"] = description
+        if alias:
+            body["alias"] = alias
+        if filter_criteria:
+            body["filter_criteria"] = filter_criteria
+        if sort_order:
+            body["sort_order"] = sort_order
+
+        response = self._request("POST", "/views", json_data=body)
+        return View.from_dict(response)
+
+    def update_view(
+        self,
+        view_id: str,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        filter_criteria: Optional[Dict[str, Any]] = None,
+        sort_order: Optional[Dict[str, Any]] = None,
+        visibility: Optional[str] = None,
+    ) -> View:
+        """
+        Update an existing view.
+
+        Args:
+            view_id: View UUID
+            name: New name (optional)
+            description: New description (optional)
+            filter_criteria: New filter criteria (optional)
+            sort_order: New sort order (optional)
+            visibility: New visibility (optional)
+
+        Returns:
+            Updated View object
+        """
+        body = {}
+
+        if name is not None:
+            body["name"] = name
+        if description is not None:
+            body["description"] = description
+        if filter_criteria is not None:
+            body["filter_criteria"] = filter_criteria
+        if sort_order is not None:
+            body["sort_order"] = sort_order
+        if visibility is not None:
+            body["visibility"] = visibility
+
+        response = self._request("PUT", f"/views/{view_id}", json_data=body)
+        return View.from_dict(response)
+
+    def delete_view(self, view_id: str) -> None:
+        """
+        Delete a view.
+
+        Args:
+            view_id: View UUID
+        """
+        self._request("DELETE", f"/views/{view_id}")
+
+    def get_my_journal_entries_view(self) -> Dict[str, Any]:
+        """
+        Execute the "My Journal Entries" system view.
+
+        This is a shortcut for getting journal entries created by the current user.
+
+        Returns:
+            Dict with 'data', 'nextCursor', 'hasMore', 'count' keys
+        """
+        return self.execute_view("my-journal-entries")
+
+    def get_my_pinboard_view(self) -> Dict[str, Any]:
+        """
+        Execute the "My Pinboard" system view.
+
+        This is a shortcut for getting pinned items.
+
+        Returns:
+            Dict with 'data', 'nextCursor', 'hasMore', 'count' keys
+        """
+        return self.execute_view("my-pinboard")
 
     # Identifier Methods
 
@@ -1751,7 +2091,7 @@ class ScambusClient:
         active: Optional[bool] = None,
         page: Optional[int] = None,
         limit: Optional[int] = None,
-    ) -> List[ExportStream]:
+    ) -> Dict[str, Any]:
         """
         List all export streams.
 
@@ -1761,16 +2101,21 @@ class ScambusClient:
             limit: Items per page
 
         Returns:
-            List of ExportStream objects
+            Dictionary with 'data' (list of ExportStream objects) and 'pagination' (pagination info)
 
         Example:
             ```python
-            streams = client.list_streams()
+            result = client.list_streams()
+            streams = result['data']
+            pagination = result['pagination']
+
             for stream in streams:
                 print(f"{stream.name}: {stream.data_type} ({'active' if stream.is_active else 'inactive'})")
 
+            print(f"Page {pagination['page']} of {pagination['total_pages']}")
+
             # Filter for active streams only
-            active_streams = client.list_streams(active=True)
+            result = client.list_streams(active=True)
 
             # With pagination
             page1 = client.list_streams(page=1, limit=10)
@@ -1787,9 +2132,13 @@ class ScambusClient:
         response = self._request("GET", "/export-streams", params=params if params else None)
 
         if isinstance(response, dict) and "data" in response:
-            return [ExportStream.from_dict(s) for s in response["data"]]
+            # Return full response with pagination info
+            return {
+                'data': [ExportStream.from_dict(s) for s in response["data"]],
+                'pagination': response.get('pagination', {})
+            }
         else:
-            return []
+            return {'data': [], 'pagination': {}}
 
     @staticmethod
     def build_stream_filter(
@@ -1998,7 +2347,7 @@ class ScambusClient:
         self,
         name: str,
         data_type: str = "journal_entry",
-        identifier_types: Optional[List[str]] = None,
+        identifier_types: Optional[Union[str, List[str]]] = None,
         min_confidence: float = 0.0,
         max_confidence: float = 1.0,
         is_active: bool = True,
@@ -2013,54 +2362,87 @@ class ScambusClient:
         Args:
             name: Stream name
             data_type: Stream data type ("journal_entry" or "identifier")
-            identifier_types: List of identifier types to filter (optional)
+            identifier_types: Identifier type(s) to filter. Can be a single string or list.
+                            Valid types: phone, email, url, bank_account, crypto_wallet,
+                            social_media, payment_token.
+                            Automatically converted to filter_expression. (optional)
             min_confidence: Minimum confidence score (0.0-1.0, default: 0.0)
             max_confidence: Maximum confidence score (0.0-1.0, default: 1.0)
             is_active: Whether stream is active (default: True)
             retention_days: Days to retain data (default: 30)
             backfill_historical: Trigger backfill after creating stream (default: False)
             backfill_from_date: Only backfill from this date (RFC3339 format, optional)
-            filter_expression: JSONPath filter expression (optional)
+            filter_expression: Custom JSONPath filter expression (optional).
+                             If identifier_types is also provided, the expressions will be
+                             combined with AND logic.
 
         Returns:
             Created ExportStream object
 
-        Example:
+        Examples:
             ```python
-            # Create journal entry stream for phone numbers
+            # Filter by single identifier type
             stream = client.create_stream(
-                name="phone-number-stream",
-                data_type="journal_entry",
-                identifier_types=["phone"],
-                min_confidence=0.5
+                name="phone-numbers",
+                data_type="identifier",
+                identifier_types="phone",
+                min_confidence=0.8
             )
 
-            # Create identifier-centric stream with backfill
+            # Filter by multiple identifier types
             stream = client.create_stream(
-                name="high-confidence-identifiers",
+                name="contact-info",
                 data_type="identifier",
-                min_confidence=0.9,
-                backfill_historical=True,
-                backfill_from_date="2025-01-01T00:00:00Z"
+                identifier_types=["phone", "email"],
+                min_confidence=0.9
+            )
+
+            # Use custom filter expression
+            stream = client.create_stream(
+                name="whatsapp-only",
+                data_type="identifier",
+                identifier_types="social_media",
+                filter_expression='$.details.platform == "whatsapp"'
+            )
+
+            # For advanced users: Use filter_expression directly
+            stream = client.create_stream(
+                name="advanced-filter",
+                data_type="identifier",
+                filter_expression='($.type == "phone" || $.type == "email") && $.confidence >= 0.95'
             )
             ```
+
+        Note:
+            The identifier_types parameter is a convenience helper that automatically
+            generates the appropriate filter_expression. You can also provide
+            filter_expression directly for more complex filtering needs.
         """
+        # Build filter expression from identifier_types if provided
+        combined_filter = filter_expression
+        if identifier_types:
+            type_filter = build_identifier_type_filter(identifier_types, data_type=data_type)
+            if combined_filter:
+                # Combine with existing filter using AND
+                combined_filter = f"({type_filter}) && ({combined_filter})"
+            else:
+                combined_filter = type_filter
+
         data = {
             "name": name,
-            "dataType": data_type,
-            "identifierTypes": identifier_types or [],
-            "minConfidence": min_confidence,
-            "maxConfidence": max_confidence,
-            "isActive": is_active,
-            "backfillHistorical": backfill_historical,
+            "data_type": data_type,
+            "min_confidence": min_confidence,
+            "max_confidence": max_confidence,
+            "is_active": is_active,
+            "backfill_historical": backfill_historical,
         }
 
         if retention_days is not None:
-            data["retentionDays"] = retention_days
+            data["retention_days"] = retention_days
         if backfill_from_date:
-            data["backfillFromDate"] = backfill_from_date
-        if filter_expression:
-            data["filterExpression"] = filter_expression
+            data["backfill_from_date"] = backfill_from_date
+        if combined_filter:
+            data["filter_expression"] = combined_filter
 
         response = self._request("POST", "/export-streams", json_data=data)
         return ExportStream.from_dict(response)

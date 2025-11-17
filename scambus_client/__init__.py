@@ -10,7 +10,11 @@ This library enables you to:
 - Manage your own cases, tags, and profile
 """
 
-from .client import ScambusClient
+from .client import (
+    ScambusClient,
+    build_identifier_type_filter,
+    build_combined_filter,
+)
 from .exceptions import (
     ScambusAPIError,
     ScambusAuthenticationError,
@@ -50,12 +54,15 @@ from .models import (
     TextConversationDetails,
     UpdateDetails,
     ValidationDetails,
+    View,
 )
 
 __version__ = "0.1.0"
 __all__ = [
     "ScambusClient",
     "ScambusWebSocketClient",
+    "build_identifier_type_filter",
+    "build_combined_filter",
     "ScambusAPIError",
     "ScambusAuthenticationError",
     "ScambusValidationError",
@@ -91,4 +98,5 @@ __all__ = [
     "Notification",
     "Session",
     "Passkey",
+    "View",
 ]

@@ -2,21 +2,10 @@
 
 Official Python client for SCAMBUS - submit scam reports and subscribe to data streams.
 
-> **💡 Quick Start:** Install directly from GitHub before PyPI availability:
+> **💡 Quick Start:** Install directly from GitHub:
 > ```bash
 > pip install git+https://github.com/scambus/python-client.git
 > ```
-
-[![PyPI version](https://badge.fury.io/py/scambus.svg)](https://badge.fury.io/py/scambus)
-[![Python Support](https://img.shields.io/pypi/pyversions/scambus.svg)](https://pypi.org/project/scambus/)
-[![Tests](https://github.com/scambus/python-client/workflows/Tests/badge.svg)](https://github.com/scambus/python-client/actions/workflows/test.yml)
-[![Lint](https://github.com/scambus/python-client/workflows/Lint/badge.svg)](https://github.com/scambus/python-client/actions/workflows/lint.yml)
-[![codecov](https://codecov.io/gh/scambus/scambus-python-client/branch/main/graph/badge.svg)](https://codecov.io/gh/scambus/scambus-python-client)
-[![Documentation](https://img.shields.io/badge/docs-latest-brightgreen.svg)](https://scambus.github.io/scambus-python-client/)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Security: bandit](https://img.shields.io/badge/security-bandit-yellow.svg)](https://github.com/PyCQA/bandit)
 
 ## Features
 

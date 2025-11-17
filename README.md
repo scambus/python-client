@@ -20,13 +20,7 @@ Official Python client for SCAMBUS - submit scam reports and subscribe to data s
 
 ## Installation
 
-### From PyPI (Recommended - when available)
-
-```bash
-pip install scambus
-```
-
-### From GitHub (Pre-release / Development)
+### From GitHub 
 
 Install directly from the GitHub repository:
 

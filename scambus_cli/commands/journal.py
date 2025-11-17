@@ -390,8 +390,13 @@ def query(
     is_flag=True,
     help="Create originator if it doesn't exist",
 )
+@click.option(
+    "--tag",
+    multiple=True,
+    help="Tag to apply. Format: 'TagName' for boolean tags or 'TagName:ValueName' for valued tags. Can be specified multiple times.",
+)
 @click.pass_context
-def create_note(ctx, description, identifier, our_identifier, confidence, attach, case_id, originator_type, originator_identifier, create_originator):
+def create_note(ctx, description, identifier, our_identifier, confidence, attach, case_id, originator_type, originator_identifier, create_originator, tag):
     """Create a note entry."""
     client = ctx.obj.get_client()
 
@@ -467,6 +472,20 @@ def create_note(ctx, description, identifier, our_identifier, confidence, attach
                 "create_if_not_exists": create_originator,
             }
 
+        # Add tags if provided
+        if tag:
+            tag_lookups = []
+            for tag_str in tag:
+                if ":" in tag_str:
+                    tag_parts = tag_str.split(":", 1)
+                    tag_lookups.append({
+                        "tag_name": tag_parts[0].strip(),
+                        "tag_value": tag_parts[1].strip()
+                    })
+                else:
+                    tag_lookups.append({"tag_name": tag_str.strip()})
+            data["tag_lookups"] = tag_lookups
+
         entry = client._request("POST", "/journal-entries", json_data=data)
         print_success(f"Note created: {entry['id']}")
         print_detail(entry, title="Created Entry")
@@ -530,6 +549,11 @@ def create_note(ctx, description, identifier, our_identifier, confidence, attach
     is_flag=True,
     help="Create originator if it doesn't exist",
 )
+@click.option(
+    "--tag",
+    multiple=True,
+    help="Tag to apply. Format: 'TagName' for boolean tags or 'TagName:ValueName' for valued tags. Can be specified multiple times.",
+)
 @click.option("--json", "output_json", is_flag=True, help="Output JSON")
 @click.pass_context
 def create_phone_call(
@@ -551,6 +575,7 @@ def create_phone_call(
     originator_type,
     originator_identifier,
     create_originator,
+    tag,
     platform,
     output_json,
 ):
@@ -706,6 +731,20 @@ def create_phone_call(
                 "create_if_not_exists": create_originator,
             }
 
+        # Add tags if provided
+        if tag:
+            tag_lookups = []
+            for tag_str in tag:
+                if ":" in tag_str:
+                    tag_parts = tag_str.split(":", 1)
+                    tag_lookups.append({
+                        "tag_name": tag_parts[0].strip(),
+                        "tag_value": tag_parts[1].strip()
+                    })
+                else:
+                    tag_lookups.append({"tag_name": tag_str.strip()})
+            data["tag_lookups"] = tag_lookups
+
         entry = client._request("POST", "/journal-entries", json_data=data)
 
         if output_json:
@@ -761,6 +800,11 @@ def create_phone_call(
     is_flag=True,
     help="Create originator if it doesn't exist",
 )
+@click.option(
+    "--tag",
+    multiple=True,
+    help="Tag to apply. Format: 'TagName' for boolean tags or 'TagName:ValueName' for valued tags. Can be specified multiple times.",
+)
 @click.pass_context
 def create_email(
     ctx,
@@ -772,6 +816,7 @@ def create_email(
     identifier,
     confidence,
     body,
+    tag,
     screenshot,
     eml_file,
     attach,
@@ -875,6 +920,20 @@ def create_email(
                 "create_if_not_exists": create_originator,
             }
 
+        # Add tags if provided
+        if tag:
+            tag_lookups = []
+            for tag_str in tag:
+                if ":" in tag_str:
+                    tag_parts = tag_str.split(":", 1)
+                    tag_lookups.append({
+                        "tag_name": tag_parts[0].strip(),
+                        "tag_value": tag_parts[1].strip()
+                    })
+                else:
+                    tag_lookups.append({"tag_name": tag_str.strip()})
+            data["tag_lookups"] = tag_lookups
+
         entry = client._request("POST", "/journal-entries", json_data=data)
         print_success(f"Email entry created: {entry['id']}")
         print_detail(entry, title="Created Entry")
@@ -920,9 +979,14 @@ def create_email(
     is_flag=True,
     help="Create originator if it doesn't exist",
 )
+@click.option(
+    "--tag",
+    multiple=True,
+    help="Tag to apply. Format: 'TagName' for boolean tags or 'TagName:ValueName' for valued tags. Can be specified multiple times.",
+)
 @click.pass_context
 def create_text_conversation(
-    ctx, description, platform, phone, identifier, confidence, screenshot, attach, case_id, originator_type, originator_identifier, create_originator
+    ctx, description, platform, phone, identifier, confidence, screenshot, attach, case_id, originator_type, originator_identifier, create_originator, tag
 ):
     """Create a text conversation entry."""
     client = ctx.obj.get_client()
@@ -1007,6 +1071,20 @@ def create_text_conversation(
                 "create_if_not_exists": create_originator,
             }
 
+        # Add tags if provided
+        if tag:
+            tag_lookups = []
+            for tag_str in tag:
+                if ":" in tag_str:
+                    tag_parts = tag_str.split(":", 1)
+                    tag_lookups.append({
+                        "tag_name": tag_parts[0].strip(),
+                        "tag_value": tag_parts[1].strip()
+                    })
+                else:
+                    tag_lookups.append({"tag_name": tag_str.strip()})
+            data["tag_lookups"] = tag_lookups
+
         entry = client._request("POST", "/journal-entries", json_data=data)
         print_success(f"Text conversation entry created: {entry['id']}")
         print_detail(entry, title="Created Entry")
@@ -1018,7 +1096,6 @@ def create_text_conversation(
 
 @journal.command()
 @click.option("--description", required=True, help="Detection description")
-@click.option("--category", required=True, help="Detection category (phishing, fraud, etc.)")
 @click.option(
     "--confidence", type=float, default=0.0, help="Detection confidence (0.0-1.0, default: 0.0)"
 )
@@ -1044,9 +1121,14 @@ def create_text_conversation(
     is_flag=True,
     help="Create originator if it doesn't exist",
 )
+@click.option(
+    "--tag",
+    multiple=True,
+    help="Tag to apply. Format: 'TagName' for boolean tags or 'TagName:ValueName' for valued tags. Can be specified multiple times.",
+)
 @click.pass_context
 def create_detection(
-    ctx, description, category, confidence, identifiers, screenshot, attach, case_id, originator_type, originator_identifier, create_originator
+    ctx, description, confidence, identifiers, screenshot, attach, case_id, originator_type, originator_identifier, create_originator, tag
 ):
     """Create a detection entry."""
     client = ctx.obj.get_client()
@@ -1077,7 +1159,7 @@ def create_detection(
             "type": "detection",
             "description": description,
             "performed_at": now_iso(),
-            "details": {"category": category, "confidence": confidence},
+            "details": {"confidence": confidence},
         }
 
         if identifiers:
@@ -1091,7 +1173,7 @@ def create_detection(
         if media_ids:
             data["evidence"] = {
                 "type": "screenshot",
-                "description": f"Evidence for {category} detection: {description}",
+                "description": f"Evidence for detection: {description}",
                 "source": "Automated Detection",
                 "collected_at": now_iso(),
                 "media_ids": media_ids,
@@ -1114,6 +1196,20 @@ def create_detection(
                 "identifier": originator_identifier,
                 "create_if_not_exists": create_originator,
             }
+
+        # Add tags if provided
+        if tag:
+            tag_lookups = []
+            for tag_str in tag:
+                if ":" in tag_str:
+                    tag_parts = tag_str.split(":", 1)
+                    tag_lookups.append({
+                        "tag_name": tag_parts[0].strip(),
+                        "tag_value": tag_parts[1].strip()
+                    })
+                else:
+                    tag_lookups.append({"tag_name": tag_str.strip()})
+            data["tag_lookups"] = tag_lookups
 
         entry = client._request("POST", "/journal-entries", json_data=data)
         print_success(f"Detection entry created: {entry['id']}")

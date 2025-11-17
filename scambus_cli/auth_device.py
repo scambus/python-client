@@ -300,3 +300,156 @@ class DeviceAuthManager:
             return response.json()
         except Exception:
             return None
+
+    def assume_automation(self, name_or_id: str, description: Optional[str] = None) -> Optional[str]:
+        """
+        Assume an automation identity.
+
+        Accepts either an automation name or UUID:
+        - If UUID: Uses that automation directly
+        - If name and exists: Creates new API key for existing automation
+        - If name and doesn't exist: Creates new automation with API key
+
+        Then logs in with that key, replacing the current authentication.
+
+        Args:
+            name_or_id: Automation name or UUID
+            description: Optional automation description (used when creating new automation)
+
+        Returns:
+            JWT token if successful, None otherwise
+        """
+        # Get current token for creating the automation
+        current_token = self.get_token()
+        if not current_token:
+            console.print(
+                "[red]✗[/red] Not authenticated. Run: [cyan]scambus auth login[/cyan] first"
+            )
+            return None
+
+        try:
+            # Check if input looks like a UUID
+            import re
+            uuid_pattern = re.compile(
+                r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+                re.IGNORECASE
+            )
+            is_uuid = bool(uuid_pattern.match(name_or_id))
+
+            if is_uuid:
+                # Input is a UUID - use it directly
+                automation_id = name_or_id
+                console.print(f"[cyan]Using automation ID:[/cyan] {automation_id}")
+
+                # Verify it exists
+                try:
+                    verify_response = requests.get(
+                        f"{self.api_url}/api/automations/{automation_id}",
+                        headers={"Authorization": f"Bearer {current_token}"},
+                        timeout=10,
+                    )
+                    verify_response.raise_for_status()
+                    automation = verify_response.json()
+                    automation_name = automation.get("name", "Unknown")
+                    console.print(f"[green]✓[/green] Found automation: {automation_name}")
+                except requests.RequestException:
+                    console.print(f"[red]✗[/red] Automation not found: {automation_id}")
+                    return None
+            else:
+                # Input is a name - search for it
+                automation_name = name_or_id
+                console.print(f"[cyan]Checking for existing automation:[/cyan] {automation_name}")
+                list_response = requests.get(
+                    f"{self.api_url}/api/automations",
+                    headers={"Authorization": f"Bearer {current_token}"},
+                    timeout=10,
+                )
+                list_response.raise_for_status()
+                automations = list_response.json()
+
+                # Find automation by name
+                existing_automation = None
+                for auto in automations:
+                    if auto.get("name") == automation_name:
+                        existing_automation = auto
+                        break
+
+                if existing_automation:
+                    automation_id = existing_automation["id"]
+                    console.print(f"[green]✓[/green] Found existing automation: {automation_id}")
+                else:
+                    # Create new automation if not found
+                    console.print(f"[cyan]Creating new automation:[/cyan] {automation_name}")
+                    automation_body = {"name": automation_name, "active": True}
+                    if description:
+                        automation_body["description"] = description
+
+                    automation_response = requests.post(
+                        f"{self.api_url}/api/automations",
+                        headers={"Authorization": f"Bearer {current_token}"},
+                        json=automation_body,
+                        timeout=10,
+                    )
+                    automation_response.raise_for_status()
+                    automation = automation_response.json()
+                    automation_id = automation["id"]
+
+                    console.print(f"[green]✓[/green] Automation created: {automation_id}")
+
+            # Step 2: Create API key for automation
+            console.print("[cyan]Generating API key...[/cyan]")
+
+            # Get automation name for the key name
+            if not is_uuid:
+                key_name = f"{name_or_id} CLI Key"
+            else:
+                # For UUID input, fetch the automation name
+                try:
+                    auto_response = requests.get(
+                        f"{self.api_url}/api/automations/{automation_id}",
+                        headers={"Authorization": f"Bearer {current_token}"},
+                        timeout=10,
+                    )
+                    auto_response.raise_for_status()
+                    auto_data = auto_response.json()
+                    key_name = f"{auto_data.get('name', 'Automation')} CLI Key"
+                except:
+                    key_name = "CLI Key"
+
+            api_key_body = {"name": key_name}
+
+            api_key_response = requests.post(
+                f"{self.api_url}/api/automations/{automation_id}/api-keys",
+                headers={"Authorization": f"Bearer {current_token}"},
+                json=api_key_body,
+                timeout=10,
+            )
+            api_key_response.raise_for_status()
+            api_key_data = api_key_response.json()
+
+            access_key_id = api_key_data["accessKeyId"]
+            secret_access_key = api_key_data["secretAccessKey"]
+            combined_key = f"{access_key_id}:{secret_access_key}"
+
+            console.print(f"[green]✓[/green] API key created")
+            console.print(
+                f"\n[yellow]⚠ Save this API key - it won't be shown again:[/yellow]\n"
+                f"[bold]{combined_key}[/bold]\n"
+            )
+
+            # Step 3: Login with the new API key
+            console.print("[cyan]Switching to automation identity...[/cyan]")
+            token = self.api_key_login(combined_key)
+
+            if token:
+                # Get automation name for display
+                display_name = name_or_id if not is_uuid else automation_name if 'automation_name' in locals() else automation_id[:8]
+                console.print(f"[green]✓[/green] Now operating as automation: {display_name}")
+                return token
+            else:
+                console.print("[red]✗[/red] Failed to switch to automation identity")
+                return None
+
+        except requests.RequestException as e:
+            console.print(f"[red]✗[/red] Failed to create automation: {e}")
+            return None

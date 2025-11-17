@@ -107,6 +107,10 @@ def login(api_key):
 
     Without --api-key: Device authorization flow (opens browser)
     With --api-key: API key authentication (for automation)
+
+    Examples:
+        scambus auth login
+        scambus auth login --api-key "your-api-key"
     """
     try:
         api_url = get_api_url()
@@ -265,7 +269,7 @@ def show_config():
 
 
 # Import command groups - imported here to avoid circular imports
-from .commands import cases, journal, media, profile, search, streams, tags, views  # noqa: E402
+from .commands import automations, cases, journal, media, profile, search, streams, tags, views  # noqa: E402
 
 cli.add_command(journal.journal)
 cli.add_command(media.media)
@@ -275,6 +279,7 @@ cli.add_command(cases.cases)
 cli.add_command(tags.tags)
 cli.add_command(profile.profile)
 cli.add_command(views.views)
+cli.add_command(automations.automations)
 
 
 def main():

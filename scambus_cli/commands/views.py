@@ -188,7 +188,7 @@ def execute_view(ctx, view_id, limit, cursor, output_json):
                 table_data = [
                     {
                         "ID": item.get("id", "")[:8] if isinstance(item, dict) else str(item)[:8],
-                        "Type": item.get("entry_type", "N/A") if isinstance(item, dict) else "N/A",
+                        "Type": item.get("type", "N/A") if isinstance(item, dict) else "N/A",
                         "Created": (
                             item.get("created_at", "N/A")[:19]
                             if isinstance(item, dict)
@@ -394,7 +394,7 @@ def my_journal(ctx, limit, output_json):
     client = ctx.obj.get_client()
 
     try:
-        result = client.get_my_journal_entries_view()
+        result = client.execute_my_journal_entries(limit=limit)
 
         data = result.get("data", [])
         count = result.get("count", 0)
@@ -409,14 +409,14 @@ def my_journal(ctx, limit, output_json):
             table_data = [
                 {
                     "ID": item.get("id", "")[:8] if isinstance(item, dict) else str(item)[:8],
-                    "Type": item.get("entry_type", "N/A") if isinstance(item, dict) else "N/A",
+                    "Type": item.get("type", "N/A") if isinstance(item, dict) else "N/A",
                     "Created": (
                         item.get("created_at", "N/A")[:19]
                         if isinstance(item, dict)
                         else "N/A"
                     ),
                 }
-                for item in data[: limit or 20]
+                for item in data[:20]  # Limit display to 20 items
             ]
             print_table(table_data, title=f"My Journal Entries ({count} total)")
 
@@ -441,7 +441,7 @@ def my_pinboard(ctx, limit, output_json):
     client = ctx.obj.get_client()
 
     try:
-        result = client.get_my_pinboard_view()
+        result = client.execute_my_pinboard(limit=limit)
 
         data = result.get("data", [])
         count = result.get("count", 0)
@@ -454,7 +454,7 @@ def my_pinboard(ctx, limit, output_json):
             print_json({"data": data, "count": count})
         else:
             print_info(f"Found {count} pinned items")
-            for i, item in enumerate(data[: limit or 10], 1):
+            for i, item in enumerate(data[:10], 1):
                 if isinstance(item, dict):
                     print(f"{i}. {item.get('id', 'unknown')[:16]} - {item.get('name', 'N/A')}")
                 else:

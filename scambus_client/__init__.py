@@ -22,6 +22,12 @@ from .exceptions import (
     ScambusValidationError,
 )
 from .websocket_client import ScambusWebSocketClient
+from .types import (
+    TagLookup,
+    StreamFilter,
+    ViewFilter,
+    ViewSortOrder,
+)
 from .models import (
     ActionDetails,
     ActivityCompleteDetails,
@@ -67,6 +73,10 @@ __all__ = [
     "ScambusAuthenticationError",
     "ScambusValidationError",
     "ScambusNotFoundError",
+    "TagLookup",
+    "StreamFilter",
+    "ViewFilter",
+    "ViewSortOrder",
     "JournalEntry",
     "Identifier",
     "IdentifierLookup",

@@ -3,6 +3,7 @@ Main Scambus API client.
 """
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -50,6 +51,14 @@ from .models import (
     UpdateDetails,
     ValidationDetails,
     View,
+)
+from .types import (
+    TagLookupInput,
+    StreamFilterInput,
+    ViewFilterInput,
+    ViewSortOrderInput,
+    to_dict,
+    to_dict_list,
 )
 
 
@@ -199,13 +208,19 @@ class ScambusClient:
     """
     Client for the Scambus API.
 
+    The client automatically uses authentication from the CLI if you've run `scambus auth login`.
+    No configuration needed in most cases!
+
     Example:
         ```python
         from scambus_client import ScambusClient
 
-        # Initialize client
+        # Initialize client (uses CLI auth automatically)
+        client = ScambusClient()
+
+        # Or explicitly provide credentials
         client = ScambusClient(
-            api_url="https://api.scambus.net/api",
+            api_url="https://scambus.net/api",
             api_token="your-api-token"
         )
 
@@ -232,25 +247,58 @@ class ScambusClient:
 
     def __init__(
         self,
-        api_url: str,
-        api_key_id: str = None,
-        api_key_secret: str = None,
-        api_token: str = None,
+        api_url: Optional[str] = None,
+        api_key_id: Optional[str] = None,
+        api_key_secret: Optional[str] = None,
+        api_token: Optional[str] = None,
         timeout: int = 30,
         max_retries: int = 3,
     ):
         """
         Initialize the Scambus client.
 
+        If api_url and api_token are not provided, they will be read from:
+        1. Environment variables (SCAMBUS_URL, SCAMBUS_API_TOKEN)
+        2. CLI config file (~/.scambus/config.json)
+        3. Defaults (api_url: https://scambus.net/api)
+
         Args:
-            api_url: Base URL of the Scambus API (e.g., https://api.scambus.net/api)
-            api_key_id: API key ID (UUID) for authentication (required if api_token not provided)
-            api_key_secret: API key secret for authentication (required if api_token not provided)
-            api_token: API JWT token (deprecated, use api_key_id and api_key_secret instead)
+            api_url: Base URL of the Scambus API (default: from config or https://scambus.net/api)
+            api_key_id: API key ID (UUID) for authentication
+            api_key_secret: API key secret for authentication
+            api_token: API JWT token (auto-loaded from CLI config if not provided)
             timeout: Request timeout in seconds (default: 30)
             max_retries: Maximum number of retries for failed requests (default: 3)
         """
-        self.api_url = api_url.rstrip("/")
+        # Load from CLI config if parameters not provided
+        if api_url is None or api_token is None:
+            config = self._load_cli_config()
+
+            if api_url is None:
+                # Priority: env var > config file > default
+                api_url = os.getenv("SCAMBUS_URL")
+                if api_url is None:
+                    api_url = config.get("api_url", "https://scambus.net")
+
+                # Ensure /api suffix
+                api_url = api_url.rstrip("/")
+                if not api_url.endswith("/api"):
+                    api_url = f"{api_url}/api"
+
+            if api_token is None and not (api_key_id and api_key_secret):
+                # Try environment variable first
+                api_token = os.getenv("SCAMBUS_API_TOKEN")
+
+                # Then try config file
+                if api_token is None:
+                    auth = config.get("auth", {})
+                    api_token = auth.get("token")
+
+                    # Also support API key from config
+                    if api_token is None and "api_key" in auth:
+                        api_key_id = auth.get("api_key")
+
+        self.api_url = api_url.rstrip("/") if api_url else "https://scambus.net/api"
         self.timeout = timeout
 
         # Create session with retry logic
@@ -283,7 +331,26 @@ class ScambusClient:
                 }
             )
         else:
-            raise ValueError("Either api_key_id/api_key_secret or api_token must be provided")
+            raise ValueError(
+                "No authentication provided. Either:\n"
+                "1. Run 'scambus auth login' to authenticate via CLI, or\n"
+                "2. Provide api_key_id/api_key_secret, or\n"
+                "3. Set SCAMBUS_API_TOKEN environment variable"
+            )
+
+    @staticmethod
+    def _load_cli_config() -> Dict[str, Any]:
+        """Load configuration from CLI config file."""
+        config_path = Path.home() / ".scambus" / "config.json"
+
+        if not config_path.exists():
+            return {}
+
+        try:
+            with open(config_path, "r") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            return {}
 
     def _request(
         self,
@@ -534,8 +601,7 @@ class ScambusClient:
         originator_identifier: Optional[str] = None,
         create_originator: bool = False,
         parent_journal_entry_id: Optional[str] = None,
-        tags: Optional[List[Dict[str, Any]]] = None,
-        tag_lookups: Optional[List[Dict[str, str]]] = None,
+        tags: Optional[List[TagLookupInput]] = None,
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
         in_progress: bool = False,
@@ -570,11 +636,10 @@ class ScambusClient:
             identifier_lookups: List of identifiers to lookup/create
             evidence: Optional evidence with media
             parent_journal_entry_id: Optional parent journal entry ID (for linking related entries)
-            tags: Optional list of tags to apply by UUID. Each tag is a dict with 'tag_id' and optional 'tag_value_id'
-                Example: [{"tag_id": "uuid-123"}, {"tag_id": "uuid-456", "tag_value_id": "uuid-789"}]
-            tag_lookups: Optional list of tags to apply by name. Each tag is a dict with 'tag_name' and optional 'tag_value'
-                The backend will validate these tags exist and return 400 if not found. Case-insensitive matching.
-                Example: [{"tag_name": "Human-reviewed"}, {"tag_name": "Scam Type", "tag_value": "Refund"}]
+            tags: Optional list of tags to apply. Can be TagLookup objects or dictionaries.
+                TagLookup objects: TagLookup(tag_name="Phishing", tag_value="Email")
+                Dictionaries: {"tag_name": "Phishing", "tag_value": "Email"}
+                The backend will validate these tags exist and return 400 if not found.
             start_time: When the activity started (optional). If set without end_time and in_progress=False,
                 end_time defaults to start_time (instant completion)
             end_time: When the activity ended (optional)
@@ -667,13 +732,9 @@ class ScambusClient:
         if parent_journal_entry_id:
             data["parent_journal_entry_id"] = parent_journal_entry_id
 
-        # Add tags if provided
+        # Add tags if provided (convert TagLookup objects to dictionaries)
         if tags:
-            data["tags"] = tags
-
-        # Add tag lookups if provided
-        if tag_lookups:
-            data["tag_lookups"] = tag_lookups
+            data["tag_lookups"] = to_dict_list(tags)
 
         # Add metadata if provided
         if metadata:
@@ -1666,8 +1727,8 @@ class ScambusClient:
         self,
         name: str,
         entity_type: str,
-        filter_criteria: Optional[Dict[str, Any]] = None,
-        sort_order: Optional[Dict[str, Any]] = None,
+        filter_criteria: Optional[ViewFilterInput] = None,
+        sort_order: Optional[ViewSortOrderInput] = None,
         description: Optional[str] = None,
         alias: Optional[str] = None,
         visibility: str = "organization",
@@ -1679,8 +1740,8 @@ class ScambusClient:
         Args:
             name: View name
             entity_type: Type of entities ("cases", "identifiers", "evidence", "journal")
-            filter_criteria: Filter criteria as dict (optional)
-            sort_order: Sort configuration as dict (optional)
+            filter_criteria: Filter criteria (ViewFilter object or dict)
+            sort_order: Sort configuration (ViewSortOrder object or dict)
             description: View description (optional)
             alias: Short alias for the view (optional)
             visibility: "private", "organization", or "public" (default: "organization")
@@ -1688,6 +1749,17 @@ class ScambusClient:
 
         Returns:
             Created View object
+
+        Example:
+            view = client.create_view(
+                name="High Confidence Detections",
+                entity_type="journal",
+                filter_criteria=ViewFilter(
+                    min_confidence=0.9,
+                    entry_types=["detection"]
+                ),
+                sort_order=ViewSortOrder(field="created_at", direction="desc")
+            )
         """
         body = {
             "name": name,
@@ -1701,9 +1773,9 @@ class ScambusClient:
         if alias:
             body["alias"] = alias
         if filter_criteria:
-            body["filter_criteria"] = filter_criteria
+            body["filter_criteria"] = to_dict(filter_criteria)
         if sort_order:
-            body["sort_order"] = sort_order
+            body["sort_order"] = to_dict(sort_order)
 
         response = self._request("POST", "/views", json_data=body)
         return View.from_dict(response)
@@ -1713,8 +1785,8 @@ class ScambusClient:
         view_id: str,
         name: Optional[str] = None,
         description: Optional[str] = None,
-        filter_criteria: Optional[Dict[str, Any]] = None,
-        sort_order: Optional[Dict[str, Any]] = None,
+        filter_criteria: Optional[ViewFilterInput] = None,
+        sort_order: Optional[ViewSortOrderInput] = None,
         visibility: Optional[str] = None,
     ) -> View:
         """
@@ -1738,9 +1810,9 @@ class ScambusClient:
         if description is not None:
             body["description"] = description
         if filter_criteria is not None:
-            body["filter_criteria"] = filter_criteria
+            body["filter_criteria"] = to_dict(filter_criteria)
         if sort_order is not None:
-            body["sort_order"] = sort_order
+            body["sort_order"] = to_dict(sort_order)
         if visibility is not None:
             body["visibility"] = visibility
 
@@ -1756,27 +1828,63 @@ class ScambusClient:
         """
         self._request("DELETE", f"/views/{view_id}")
 
-    def get_my_journal_entries_view(self) -> Dict[str, Any]:
+    def get_my_journal_entries_view(self) -> View:
         """
-        Execute the "My Journal Entries" system view.
+        Get the "My Journal Entries" system view object.
 
-        This is a shortcut for getting journal entries created by the current user.
+        This is a shortcut for getting the view definition.
+        To execute it, use execute_view() with the returned view's ID.
+
+        Returns:
+            View object
+        """
+        response = self._request("GET", "/views/my-journal-entries")
+        return View.from_dict(response)
+
+    def get_my_pinboard_view(self) -> View:
+        """
+        Get the "My Pinboard" system view object.
+
+        This is a shortcut for getting the view definition.
+        To execute it, use execute_view() with the returned view's ID.
+
+        Returns:
+            View object
+        """
+        response = self._request("GET", "/views/my-pinboard")
+        return View.from_dict(response)
+
+    def execute_my_journal_entries(self, cursor: Optional[str] = None, limit: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Execute the "My Journal Entries" view and return results.
+
+        This combines getting the view and executing it in one call.
+
+        Args:
+            cursor: Pagination cursor (optional)
+            limit: Results limit (optional)
 
         Returns:
             Dict with 'data', 'nextCursor', 'hasMore', 'count' keys
         """
-        return self.execute_view("my-journal-entries")
+        view = self.get_my_journal_entries_view()
+        return self.execute_view(view.id, cursor=cursor, limit=limit)
 
-    def get_my_pinboard_view(self) -> Dict[str, Any]:
+    def execute_my_pinboard(self, cursor: Optional[str] = None, limit: Optional[int] = None) -> Dict[str, Any]:
         """
-        Execute the "My Pinboard" system view.
+        Execute the "My Pinboard" view and return results.
 
-        This is a shortcut for getting pinned items.
+        This combines getting the view and executing it in one call.
+
+        Args:
+            cursor: Pagination cursor (optional)
+            limit: Results limit (optional)
 
         Returns:
             Dict with 'data', 'nextCursor', 'hasMore', 'count' keys
         """
-        return self.execute_view("my-pinboard")
+        view = self.get_my_pinboard_view()
+        return self.execute_view(view.id, cursor=cursor, limit=limit)
 
     # Identifier Methods
 
@@ -3517,5 +3625,110 @@ class ScambusClient:
                 )
 
         raise ValueError("Could not extract authentication credentials from client")
+
+    # Automation Methods
+
+    def create_automation(
+        self,
+        name: str,
+        description: Optional[str] = None,
+        active: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Create a new automation identity.
+
+        Args:
+            name: Automation name
+            description: Optional description
+            active: Whether the automation is active (default: True)
+
+        Returns:
+            Automation object with id, name, description, etc.
+        """
+        body = {"name": name, "active": active}
+        if description:
+            body["description"] = description
+
+        return self._request("POST", "/automations", json_data=body)
+
+    def create_automation_api_key(
+        self,
+        automation_id: str,
+        name: str,
+        expires_at: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Create a new API key for an automation.
+
+        Args:
+            automation_id: Automation UUID
+            name: API key name
+            expires_at: Optional expiration date (ISO 8601 format)
+
+        Returns:
+            Dict with 'apiKey', 'accessKeyId', and 'secretAccessKey'.
+            NOTE: accessKeyId and secretAccessKey are only returned once!
+        """
+        body = {"name": name}
+        if expires_at:
+            body["expiresAt"] = expires_at
+
+        return self._request("POST", f"/automations/{automation_id}/api-keys", json_data=body)
+
+    def list_automations(self) -> List[Dict[str, Any]]:
+        """
+        List all automations for the organization.
+
+        Returns:
+            List of automation objects
+        """
+        return self._request("GET", "/automations")
+
+    def get_automation(self, automation_id: str) -> Dict[str, Any]:
+        """
+        Get automation details by ID.
+
+        Args:
+            automation_id: Automation UUID
+
+        Returns:
+            Automation object
+        """
+        return self._request("GET", f"/automations/{automation_id}")
+
+    def list_automation_api_keys(self, automation_id: str) -> List[Dict[str, Any]]:
+        """
+        List all API keys for an automation.
+
+        Args:
+            automation_id: Automation UUID
+
+        Returns:
+            List of API key objects (without secrets)
+        """
+        return self._request("GET", f"/automations/{automation_id}/api-keys")
+
+    def revoke_automation_api_key(self, automation_id: str, key_id: str) -> Dict[str, Any]:
+        """
+        Revoke an automation API key without deleting it.
+
+        Args:
+            automation_id: Automation UUID
+            key_id: API key UUID
+
+        Returns:
+            Updated API key object
+        """
+        return self._request("POST", f"/automations/{automation_id}/api-keys/{key_id}/revoke")
+
+    def delete_automation_api_key(self, automation_id: str, key_id: str) -> None:
+        """
+        Permanently delete an automation API key.
+
+        Args:
+            automation_id: Automation UUID
+            key_id: API key UUID
+        """
+        self._request("DELETE", f"/automations/{automation_id}/api-keys/{key_id}")
 
     # Group Methods

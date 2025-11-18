@@ -2,15 +2,14 @@
 Main Scambus API client.
 """
 
-import json
-import os
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+
+from .config import get_api_url, get_api_token
 
 from .exceptions import (
     ScambusAPIError,
@@ -271,32 +270,14 @@ class ScambusClient:
             max_retries: Maximum number of retries for failed requests (default: 3)
         """
         # Load from CLI config if parameters not provided
-        if api_url is None or api_token is None:
-            config = self._load_cli_config()
+        api_url = get_api_url(api_url)
 
-            if api_url is None:
-                # Priority: env var > config file > default
-                api_url = os.getenv("SCAMBUS_URL")
-                if api_url is None:
-                    api_url = config.get("api_url", "https://scambus.net")
+        # Ensure /api suffix
+        if not api_url.endswith("/api"):
+            api_url = f"{api_url}/api"
 
-                # Ensure /api suffix
-                api_url = api_url.rstrip("/")
-                if not api_url.endswith("/api"):
-                    api_url = f"{api_url}/api"
-
-            if api_token is None and not (api_key_id and api_key_secret):
-                # Try environment variable first
-                api_token = os.getenv("SCAMBUS_API_TOKEN")
-
-                # Then try config file
-                if api_token is None:
-                    auth = config.get("auth", {})
-                    api_token = auth.get("token")
-
-                    # Also support API key from config
-                    if api_token is None and "api_key" in auth:
-                        api_key_id = auth.get("api_key")
+        if api_token is None and not (api_key_id and api_key_secret):
+            api_token = get_api_token()
 
         self.api_url = api_url.rstrip("/") if api_url else "https://scambus.net/api"
         self.timeout = timeout
@@ -337,20 +318,6 @@ class ScambusClient:
                 "2. Provide api_key_id/api_key_secret, or\n"
                 "3. Set SCAMBUS_API_TOKEN environment variable"
             )
-
-    @staticmethod
-    def _load_cli_config() -> Dict[str, Any]:
-        """Load configuration from CLI config file."""
-        config_path = Path.home() / ".scambus" / "config.json"
-
-        if not config_path.exists():
-            return {}
-
-        try:
-            with open(config_path, "r") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError):
-            return {}
 
     def _request(
         self,
@@ -1641,6 +1608,60 @@ class ScambusClient:
             "hasMore": response.get("hasMore", False),
             "count": response.get("count", 0),
         }
+
+    def create_stream_from_query(
+        self,
+        name: str,
+        entry_type: Optional[str] = None,
+        min_confidence: Optional[float] = None,
+        max_confidence: Optional[float] = None,
+        performed_after: Optional[Union[str, datetime]] = None,
+        performed_before: Optional[Union[str, datetime]] = None,
+        search_query: Optional[str] = None,
+        ttl_minutes: int = 60,
+    ) -> ExportStream:
+        """
+        Create a temporary export stream from query parameters.
+
+        This creates a temporary stream that auto-expires after ttl_minutes (max 24 hours).
+        Useful for following query results in real-time via WebSocket.
+
+        Args:
+            name: Stream name
+            entry_type: Filter by entry type
+            min_confidence: Minimum confidence score
+            max_confidence: Maximum confidence score
+            performed_after: Start date filter
+            performed_before: End date filter
+            search_query: Full-text search query
+            ttl_minutes: Time-to-live in minutes (default: 60, max: 1440 = 24 hours)
+
+        Returns:
+            ExportStream object with the new temporary stream details
+        """
+        from .types import ViewFilter
+        import json
+
+        # Build filter from query parameters
+        filter_params = ViewFilter(
+            entry_types=[entry_type] if entry_type else None,
+            min_confidence=min_confidence,
+            max_confidence=max_confidence,
+            performed_after=performed_after.isoformat() if isinstance(performed_after, datetime) else performed_after,
+            performed_before=performed_before.isoformat() if isinstance(performed_before, datetime) else performed_before,
+            search_query=search_query,
+        )
+
+        # Create temporary stream via dedicated endpoint
+        data = {
+            "name": name,
+            "data_type": "journal_entry",
+            "filter_expression": json.dumps(filter_params.to_dict()),
+            "ttlMinutes": ttl_minutes,
+        }
+
+        response = self._request("POST", "/export-streams/temporary", json_data=data)
+        return ExportStream.from_dict(response)
 
     def get_in_progress_activities(self) -> List[JournalEntry]:
         """

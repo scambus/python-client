@@ -145,16 +145,20 @@ def get_view(ctx, view_id, output_json):
 @click.argument("view_id")
 @click.option("--limit", type=int, help="Maximum number of results")
 @click.option("--cursor", help="Pagination cursor")
+@click.option("--follow", "-f", is_flag=True, help="Follow mode: show results then stream new matches (journal views only)")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 @click.pass_context
-def execute_view(ctx, view_id, limit, cursor, output_json):
+def execute_view(ctx, view_id, limit, cursor, follow, output_json):
     """Execute a saved view query.
 
     VIEW_ID can be a UUID or an alias (e.g., "my-journal-entries")
 
+    Use --follow (-f) to watch for new matching entries in real-time (journal views only).
+
     Examples:
         scambus views execute my-journal-entries
         scambus views execute my-journal-entries --limit 10
+        scambus views execute my-journal-entries --follow
         scambus views execute 123e4567-e89b-12d3-a456-426614174000 --json
     """
     client = ctx.obj.get_client()
@@ -209,6 +213,88 @@ def execute_view(ctx, view_id, limit, cursor, output_json):
 
             if has_more:
                 print_info(f"\nMore results available. Use --cursor {next_cursor}")
+
+        # Follow mode: create stream from view and subscribe via WebSocket
+        if follow:
+            if entity_type != "journal":
+                print_error("Follow mode is only supported for journal entity views")
+                sys.exit(1)
+
+            import asyncio
+            from scambus_client.websocket_client import ScambusWebSocketClient
+            from scambus_cli.config import get_api_url
+            import time
+
+            print_info("\n==> Entering follow mode (press Ctrl+C to exit)")
+            print_info("Creating stream from view...")
+
+            try:
+                # Get view details to extract filters
+                view = client.get_view(view_id)
+
+                # Create stream from view filters (mark as temporary for auto-cleanup)
+                stream_name = f"View Follow: {view.name} ({int(time.time())})"
+                stream = client.create_stream(
+                    name=stream_name,
+                    data_type="journal_entry",
+                    filters=view.filters,
+                    is_temporary=True,
+                )
+
+                print_success(f"Stream created: {stream.id}")
+                print_info("Waiting for new matching entries...\n")
+
+                # Create WebSocket client
+                api_url = get_api_url()
+                ws_client = ScambusWebSocketClient(api_url=api_url)
+
+                new_count = 0
+
+                # Define message handler for follow mode
+                def handle_new_entry(entry_data):
+                    nonlocal new_count
+                    new_count += 1
+
+                    if output_json:
+                        # Output as single JSON object per line
+                        print_json(entry_data)
+                    else:
+                        # Pretty print new entry
+                        print_info(f"\n==> New Entry #{new_count}")
+                        entry_summary = {
+                            "ID": entry_data.get("id", "")[:8],
+                            "Type": entry_data.get("type", "N/A"),
+                            "Description": entry_data.get("description", "")[:80],
+                            "Performed": entry_data.get("performed_at", "N/A")[:19] if entry_data.get("performed_at") else "N/A",
+                        }
+                        print_detail(entry_summary)
+
+                # Run WebSocket listener
+                asyncio.run(ws_client.listen_stream(
+                    stream_id=stream.id,
+                    on_message=handle_new_entry,
+                    cursor="$"  # Only new messages
+                ))
+
+            except KeyboardInterrupt:
+                print_info(f"\n\nFollow mode stopped. Received {new_count} new entries.")
+                print_info("Cleaning up temporary stream...")
+                try:
+                    client.delete_stream(stream.id)
+                    print_success("Temporary stream deleted")
+                except Exception as cleanup_error:
+                    print_error(f"Failed to delete stream {stream.id}: {cleanup_error}")
+            except Exception as follow_error:
+                print_error(f"Follow mode failed: {follow_error}")
+                import traceback
+                traceback.print_exc()
+                # Try to clean up stream on error
+                try:
+                    print_info("Cleaning up temporary stream...")
+                    client.delete_stream(stream.id)
+                    print_success("Temporary stream deleted")
+                except:
+                    pass  # Ignore cleanup errors on failure
 
     except Exception as e:
         print_error(f"Failed to execute view: {e}")

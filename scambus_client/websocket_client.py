@@ -13,6 +13,8 @@ import websockets
 from websockets.client import WebSocketClientProtocol
 from websockets.exceptions import ConnectionClosed, WebSocketException
 
+from .config import get_api_url, get_api_token
+
 logger = logging.getLogger(__name__)
 
 
@@ -52,7 +54,7 @@ class ScambusWebSocketClient:
 
     def __init__(
         self,
-        api_url: str,
+        api_url: Optional[str] = None,
         api_key_id: Optional[str] = None,
         api_key_secret: Optional[str] = None,
         api_token: Optional[str] = None,
@@ -63,14 +65,17 @@ class ScambusWebSocketClient:
         Initialize the WebSocket client.
 
         Args:
-            api_url: Base URL of the Scambus API (e.g., https://api.scambus.net/api)
+            api_url: Base URL of the Scambus API (auto-loaded from CLI config if not provided)
             api_key_id: API key ID (UUID) for authentication
             api_key_secret: API key secret for authentication
-            api_token: API JWT token (deprecated, use api_key_id and api_key_secret instead)
+            api_token: API JWT token (auto-loaded from CLI config if not provided)
             max_reconnect_attempts: Maximum number of reconnection attempts (default: 10)
             reconnect_delay: Initial delay between reconnection attempts in seconds (default: 1.0)
         """
-        self.api_url = api_url.rstrip("/")
+        # Load from CLI config if parameters not provided
+        self.api_url = get_api_url(api_url)
+        if api_token is None:
+            api_token = get_api_token()
         self.max_reconnect_attempts = max_reconnect_attempts
         self.reconnect_delay = reconnect_delay
         self.reconnect_attempts = 0
@@ -344,6 +349,140 @@ class ScambusWebSocketClient:
         """
         # Register notification handler
         self.on("notifications", "notification", on_notification)
+
+        # Register error handler if provided
+        if on_error:
+
+            async def error_wrapper():
+                try:
+                    await self.run()
+                except Exception as e:
+                    if asyncio.iscoroutinefunction(on_error):
+                        await on_error(e)
+                    else:
+                        on_error(e)
+
+            await error_wrapper()
+        else:
+            await self.run()
+
+    async def subscribe_stream(self, stream_id: str, cursor: str = "$") -> None:
+        """
+        Subscribe to an export stream for real-time messages.
+
+        This sends a subscribe message to the server to start receiving stream messages.
+
+        Args:
+            stream_id: UUID of the export stream to subscribe to
+            cursor: Starting position in the stream:
+                   - "$" = from end (only new messages, default)
+                   - "0-0" = from beginning (all messages)
+                   - "<message-id>" = from specific message ID (e.g., "1234567890-0")
+
+        Example:
+            ```python
+            # Subscribe from end (only new messages)
+            await ws_client.subscribe_stream("abc-123-def-456")
+
+            # Subscribe from beginning (get all messages)
+            await ws_client.subscribe_stream("abc-123-def-456", cursor="0-0")
+
+            # Resume from specific position
+            await ws_client.subscribe_stream("abc-123-def-456", cursor="1700000000000-0")
+
+            # Register handler for stream messages
+            def handle_stream_message(data):
+                print(f"Received stream message: {data}")
+
+            ws_client.on(f"stream:{stream_id}", "message", handle_stream_message)
+            ```
+        """
+        if not self._ws or self._ws.closed:
+            raise RuntimeError("WebSocket not connected. Call connect() first.")
+
+        # Send subscribe message to server with cursor
+        subscribe_msg = {
+            "action": "subscribe",
+            "channel": f"stream:{stream_id}",
+            "cursor": cursor
+        }
+
+        await self._ws.send(json.dumps(subscribe_msg))
+        logger.info(f"Sent subscribe request for stream: {stream_id} (cursor: {cursor})")
+
+    async def unsubscribe_stream(self, stream_id: str) -> None:
+        """
+        Unsubscribe from an export stream.
+
+        Args:
+            stream_id: UUID of the export stream to unsubscribe from
+
+        Example:
+            ```python
+            await ws_client.unsubscribe_stream("abc-123-def-456")
+            ```
+        """
+        if not self._ws or self._ws.closed:
+            raise RuntimeError("WebSocket not connected. Call connect() first.")
+
+        # Send unsubscribe message to server
+        unsubscribe_msg = {
+            "action": "unsubscribe",
+            "channel": f"stream:{stream_id}"
+        }
+
+        await self._ws.send(json.dumps(unsubscribe_msg))
+        logger.info(f"Sent unsubscribe request for stream: {stream_id}")
+
+    async def listen_stream(
+        self,
+        stream_id: str,
+        on_message: Callable[[Dict[str, Any]], None],
+        on_error: Optional[Callable[[Exception], None]] = None,
+        cursor: str = "$",
+    ) -> None:
+        """
+        Convenience method to listen for export stream messages.
+
+        This is a simplified interface that:
+        1. Connects to WebSocket
+        2. Subscribes to the stream
+        3. Registers the message handler
+        4. Runs until interrupted
+
+        Args:
+            stream_id: UUID of the export stream to listen to
+            on_message: Callback for stream messages (can be sync or async)
+            on_error: Optional callback for errors (can be sync or async)
+            cursor: Starting position in the stream:
+                   - "$" = from end (only new messages, default)
+                   - "0-0" = from beginning (all messages)
+                   - "<message-id>" = from specific message ID
+
+        Example:
+            ```python
+            async def handle_message(message):
+                print(f"Journal Entry: {message.get('id')}")
+                print(f"Type: {message.get('type')}")
+                for identifier in message.get('identifiers', []):
+                    print(f"  - {identifier['type']}: {identifier['displayValue']}")
+
+            # Listen from end (only new messages)
+            await ws_client.listen_stream("abc-123-def-456", handle_message)
+
+            # Listen from beginning (get all historical messages)
+            await ws_client.listen_stream("abc-123-def-456", handle_message, cursor="0-0")
+            ```
+        """
+        # Register message handler
+        channel = f"stream:{stream_id}"
+        self.on(channel, "message", on_message)
+
+        # Connect to WebSocket
+        await self.connect()
+
+        # Subscribe to stream with cursor
+        await self.subscribe_stream(stream_id, cursor=cursor)
 
         # Register error handler if provided
         if on_error:

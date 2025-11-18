@@ -200,6 +200,7 @@ def get(ctx, entry_id, output_json):
 @click.option("--order-by", default="performed_at", help="Sort column (default: performed_at)")
 @click.option("--order-desc/--order-asc", default=True, help="Sort order (default: descending)")
 @click.option("--limit", type=int, help="Max results to fetch (fetches in pages of 100)")
+@click.option("--follow", "-f", is_flag=True, help="Follow mode: show results then stream new matches in real-time")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 @click.option("--with-identifiers", is_flag=True, help="Include related identifiers")
 @click.option("--with-evidence", is_flag=True, help="Include related evidence")
@@ -218,6 +219,7 @@ def query(
     order_by,
     order_desc,
     limit,
+    follow,
     output_json,
     with_identifiers,
     with_evidence,
@@ -227,6 +229,8 @@ def query(
 
     Results are fetched in pages of 100 until limit is reached or no more results.
 
+    Use --follow (-f) to watch for new matching entries in real-time (like tail -f).
+
     Examples:
         # Search for "spam" in recent entries
         scambus journal query --search spam --limit 50
@@ -234,11 +238,20 @@ def query(
         # Find all inbound phone calls
         scambus journal query --type phone_call --direction inbound
 
+        # Follow mode: show results then watch for new phone calls
+        scambus journal query --type phone_call --follow
+
+        # Follow with JSON output (one per line)
+        scambus journal query --type phone_call -f --json
+
         # Query by multiple JSONB details
         scambus journal query --detail direction=inbound --detail platform=pstn
 
         # Time range query with confidence filter
         scambus journal query --after 2025-01-01T00:00:00Z --min-confidence 0.7
+
+        # Follow high-confidence scams
+        scambus journal query --min-confidence 0.9 --follow
 
         # Export everything to JSON
         scambus journal query --json > results.json
@@ -342,6 +355,89 @@ def query(
 
             if cursor and fetched >= (limit or float("inf")):
                 print_info(f"Showing first {len(all_entries)} results (use --limit to fetch more)")
+
+        # Follow mode: create stream and subscribe via WebSocket
+        if follow:
+            import asyncio
+            from scambus_client.websocket_client import ScambusWebSocketClient
+            from scambus_cli.config import get_api_url
+            import time
+
+            print_info("\n==> Entering follow mode (press Ctrl+C to exit)")
+            print_info("Creating stream for matching criteria...")
+
+            try:
+                # Create stream from query parameters
+                stream_name = f"Query Follow {int(time.time())}"
+                stream = client.create_stream_from_query(
+                    name=stream_name,
+                    entry_type=entry_type,
+                    min_confidence=min_confidence,
+                    max_confidence=max_confidence,
+                    performed_after=after,
+                    performed_before=before,
+                    search_query=search,
+                )
+
+                print_success(f"Stream created: {stream.id}")
+                print_info("Waiting for new matching entries...\n")
+
+                # Create WebSocket client
+                api_url = get_api_url()
+                ws_client = ScambusWebSocketClient(api_url=api_url)
+
+                new_count = 0
+
+                # Define message handler for follow mode
+                def handle_new_entry(entry_data):
+                    nonlocal new_count
+                    new_count += 1
+
+                    if output_json:
+                        # Output as single JSON object per line
+                        print_json(entry_data)
+                    else:
+                        # Pretty print new entry
+                        print_info(f"\n==> New Entry #{new_count}")
+                        entry_summary = {
+                            "ID": entry_data.get("id", "")[:8],
+                            "Type": entry_data.get("type", "N/A"),
+                            "Description": entry_data.get("description", "")[:80],
+                            "Performed": entry_data.get("performed_at", "N/A")[:19] if entry_data.get("performed_at") else "N/A",
+                        }
+                        if with_identifiers and entry_data.get("identifiers"):
+                            entry_summary["Identifiers"] = ", ".join(
+                                f"{i['type']}:{i.get('displayValue', '')}"
+                                for i in entry_data["identifiers"][:3]
+                            )
+                        print_detail(entry_summary)
+
+                # Run WebSocket listener
+                asyncio.run(ws_client.listen_stream(
+                    stream_id=stream.id,
+                    on_message=handle_new_entry,
+                    cursor="$"  # Only new messages
+                ))
+
+            except KeyboardInterrupt:
+                print_info(f"\n\nFollow mode stopped. Received {new_count} new entries.")
+                print_info("Cleaning up temporary stream...")
+                try:
+                    client.delete_stream(stream.id)
+                    print_success("Temporary stream deleted")
+                except Exception as cleanup_error:
+                    print_error(f"Failed to delete stream {stream.id}: {cleanup_error}")
+            except Exception as follow_error:
+                print_error(f"Follow mode failed: {follow_error}")
+                import traceback
+                traceback.print_exc()
+                # Try to clean up stream on error
+                try:
+                    print_info("Cleaning up temporary stream...")
+                    client.delete_stream(stream.id)
+                    print_success("Temporary stream deleted")
+                except:
+                    pass  # Ignore cleanup errors on failure
 
     except Exception as e:
         print_error(f"Query failed: {e}")

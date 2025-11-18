@@ -529,6 +529,122 @@ def recovery_info(ctx, stream_id, output_json):
         sys.exit(1)
 
 
+@streams.command("listen")
+@click.argument("stream_id")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON (one per line)")
+@click.option("--from-beginning", is_flag=True, help="Start from beginning of stream (default: only new messages)")
+@click.option("--cursor", help="Start from specific message ID (e.g., '1700000000000-0')")
+@click.pass_context
+def listen_stream(ctx, stream_id, output_json, from_beginning, cursor):
+    """Listen to a stream in real-time via WebSocket.
+
+    This command establishes a WebSocket connection and streams messages
+    in real-time as they are published to the export stream. Messages are
+    displayed immediately without polling.
+
+    By default, only new messages are shown. Use --from-beginning to
+    replay all historical messages first, or --cursor to start from
+    a specific position.
+
+    Press Ctrl+C to stop listening.
+
+    Examples:
+        # Listen for new messages only (default)
+        scambus streams listen <stream-id>
+
+        # Replay all messages from the beginning
+        scambus streams listen <stream-id> --from-beginning
+
+        # Start from a specific message ID
+        scambus streams listen <stream-id> --cursor 1700000000000-0
+
+        # Listen and output JSON (one per line)
+        scambus streams listen <stream-id> --json
+
+        # Listen and pipe to jq for processing
+        scambus streams listen <stream-id> --json | jq '.identifiers[0].displayValue'
+    """
+    import asyncio
+    from scambus_client.websocket_client import ScambusWebSocketClient
+    from scambus_cli.config import get_api_url
+    from scambus_cli.auth_device import DeviceAuthManager
+
+    # Determine cursor position
+    if cursor:
+        stream_cursor = cursor
+    elif from_beginning:
+        stream_cursor = "0-0"
+    else:
+        stream_cursor = "$"  # default: from end
+
+    # Get API URL and authentication
+    api_url = get_api_url()
+    manager = DeviceAuthManager(api_url)
+    token = manager.get_token()
+
+    if not token:
+        print_error("Not authenticated. Run 'scambus auth login' first.")
+        sys.exit(1)
+
+    # Create WebSocket client
+    ws_client = ScambusWebSocketClient(
+        api_url=api_url,
+        api_token=token
+    )
+
+    cursor_desc = {
+        "$": "new messages only",
+        "0-0": "from beginning",
+    }.get(stream_cursor, f"from cursor {stream_cursor}")
+
+    print_info(f"Connecting to stream {stream_id}...")
+    print_info(f"Starting position: {cursor_desc}")
+    print_info("Press Ctrl+C to stop\n")
+
+    message_count = 0
+
+    # Define message handler
+    def handle_message(message):
+        nonlocal message_count
+        message_count += 1
+
+        if output_json:
+            # Output raw JSON (one per line)
+            print_json(message)
+        else:
+            # Pretty print message
+            _format_stream_message(message_count, message)
+
+    # Define error handler
+    def handle_error(error):
+        print_error(f"WebSocket error: {error}")
+
+    # Run WebSocket client
+    try:
+        asyncio.run(ws_client.listen_stream(
+            stream_id=stream_id,
+            on_message=handle_message,
+            on_error=handle_error,
+            cursor=stream_cursor
+        ))
+    except KeyboardInterrupt:
+        print_info(f"\n\nStopped listening. Received {message_count} messages.")
+    except Exception as e:
+        print_error(f"Failed to listen to stream: {e}")
+        sys.exit(1)
+
+
+def _format_stream_message(index: int, msg: dict):
+    """Format a stream message for display."""
+    # Detect message type by checking for identifier-specific fields
+    is_identifier = "identifierId" in msg or "identifier_id" in msg
+
+    if is_identifier:
+        _format_identifier_message(index, msg)
+    else:
+        _format_journal_entry_message(index, msg)
+
+
 @streams.command()
 @click.argument("stream_id")
 @click.pass_context

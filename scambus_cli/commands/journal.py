@@ -1084,7 +1084,14 @@ def create_email(
 def create_text_conversation(
     ctx, description, platform, phone, identifier, confidence, screenshot, attach, case_id, originator_type, originator_identifier, create_originator, tag
 ):
-    """Create a text conversation entry."""
+    """Create a text conversation entry.
+
+    This creates a simple text_conversation entry suitable for recording
+    that a conversation occurred on a messaging platform.
+
+    For use cases requiring message-level tracking, use
+    'create-conversation' and 'add-conversation-messages' instead.
+    """
     client = ctx.obj.get_client()
 
     try:
@@ -1447,4 +1454,473 @@ def in_progress(ctx, output_json):
 
     except Exception as e:
         print_error(f"Failed to get in-progress activities: {e}")
+        sys.exit(1)
+
+
+# ============================================================================
+# CONVERSATION COMMANDS WITH MESSAGE SUPPORT
+# ============================================================================
+
+
+@journal.command()
+@click.option("--description", required=True, help="Conversation description")
+@click.option(
+    "--platform",
+    required=True,
+    type=click.Choice(["sms", "whatsapp", "telegram", "signal", "facebook", "imessage", "email", "other"]),
+    help="Messaging platform",
+)
+@click.option(
+    "--conversation-type",
+    type=click.Choice(["individual", "group"]),
+    help="Conversation type (optional)",
+)
+@click.option("--conversation-id", help="Platform-specific conversation/thread ID (optional)")
+@click.option(
+    "--source-type",
+    type=click.Choice(["export", "screenshot", "api", "manual_entry"]),
+    help="How the conversation was collected (optional)",
+)
+@click.option("--first-message-at", help="First message timestamp (ISO 8601 or relative, optional)")
+@click.option("--last-message-at", help="Last message timestamp (ISO 8601 or relative, optional)")
+@click.option("--subject", help="Subject line (for email) or group name")
+@click.option("--participant-count", type=int, help="Number of participants")
+@click.option(
+    "--export-format",
+    type=click.Choice(["json", "mbox", "eml", "txt", "html"]),
+    help="Format of exported data",
+)
+@click.option(
+    "--collection-method",
+    type=click.Choice(["user_upload", "api_sync", "screenshot_ocr"]),
+    help="How data was collected",
+)
+@click.option(
+    "--identifier",
+    multiple=True,
+    help="Identifier with optional ref: 'type:value' or 'type:value:ref' (e.g., phone:+1234567890:scammer)",
+)
+@click.option(
+    "--confidence",
+    type=float,
+    default=1.0,
+    help="Default confidence for identifiers (0.0-1.0)",
+)
+@click.option("--case-id", help="Case ID to link to")
+@click.option(
+    "--screenshot", multiple=True, type=click.Path(exists=True), help="Screenshot(s) of conversation"
+)
+@click.option(
+    "--attach", multiple=True, type=click.Path(exists=True), help="Additional attachments"
+)
+@click.option(
+    "--originator-type",
+    type=click.Choice(["user", "automation"]),
+    help="Originator type",
+)
+@click.option("--originator-identifier", help="Originator identifier")
+@click.option("--create-originator", is_flag=True, help="Create originator if not exists")
+@click.option(
+    "--tag",
+    multiple=True,
+    help="Tag to apply: 'TagName' or 'TagName:ValueName'",
+)
+@click.option("--json", "output_json", is_flag=True, help="Output JSON")
+@click.pass_context
+def create_conversation(
+    ctx,
+    description,
+    platform,
+    conversation_type,
+    conversation_id,
+    source_type,
+    first_message_at,
+    last_message_at,
+    subject,
+    participant_count,
+    export_format,
+    collection_method,
+    identifier,
+    confidence,
+    case_id,
+    screenshot,
+    attach,
+    originator_type,
+    originator_identifier,
+    create_originator,
+    tag,
+    output_json,
+):
+    """Create a text_conversation entry with optional metadata.
+
+    This creates a text_conversation journal entry. You can add messages
+    later via child conversation_continuation entries using 'add-conversation-messages'.
+
+    Examples:
+        # Simple conversation
+        scambus journal create-conversation \\
+            --description "Scam SMS conversation" \\
+            --platform sms \\
+            --identifier "phone:+1234567890"
+
+        # Conversation with full metadata
+        scambus journal create-conversation \\
+            --description "Scam conversation from WhatsApp export" \\
+            --platform whatsapp \\
+            --conversation-type individual \\
+            --conversation-id "chat_123456" \\
+            --source-type export \\
+            --export-format json \\
+            --first-message-at "2025-01-01T10:00:00Z" \\
+            --last-message-at "2025-01-01T11:30:00Z" \\
+            --identifier "phone:+1234567890:scammer" \\
+            --identifier "phone:+0987654321:victim"
+
+        # Create an email thread
+        scambus journal create-conversation \\
+            --description "Phishing email thread" \\
+            --platform email \\
+            --conversation-type individual \\
+            --conversation-id "thread_abc123" \\
+            --source-type export \\
+            --export-format mbox \\
+            --subject "Urgent: Verify your account" \\
+            --first-message-at "-7d" \\
+            --last-message-at "-1d"
+    """
+    client = ctx.obj.get_client()
+
+    try:
+        # Parse timestamps if provided
+        parsed_first = None
+        parsed_last = None
+        if first_message_at:
+            try:
+                parsed_first = parse_time_or_relative(first_message_at)
+            except ValueError as e:
+                print_error(str(e))
+                sys.exit(1)
+        if last_message_at:
+            try:
+                parsed_last = parse_time_or_relative(last_message_at)
+            except ValueError as e:
+                print_error(str(e))
+                sys.exit(1)
+
+        # Upload media files
+        media_ids = []
+
+        if screenshot:
+            for ss_path in screenshot:
+                print_info(f"Uploading screenshot: {ss_path}...")
+                media = upload_media_file(
+                    client, ss_path, notes=f"Conversation screenshot: {description}"
+                )
+                media_ids.append(media["id"])
+                print_success(f"Uploaded screenshot: {media['filename']}")
+
+        if attach:
+            for file_path in attach:
+                print_info(f"Uploading {file_path}...")
+                media = upload_media_file(
+                    client, file_path, notes=f"Conversation attachment: {description}"
+                )
+                media_ids.append(media["id"])
+                print_success(f"Uploaded: {media['filename']}")
+
+        # Build details - only platform is required
+        details = {
+            "platform": platform,
+        }
+
+        if conversation_type:
+            details["conversation_type"] = conversation_type
+        if conversation_id:
+            details["conversation_id"] = conversation_id
+        if source_type:
+            details["source_type"] = source_type
+        if parsed_first:
+            details["first_message_at"] = parsed_first.isoformat()
+        if parsed_last:
+            details["last_message_at"] = parsed_last.isoformat()
+        if subject:
+            details["subject"] = subject
+        if participant_count is not None:
+            details["participant_count"] = participant_count
+        if export_format:
+            details["export_format"] = export_format
+        if collection_method:
+            details["collection_method"] = collection_method
+
+        # Use current time for performed_at if no timestamps provided
+        performed_at = parsed_first.isoformat() if parsed_first else now_iso()
+
+        data = {
+            "type": "text_conversation",
+            "description": description,
+            "performed_at": performed_at,
+            "details": details,
+        }
+
+        # Only add start/end times if provided
+        if parsed_first:
+            data["start_time"] = parsed_first.isoformat()
+        if parsed_last:
+            data["end_time"] = parsed_last.isoformat()
+
+        # Add identifier lookups with optional ref
+        identifiers = []
+        if identifier:
+            for ident in identifier:
+                parts = ident.split(":", 2)
+                if len(parts) < 2:
+                    print_error(
+                        f"Invalid identifier format: {ident}. Use type:value or type:value:ref"
+                    )
+                    sys.exit(1)
+                ident_type = parts[0]
+                ident_value = parts[1]
+                ident_ref = parts[2] if len(parts) > 2 else None
+
+                lookup = {
+                    "type": ident_type,
+                    "value": ident_value,
+                    "confidence": confidence,
+                }
+                if ident_ref:
+                    lookup["ref"] = ident_ref
+                identifiers.append(lookup)
+
+        if identifiers:
+            data["identifier_lookups"] = identifiers
+
+        # Add evidence if media uploaded
+        if media_ids:
+            data["evidence"] = {
+                "type": "screenshot",
+                "description": f"Evidence for conversation: {description}",
+                "source": f"{platform} export",
+                "collected_at": now_iso(),
+                "media_ids": media_ids,
+            }
+
+        if case_id:
+            data["case_id"] = case_id
+
+        # Add originator lookup if provided
+        if originator_type or originator_identifier:
+            if not originator_type or not originator_identifier:
+                print_error(
+                    "Both --originator-type and --originator-identifier must be provided together"
+                )
+                sys.exit(1)
+
+            data["originator_lookup"] = {
+                "type": originator_type,
+                "identifier": originator_identifier,
+                "create_if_not_exists": create_originator,
+            }
+
+        # Add tags if provided
+        if tag:
+            tag_lookups = []
+            for tag_str in tag:
+                if ":" in tag_str:
+                    tag_parts = tag_str.split(":", 1)
+                    tag_lookups.append({
+                        "tag_name": tag_parts[0].strip(),
+                        "tag_value": tag_parts[1].strip()
+                    })
+                else:
+                    tag_lookups.append({"tag_name": tag_str.strip()})
+            data["tag_lookups"] = tag_lookups
+
+        entry = client._request("POST", "/journal-entries", json_data=data)
+
+        if output_json:
+            print_json(entry)
+        else:
+            print_success(f"Conversation entry created: {entry['id']}")
+            print_info("Use 'scambus journal add-conversation-messages' to add messages to this conversation")
+            print_detail(entry, title="Created Entry")
+
+    except Exception as e:
+        print_error(f"Failed to create conversation entry: {e}")
+        sys.exit(1)
+
+
+@journal.command()
+@click.argument("parent_id")
+@click.option("--description", help="Description for this message batch (optional)")
+@click.option("--reason", help="Reason for adding messages (e.g., 'initial import', 'new messages')")
+@click.option(
+    "--messages-file",
+    type=click.Path(exists=True),
+    help="JSON file containing messages array",
+)
+@click.option(
+    "--identifier",
+    multiple=True,
+    help="Identifier with ref: 'type:value:ref' (e.g., phone:+1234567890:scammer)",
+)
+@click.option(
+    "--confidence",
+    type=float,
+    default=1.0,
+    help="Default confidence for identifiers (0.0-1.0)",
+)
+@click.option(
+    "--originator-type",
+    type=click.Choice(["user", "automation"]),
+    help="Originator type",
+)
+@click.option("--originator-identifier", help="Originator identifier")
+@click.option("--create-originator", is_flag=True, help="Create originator if not exists")
+@click.option("--json", "output_json", is_flag=True, help="Output JSON")
+@click.pass_context
+def add_conversation_messages(
+    ctx,
+    parent_id,
+    description,
+    reason,
+    messages_file,
+    identifier,
+    confidence,
+    originator_type,
+    originator_identifier,
+    create_originator,
+    output_json,
+):
+    """Add messages to an existing conversation (creates conversation_continuation entry).
+
+    The PARENT_ID is the ID of the parent entry to add messages to. This can be:
+    - A text_conversation entry
+    - An email entry (to add the email thread messages)
+
+    Messages are provided via a JSON file with the following structure:
+
+    \b
+    [
+        {
+            "index": 0,
+            "message_id": "msg_001",
+            "timestamp": "2025-01-01T10:00:00Z",
+            "body": "Hello, is this tech support?",
+            "is_outgoing": false,
+            "sender_ref": "scammer"
+        },
+        {
+            "index": 1,
+            "message_id": "msg_002",
+            "timestamp": "2025-01-01T10:01:00Z",
+            "body": "Yes, how can I help?",
+            "is_outgoing": true,
+            "sender_ref": "victim",
+            "identifier_refs": [
+                {"ref": "scammer_phone", "field": "body"}
+            ]
+        }
+    ]
+
+    The sender_ref and identifier_refs reference identifiers by their ref ID,
+    which must match identifiers provided via --identifier.
+
+    Examples:
+        # Add messages from a JSON file
+        scambus journal add-conversation-messages abc123 \\
+            --messages-file messages.json \\
+            --identifier "phone:+1234567890:scammer" \\
+            --identifier "phone:+0987654321:victim" \\
+            --reason "initial import"
+
+        # Add messages to continue a conversation
+        scambus journal add-conversation-messages abc123 \\
+            --messages-file new_messages.json \\
+            --reason "new messages received"
+    """
+    client = ctx.obj.get_client()
+
+    try:
+        if not messages_file:
+            print_error("--messages-file is required")
+            sys.exit(1)
+
+        # Load messages from JSON file
+        with open(messages_file, "r") as f:
+            messages = json.load(f)
+
+        if not isinstance(messages, list) or len(messages) == 0:
+            print_error("Messages file must contain a non-empty array of messages")
+            sys.exit(1)
+
+        # Build details
+        details = {
+            "messages": messages,
+        }
+        if reason:
+            details["reason"] = reason
+
+        # Use first message timestamp for performed_at
+        first_timestamp = messages[0].get("timestamp", now_iso())
+
+        data = {
+            "type": "conversation_continuation",
+            "description": description or f"Messages for conversation {parent_id[:8]}",
+            "performed_at": first_timestamp,
+            "parent_journal_entry_id": parent_id,
+            "details": details,
+        }
+
+        # Add identifier lookups with ref (required for message references)
+        identifiers = []
+        if identifier:
+            for ident in identifier:
+                parts = ident.split(":", 2)
+                if len(parts) < 3:
+                    print_error(
+                        f"Invalid identifier format: {ident}. Use type:value:ref (ref is required for message references)"
+                    )
+                    sys.exit(1)
+                ident_type = parts[0]
+                ident_value = parts[1]
+                ident_ref = parts[2]
+
+                identifiers.append({
+                    "type": ident_type,
+                    "value": ident_value,
+                    "confidence": confidence,
+                    "ref": ident_ref,
+                })
+
+        if identifiers:
+            data["identifier_lookups"] = identifiers
+
+        # Add originator lookup if provided
+        if originator_type or originator_identifier:
+            if not originator_type or not originator_identifier:
+                print_error(
+                    "Both --originator-type and --originator-identifier must be provided together"
+                )
+                sys.exit(1)
+
+            data["originator_lookup"] = {
+                "type": originator_type,
+                "identifier": originator_identifier,
+                "create_if_not_exists": create_originator,
+            }
+
+        entry = client._request("POST", "/journal-entries", json_data=data)
+
+        if output_json:
+            print_json(entry)
+        else:
+            print_success(f"Conversation continuation created: {entry['id']}")
+            print_info(f"Added {len(messages)} messages to conversation {parent_id[:8]}")
+            print_detail(entry, title="Created Entry")
+
+    except json.JSONDecodeError as e:
+        print_error(f"Invalid JSON in messages file: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print_error(f"Failed to add conversation messages: {e}")
         sys.exit(1)

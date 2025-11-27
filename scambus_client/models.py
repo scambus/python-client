@@ -16,17 +16,25 @@ class IdentifierLookup:
         type: Type of identifier (phone, email, bank_account, crypto_wallet, social_media, zelle)
         value: Identifier value in standard format
         confidence: Confidence score (0.0 to 1.0)
+        label: Contextual label (e.g., "from", "to", "sender")
+        ref: Local reference ID for message-level identifier tracking in conversations
     """
 
     type: str
     value: str
     confidence: Optional[float] = None
+    label: Optional[str] = None
+    ref: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API request."""
         data = {"type": self.type, "value": self.value}
         if self.confidence is not None:
             data["confidence"] = self.confidence
+        if self.label is not None:
+            data["label"] = self.label
+        if self.ref is not None:
+            data["ref"] = self.ref
         return data
 
 
@@ -240,24 +248,328 @@ class EmailDetails:
 
 
 @dataclass
-class TextConversationDetails:
+class CustodyEvent:
     """
-    Details for a text/messaging conversation journal entry.
-
-    Note: start_time and end_time are now set at the top level of the JournalEntry,
-    not in the details object.
+    Chain of custody event for evidence tracking.
 
     Attributes:
-        platform: Messaging platform (e.g., "SMS", "WhatsApp", "Telegram", "Signal")
+        timestamp: When the event occurred
+        event: Event type ("collected", "transferred", "uploaded", "verified")
+        method: How the event was performed
+        actor: Who performed the event (optional)
+        notes: Additional notes (optional)
     """
 
-    platform: str
+    timestamp: datetime
+    event: str
+    method: str
+    actor: Optional[str] = None
+    notes: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API request."""
-        return {
+        data = {
+            "timestamp": self.timestamp.isoformat(),
+            "event": self.event,
+            "method": self.method,
+        }
+        if self.actor:
+            data["actor"] = self.actor
+        if self.notes:
+            data["notes"] = self.notes
+        return data
+
+
+@dataclass
+class MessageIdentifierRef:
+    """
+    Reference to an identifier within a conversation message.
+
+    Attributes:
+        ref: Local reference ID matching an IdentifierLookup's ref field
+        field: Where the identifier appears ("body", "subject", "headers")
+        position: Byte position in the field (UTF-8 byte offset)
+        length: Byte length of the matched text (UTF-8 byte count)
+    """
+
+    ref: str
+    field: str = "body"
+    position: Optional[int] = None
+    length: Optional[int] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for API request."""
+        data = {
+            "ref": self.ref,
+            "field": self.field,
+        }
+        if self.position is not None:
+            data["position"] = self.position
+        if self.length is not None:
+            data["length"] = self.length
+        return data
+
+
+@dataclass
+class MessageAttachment:
+    """
+    Attachment on a conversation message.
+
+    Attributes:
+        filename: Name of the file
+        content_type: MIME type
+        size_bytes: File size in bytes (optional)
+        url: URL to the attachment (optional)
+        media_id: Reference to uploaded media (optional)
+    """
+
+    filename: str
+    content_type: str
+    size_bytes: Optional[int] = None
+    url: Optional[str] = None
+    media_id: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for API request."""
+        data = {
+            "filename": self.filename,
+            "content_type": self.content_type,
+        }
+        if self.size_bytes is not None:
+            data["size_bytes"] = self.size_bytes
+        if self.url:
+            data["url"] = self.url
+        if self.media_id:
+            data["media_id"] = self.media_id
+        return data
+
+
+@dataclass
+class ConversationMessage:
+    """
+    A single message in a text conversation.
+
+    Attributes:
+        index: Absolute position in the full conversation (0-based)
+        message_id: Platform-specific message ID
+        timestamp: When the message was sent
+        body: Plain text message body (required)
+        is_outgoing: True if our side sent it, False if their side (required)
+        sender_ref: Reference to identifier lookup for the sender (optional)
+        sender_display_name: Fallback display name for sender (optional)
+        identifier_refs: List of identifier references in this message (optional)
+        attachments: List of attachments (optional)
+        timezone: Timezone string (optional)
+        body_html: HTML body for email (optional)
+        subject: Subject line for email (optional)
+        is_deleted: Whether message was deleted (optional)
+        is_edited: Whether message was edited (optional)
+        delivery_status: Delivery status ("sent", "delivered", "read", "failed") (optional)
+        delivery_timestamp: When message was delivered (optional)
+        read_timestamp: When message was read (optional)
+        in_reply_to: Message ID this replies to (optional)
+        headers: Email headers (optional)
+        platform_metadata: Platform-specific data (optional)
+    """
+
+    index: int
+    message_id: str
+    timestamp: datetime
+    body: str
+    is_outgoing: bool = False
+    sender_ref: Optional[str] = None
+    sender_display_name: Optional[str] = None
+    identifier_refs: Optional[List[MessageIdentifierRef]] = None
+    attachments: Optional[List[MessageAttachment]] = None
+    timezone: Optional[str] = None
+    body_html: Optional[str] = None
+    subject: Optional[str] = None
+    is_deleted: bool = False
+    is_edited: bool = False
+    delivery_status: Optional[str] = None
+    delivery_timestamp: Optional[datetime] = None
+    read_timestamp: Optional[datetime] = None
+    in_reply_to: Optional[str] = None
+    headers: Optional[Dict[str, str]] = None
+    platform_metadata: Optional[Dict[str, Any]] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for API request."""
+        data = {
+            "index": self.index,
+            "message_id": self.message_id,
+            "timestamp": self.timestamp.isoformat(),
+            "body": self.body,
+            "is_outgoing": self.is_outgoing,
+        }
+        if self.sender_ref:
+            data["sender_ref"] = self.sender_ref
+        if self.sender_display_name:
+            data["sender_display_name"] = self.sender_display_name
+        if self.identifier_refs:
+            data["identifier_refs"] = [ref.to_dict() for ref in self.identifier_refs]
+        if self.attachments:
+            data["attachments"] = [att.to_dict() for att in self.attachments]
+        if self.timezone:
+            data["timezone"] = self.timezone
+        if self.body_html:
+            data["body_html"] = self.body_html
+        if self.subject:
+            data["subject"] = self.subject
+        if self.is_deleted:
+            data["is_deleted"] = self.is_deleted
+        if self.is_edited:
+            data["is_edited"] = self.is_edited
+        if self.delivery_status:
+            data["delivery_status"] = self.delivery_status
+        if self.delivery_timestamp:
+            data["delivery_timestamp"] = self.delivery_timestamp.isoformat()
+        if self.read_timestamp:
+            data["read_timestamp"] = self.read_timestamp.isoformat()
+        if self.in_reply_to:
+            data["in_reply_to"] = self.in_reply_to
+        if self.headers:
+            data["headers"] = self.headers
+        if self.platform_metadata:
+            data["platform_metadata"] = self.platform_metadata
+        return data
+
+
+@dataclass
+class TextConversationDetails:
+    """
+    Details for a text_conversation journal entry.
+
+    Can be used for simple entries (just platform) or entries with
+    full metadata. Messages can be added via child conversation_continuation entries.
+
+    Attributes:
+        platform: Messaging platform (e.g., "sms", "whatsapp", "telegram", "signal", "email")
+        conversation_type: Type of conversation ("individual" or "group") (optional)
+        conversation_id: Platform-specific thread/conversation ID (optional)
+        first_message_at: Timestamp of the first message (optional)
+        last_message_at: Timestamp of the last message (optional)
+        source_type: How the conversation was collected ("export", "screenshot", "api", "manual_entry") (optional)
+        subject: Subject line for email or group name (optional)
+        participant_count: Number of participants (optional)
+        export_format: Format of exported data ("json", "mbox", "eml", "txt") (optional)
+        collection_method: How data was collected ("user_upload", "api_sync", "screenshot_ocr") (optional)
+        chain_of_custody: List of custody events for tracking (optional)
+        platform_metadata: Platform-specific data (optional)
+
+    Example (simple):
+        ```python
+        details = TextConversationDetails(platform="whatsapp")
+        ```
+
+    Example (with full metadata):
+        ```python
+        details = TextConversationDetails(
+            platform="whatsapp",
+            conversation_type="individual",
+            conversation_id="chat_123456",
+            first_message_at=datetime(2025, 1, 1, 10, 0, 0),
+            last_message_at=datetime(2025, 1, 1, 11, 30, 0),
+            source_type="export",
+            export_format="json",
+            collection_method="user_upload",
+        )
+        ```
+    """
+
+    platform: str
+    conversation_type: Optional[str] = None
+    conversation_id: Optional[str] = None
+    first_message_at: Optional[datetime] = None
+    last_message_at: Optional[datetime] = None
+    source_type: Optional[str] = None
+    subject: Optional[str] = None
+    participant_count: Optional[int] = None
+    export_format: Optional[str] = None
+    collection_method: Optional[str] = None
+    chain_of_custody: Optional[List[CustodyEvent]] = None
+    platform_metadata: Optional[Dict[str, Any]] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for API request."""
+        data = {
             "platform": self.platform,
         }
+        if self.conversation_type:
+            data["conversation_type"] = self.conversation_type
+        if self.conversation_id:
+            data["conversation_id"] = self.conversation_id
+        if self.first_message_at:
+            data["first_message_at"] = self.first_message_at.isoformat()
+        if self.last_message_at:
+            data["last_message_at"] = self.last_message_at.isoformat()
+        if self.source_type:
+            data["source_type"] = self.source_type
+        if self.subject:
+            data["subject"] = self.subject
+        if self.participant_count is not None:
+            data["participant_count"] = self.participant_count
+        if self.export_format:
+            data["export_format"] = self.export_format
+        if self.collection_method:
+            data["collection_method"] = self.collection_method
+        if self.chain_of_custody:
+            data["chain_of_custody"] = [event.to_dict() for event in self.chain_of_custody]
+        if self.platform_metadata:
+            data["platform_metadata"] = self.platform_metadata
+        return data
+
+
+@dataclass
+class ConversationContinuationDetails:
+    """
+    Details for a conversation_continuation journal entry (child entry with messages).
+
+    This is a child entry of a text_conversation or email entry that contains
+    the actual messages. Multiple continuation entries can be created to add
+    messages to a conversation.
+
+    Attributes:
+        messages: List of messages in this continuation
+        reason: Why this continuation was created (e.g., "initial import", "new messages")
+
+    Example:
+        ```python
+        messages = [
+            ConversationMessage(
+                index=0,
+                message_id="msg_001",
+                timestamp=datetime(2025, 1, 1, 10, 0, 0),
+                body="Hello, is this tech support?",
+                sender_ref="scammer",
+            ),
+            ConversationMessage(
+                index=1,
+                message_id="msg_002",
+                timestamp=datetime(2025, 1, 1, 10, 1, 0),
+                body="Yes, how can I help you?",
+                sender_ref="victim",
+            ),
+        ]
+
+        details = ConversationContinuationDetails(
+            messages=messages,
+            reason="initial import"
+        )
+        ```
+    """
+
+    messages: List[ConversationMessage]
+    reason: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for API request."""
+        data = {
+            "messages": [msg.to_dict() for msg in self.messages],
+        }
+        if self.reason:
+            data["reason"] = self.reason
+        return data
 
 
 @dataclass

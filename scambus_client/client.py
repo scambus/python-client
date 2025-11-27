@@ -564,6 +564,7 @@ class ScambusClient:
         performed_at: Optional[datetime] = None,
         case_id: Optional[str] = None,
         identifier_lookups: Optional[List[Union[Dict[str, Any], IdentifierLookup]]] = None,
+        our_identifier_lookups: Optional[List[Union[Dict[str, Any], IdentifierLookup]]] = None,
         evidence: Optional[Union[Dict[str, Any], Evidence]] = None,
         originator_type: Optional[str] = None,
         originator_identifier: Optional[str] = None,
@@ -601,7 +602,8 @@ class ScambusClient:
             details: Type-specific details
             performed_at: When the action/event occurred
             case_id: Optional case ID to link to
-            identifier_lookups: List of identifiers to lookup/create
+            identifier_lookups: List of identifiers to lookup/create (for scammer/suspect identifiers)
+            our_identifier_lookups: List of "our" identifiers to lookup/create (for honeypot/bot identifiers)
             evidence: Optional evidence with media
             parent_journal_entry_id: Optional parent journal entry ID (for linking related entries)
             tags: Optional list of tags to apply. Can be TagLookup objects or dictionaries.
@@ -682,6 +684,13 @@ class ScambusClient:
             data["identifier_lookups"] = [
                 lookup.to_dict() if isinstance(lookup, IdentifierLookup) else lookup
                 for lookup in identifier_lookups
+            ]
+
+        # Convert our identifier lookups to dictionaries (for honeypot/bot identifiers)
+        if our_identifier_lookups:
+            data["our_identifier_lookups"] = [
+                lookup.to_dict() if isinstance(lookup, IdentifierLookup) else lookup
+                for lookup in our_identifier_lookups
             ]
 
         # Convert evidence to dictionary

@@ -14,45 +14,133 @@ def search():
 
 
 @search.command()
-@click.option("--query", required=True, help="Search query (REQUIRED)")
+@click.option("--query", help="Search query for existing identifiers (use without --follow)")
 @click.option(
     "--type",
     "identifier_type",
     help="Filter by identifier type (optional). Available types: email, phone, bank_account, crypto_wallet, social_media, zelle",
 )
-@click.option("--limit", type=int, default=20, help="Maximum results to return (default: 20)")
+@click.option("--limit", type=int, default=20, help="Maximum results to return (default: 20, only for search)")
+@click.option("--min-confidence", type=float, default=0.0, help="Minimum confidence (0.0-1.0, only for --follow)")
+@click.option("--follow", "-f", is_flag=True, help="Follow mode: create temporary stream and watch for new identifiers in real-time")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON format")
 @click.pass_context
-def identifiers(ctx, query, identifier_type, limit, output_json):
-    """Search for identifiers by query string.
+def identifiers(ctx, query, identifier_type, limit, min_confidence, follow, output_json):
+    """Search for identifiers or follow new ones in real-time.
 
     \b
-    Required Options:
-      --query        Text to search for (phone numbers, emails, usernames, etc.)
-
-    \b
-    Optional Filters:
-      --type         Filter by identifier type (default: all types)
-                     Available types: email, phone, bank_account, crypto_wallet,
-                                     social_media, zelle
+    Search Mode (without --follow):
+      --query        Text to search for (phone numbers, emails, usernames, etc.) [REQUIRED]
+      --type         Filter by identifier type
       --limit        Maximum number of results (default: 20)
-      --json         Output results in JSON format
+
+    \b
+    Follow Mode (with --follow):
+      --type         Identifier type to follow [REQUIRED with --follow]
+      --min-confidence  Minimum confidence threshold (default: 0.0)
 
     \b
     Examples:
-      # Search for a phone number
+      # Search for existing identifiers
       scambus search identifiers --query "+1234567890"
-
-      # Search for email addresses containing "scammer"
       scambus search identifiers --query "scammer" --type email
 
-      # Search bank accounts with more results
-      scambus search identifiers --query "Bank of America" --type bank_account --limit 50
+      # Follow new phone numbers in real-time
+      scambus search identifiers --type phone --follow
 
-      # Get raw JSON output
-      scambus search identifiers --query "crypto" --type crypto_wallet --json
+      # Follow high-confidence emails
+      scambus search identifiers --type email --min-confidence 0.8 --follow
+
+      # Follow with JSON output
+      scambus search identifiers --type phone --follow --json
     """
     client = ctx.obj.get_client()
+
+    # Follow mode: create temporary stream and watch for new identifiers
+    if follow:
+        if not identifier_type:
+            print_error("--type is required when using --follow")
+            sys.exit(1)
+
+        import asyncio
+        from scambus_client.websocket_client import ScambusWebSocketClient
+        from scambus_cli.config import get_api_url
+        from scambus_cli.auth_device import DeviceAuthManager
+
+        stream_id = None
+
+        try:
+            # Create temporary stream
+            print_info(f"Creating temporary stream for {identifier_type} identifiers...")
+
+            stream = client.create_temporary_stream(
+                data_type="identifier",
+                identifier_types=[identifier_type],
+                min_confidence=min_confidence
+            )
+            stream_id = stream.id
+
+            print_info(f"Temporary stream created: {stream_id}")
+            print_info(f"Stream will be cleaned up after 1 hour of inactivity")
+            print_info(f"Watching for new {identifier_type} identifiers (Ctrl+C to stop)...\n")
+
+            # Get API URL and authentication
+            api_url = get_api_url()
+            manager = DeviceAuthManager(api_url)
+            token = manager.get_token()
+
+            # Create WebSocket client
+            ws_client = ScambusWebSocketClient(api_url=api_url, api_token=token)
+
+            message_count = 0
+
+            # Define message handler
+            def handle_message(message):
+                nonlocal message_count
+                message_count += 1
+
+                if output_json:
+                    print_json(message)
+                else:
+                    # Format identifier message
+                    from scambus_cli.commands.streams import _format_identifier_message
+                    _format_identifier_message(message_count, message)
+
+            # Define error handler
+            def handle_error(error):
+                print_error(f"WebSocket error: {error}")
+
+            # Run WebSocket client
+            asyncio.run(ws_client.listen_stream(
+                stream_id=stream_id,
+                on_message=handle_message,
+                on_error=handle_error,
+                cursor="$"  # Start from now (only new messages)
+            ))
+
+        except KeyboardInterrupt:
+            print_info(f"\n\nStopped following. Received {message_count} identifiers.")
+        except Exception as e:
+            print_error(f"Failed to follow identifiers: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+        finally:
+            # Clean up temporary stream
+            if stream_id:
+                try:
+                    print_info(f"Deleting temporary stream {stream_id}...")
+                    client.delete_stream(stream_id)
+                    print_info("Temporary stream deleted")
+                except Exception as e:
+                    print_error(f"Failed to delete temporary stream: {e}")
+
+        return
+
+    # Search mode: search existing identifiers
+    if not query:
+        print_error("--query is required when not using --follow")
+        sys.exit(1)
 
     try:
         # Convert single type to list if provided

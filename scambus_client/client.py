@@ -3,6 +3,7 @@ Main Scambus API client.
 """
 
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import requests
@@ -1040,15 +1041,15 @@ class ScambusClient:
                     "description": f"Evidence for email: {subject}",
                     "source": "Email Communication",
                     "collectedAt": sent_at.isoformat(),
-                    "mediaIds": media_ids,
+                    "media_ids": media_ids,
                 }
             else:
                 if isinstance(evidence, Evidence):
                     evidence.media_ids.extend(media_ids)
                 elif isinstance(evidence, dict):
-                    if "mediaIds" not in evidence:
-                        evidence["mediaIds"] = []
-                    evidence["mediaIds"].extend(media_ids)
+                    if "media_ids" not in evidence:
+                        evidence["media_ids"] = []
+                    evidence["media_ids"].extend(media_ids)
 
         return self.create_journal_entry(
             entry_type="email",
@@ -1158,15 +1159,15 @@ class ScambusClient:
                     "description": f"Evidence for {platform} conversation: {description}",
                     "source": f"{platform} Communication",
                     "collectedAt": start_time.isoformat(),
-                    "mediaIds": media_ids,
+                    "media_ids": media_ids,
                 }
             else:
                 if isinstance(evidence, Evidence):
                     evidence.media_ids.extend(media_ids)
                 elif isinstance(evidence, dict):
-                    if "mediaIds" not in evidence:
-                        evidence["mediaIds"] = []
-                    evidence["mediaIds"].extend(media_ids)
+                    if "media_ids" not in evidence:
+                        evidence["media_ids"] = []
+                    evidence["media_ids"].extend(media_ids)
 
         return self.create_journal_entry(
             entry_type="text_conversation",
@@ -1376,8 +1377,10 @@ class ScambusClient:
         """
         response = self._request("GET", f"/journal-entries/{entry_id}")
 
-        # Backend always wraps response in {"journalEntry": {...}}
-        entry = JournalEntry.from_dict(response["journalEntry"])
+        # Backend returns: {"journal_entry": {"journal_entry": {...}, "can_edit": bool}, "cases": [...]}
+        # Extract the nested journal_entry object
+        journal_entry_data = response["journal_entry"]["journal_entry"]
+        entry = JournalEntry.from_dict(journal_entry_data)
 
         # Set client reference so entry.complete() works
         entry._client = self
@@ -1489,8 +1492,9 @@ class ScambusClient:
         response = self._request("GET", "/journal-entries", params=params)
 
         # Handle paginated response
+        # Backend returns: {"data": [{"journal_entry": {...}, "can_edit": bool}, ...]}
         if isinstance(response, dict) and "data" in response:
-            return [JournalEntry.from_dict(entry) for entry in response["data"]]
+            return [JournalEntry.from_dict(item["journal_entry"]) for item in response["data"]]
         else:
             return []
 
@@ -1618,13 +1622,12 @@ class ScambusClient:
         performed_after: Optional[Union[str, datetime]] = None,
         performed_before: Optional[Union[str, datetime]] = None,
         search_query: Optional[str] = None,
-        ttl_minutes: int = 60,
     ) -> ExportStream:
         """
         Create a temporary export stream from query parameters.
 
-        This creates a temporary stream that auto-expires after ttl_minutes (max 24 hours).
-        Useful for following query results in real-time via WebSocket.
+        This creates a temporary stream that is automatically cleaned up after
+        1 hour of inactivity. Useful for following query results in real-time via WebSocket.
 
         Args:
             name: Stream name
@@ -1634,7 +1637,6 @@ class ScambusClient:
             performed_after: Start date filter
             performed_before: End date filter
             search_query: Full-text search query
-            ttl_minutes: Time-to-live in minutes (default: 60, max: 1440 = 24 hours)
 
         Returns:
             ExportStream object with the new temporary stream details
@@ -1657,7 +1659,6 @@ class ScambusClient:
             "name": name,
             "data_type": "journal_entry",
             "filter_expression": json.dumps(filter_params.to_dict()),
-            "ttlMinutes": ttl_minutes,
         }
 
         response = self._request("POST", "/export-streams/temporary", json_data=data)
@@ -2574,6 +2575,72 @@ class ScambusClient:
             data["filter_expression"] = combined_filter
 
         response = self._request("POST", "/export-streams", json_data=data)
+        return ExportStream.from_dict(response)
+
+    def create_temporary_stream(
+        self,
+        data_type: str = "identifier",
+        identifier_types: Optional[Union[str, List[str]]] = None,
+        min_confidence: float = 0.0,
+        max_confidence: float = 1.0,
+        filter_expression: Optional[str] = None,
+        name: Optional[str] = None,
+        view_id: Optional[str] = None,
+    ) -> ExportStream:
+        """
+        Create a temporary export stream that is automatically cleaned up after 1 hour of inactivity.
+
+        Args:
+            data_type: Stream data type ("journal_entry" or "identifier")
+            identifier_types: Identifier type(s) to filter (optional)
+            min_confidence: Minimum confidence score (0.0-1.0, default: 0.0)
+            max_confidence: Maximum confidence score (0.0-1.0, default: 1.0)
+            filter_expression: Custom JSONPath filter expression (optional)
+            name: Stream name (auto-generated if not provided)
+            view_id: View ID to use for filtering (stream will match view's filter criteria) (optional)
+
+        Returns:
+            Created ExportStream object
+
+        Example:
+            ```python
+            # Create temporary phone stream
+            stream = client.create_temporary_stream(
+                data_type="identifier",
+                identifier_types="phone",
+                min_confidence=0.8
+            )
+
+            # Create temporary stream for a specific view
+            stream = client.create_temporary_stream(
+                view_id="my-view-id",
+                data_type="journal_entry"
+            )
+            ```
+        """
+        # Build filter expression from identifier_types if provided
+        combined_filter = filter_expression
+        if identifier_types:
+            type_filter = build_identifier_type_filter(identifier_types, data_type=data_type)
+            if combined_filter:
+                combined_filter = f"({type_filter}) && ({combined_filter})"
+            else:
+                combined_filter = type_filter
+
+        data = {
+            "data_type": data_type,
+            "min_confidence": min_confidence,
+            "max_confidence": max_confidence,
+        }
+
+        if name:
+            data["name"] = name
+        if combined_filter:
+            data["filter_expression"] = combined_filter
+        if view_id:
+            data["view_id"] = view_id
+
+        response = self._request("POST", "/export-streams/temporary", json_data=data)
         return ExportStream.from_dict(response)
 
     def delete_stream(self, stream_id: str) -> None:

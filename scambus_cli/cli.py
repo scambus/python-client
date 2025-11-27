@@ -9,7 +9,8 @@ from rich.console import Console
 from .auth_device import DeviceAuthManager
 from .config import get_api_url
 
-console = Console()
+# Console for status messages (stderr)
+console = Console(stderr=True)
 
 __version__ = "2.0.0"
 
@@ -48,7 +49,10 @@ class Context:
 
                 self.client = ScambusClient(api_url=api_url, api_token=self.token)
             except Exception as e:
+                import traceback
                 console.print(f"[red]Failed to create client:[/red] {e}")
+                console.print("[red]Full traceback:[/red]")
+                traceback.print_exc()
                 sys.exit(1)
 
         return self.client

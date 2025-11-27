@@ -145,7 +145,7 @@ def list_entries(ctx, entry_type, page, limit, output_json):
             table_data = [
                 {
                     "ID": e.id,
-                    "Type": e.entry_type,
+                    "Type": e.type,
                     "Description": (e.description or "")[:50],
                     "Created": e.created_at.strftime("%Y-%m-%d") if e.created_at else "N/A",
                 }
@@ -173,7 +173,7 @@ def get(ctx, entry_id, output_json):
         if output_json:
             print_json(entry.to_dict())
         else:
-            print_detail(entry.to_dict(), title=f"Journal Entry: {entry.entry_type}")
+            print_detail(entry.to_dict(), title=f"Journal Entry: {entry.type}")
 
     except Exception as e:
         print_error(f"Failed to get journal entry: {e}")
@@ -501,7 +501,7 @@ def create_note(ctx, description, identifier, our_identifier, confidence, attach
         media_ids = []
         if attach:
             for file_path in attach:
-                print(f"Uploading {file_path}...")
+                print_info(f"Uploading {file_path}...")
                 media = upload_media_file(
                     client, file_path, notes=f"Attachment for note: {description}"
                 )
@@ -930,20 +930,20 @@ def create_email(
 
         if screenshot:
             for ss_path in screenshot:
-                print(f"Uploading screenshot: {ss_path}...")
+                print_info(f"Uploading screenshot: {ss_path}...")
                 media = upload_media_file(client, ss_path, notes=f"Email screenshot: {subject}")
                 media_ids.append(media["id"])
                 print_success(f"Uploaded screenshot: {media['filename']}")
 
         if eml_file:
-            print(f"Uploading .eml file: {eml_file}...")
+            print_info(f"Uploading .eml file: {eml_file}...")
             media = upload_media_file(client, eml_file, notes=f"Email source file: {subject}")
             media_ids.append(media["id"])
             print_success(f"Uploaded .eml: {media['filename']}")
 
         if attach:
             for file_path in attach:
-                print(f"Uploading {file_path}...")
+                print_info(f"Uploading {file_path}...")
                 media = upload_media_file(
                     client, file_path, notes=f"Attachment for email: {subject}"
                 )
@@ -1093,7 +1093,7 @@ def create_text_conversation(
 
         if screenshot:
             for ss_path in screenshot:
-                print(f"Uploading screenshot: {ss_path}...")
+                print_info(f"Uploading screenshot: {ss_path}...")
                 media = upload_media_file(
                     client, ss_path, notes=f"Text conversation screenshot on {platform}"
                 )
@@ -1102,7 +1102,7 @@ def create_text_conversation(
 
         if attach:
             for file_path in attach:
-                print(f"Uploading {file_path}...")
+                print_info(f"Uploading {file_path}...")
                 media = upload_media_file(
                     client, file_path, notes=f"Attachment for {platform} conversation"
                 )
@@ -1235,7 +1235,7 @@ def create_detection(
 
         if screenshot:
             for ss_path in screenshot:
-                print(f"Uploading screenshot: {ss_path}...")
+                print_info(f"Uploading screenshot: {ss_path}...")
                 media = upload_media_file(
                     client, ss_path, notes=f"Detection screenshot: {description}"
                 )
@@ -1244,7 +1244,7 @@ def create_detection(
 
         if attach:
             for file_path in attach:
-                print(f"Uploading {file_path}...")
+                print_info(f"Uploading {file_path}...")
                 media = upload_media_file(
                     client, file_path, notes=f"Detection evidence: {description}"
                 )

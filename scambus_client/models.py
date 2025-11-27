@@ -797,6 +797,7 @@ class JournalEntry:
         start_time: When the activity started (optional)
         end_time: When the activity ended (optional)
         _client: Internal reference to ScambusClient for calling complete()
+        _raw_data: Original API response data with all fields
     """
 
     id: str
@@ -812,6 +813,57 @@ class JournalEntry:
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     _client: Optional[Any] = field(default=None, repr=False)
+    _raw_data: Optional[Dict[str, Any]] = field(default=None, repr=False)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization.
+
+        Returns the original API response data with all fields preserved,
+        ensuring datetime fields are properly serialized to ISO format.
+        """
+        if self._raw_data:
+            # Return the complete API response, serializing datetime fields
+            data = dict(self._raw_data)
+
+            # Ensure datetime fields are serialized to ISO format
+            for key in ['performed_at', 'created_at', 'updated_at', 'start_time', 'end_time', 'signed_at']:
+                if key in data and isinstance(data[key], datetime):
+                    data[key] = data[key].isoformat()
+
+            # Handle nested datetime in relationships
+            if 'parent_journal_entry' in data and data['parent_journal_entry']:
+                if isinstance(data['parent_journal_entry'], dict):
+                    for key in ['performed_at', 'created_at', 'updated_at']:
+                        if key in data['parent_journal_entry'] and isinstance(data['parent_journal_entry'][key], datetime):
+                            data['parent_journal_entry'][key] = data['parent_journal_entry'][key].isoformat()
+
+            return data
+
+        # Fallback to basic fields if no raw data
+        data = {
+            "id": self.id,
+            "type": self.type,
+            "description": self.description,
+        }
+        if self.details:
+            data["details"] = self.details
+        if self.performed_at:
+            data["performed_at"] = self.performed_at.isoformat()
+        if self.created_at:
+            data["created_at"] = self.created_at.isoformat()
+        if self.updated_at:
+            data["updated_at"] = self.updated_at.isoformat()
+        if self.identifiers:
+            data["identifiers"] = [i.to_dict() for i in self.identifiers]
+        if self.evidence:
+            data["evidence"] = self.evidence
+        if self.case_id:
+            data["case_id"] = self.case_id
+        if self.start_time:
+            data["start_time"] = self.start_time.isoformat()
+        if self.end_time:
+            data["end_time"] = self.end_time.isoformat()
+        return data
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "JournalEntry":
@@ -820,7 +872,7 @@ class JournalEntry:
         if "identifiers" in data and data["identifiers"]:
             identifiers = [Identifier.from_dict(i) for i in data["identifiers"]]
 
-        return cls(
+        entry = cls(
             id=data["id"],
             type=data.get("type", "unknown"),  # Backend may not always return type
             description=data.get("description", ""),
@@ -834,6 +886,11 @@ class JournalEntry:
             start_time=Identifier._parse_datetime(data.get("start_time")),
             end_time=Identifier._parse_datetime(data.get("end_time")),
         )
+
+        # Store the complete raw response for to_dict()
+        entry._raw_data = data
+
+        return entry
 
     def complete(
         self,

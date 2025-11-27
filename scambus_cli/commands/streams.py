@@ -2,9 +2,11 @@
 
 import json
 import sys
+from typing import Union
 
 import click
 
+from scambus_client.models import Identifier, JournalEntry
 from scambus_cli.utils import (
     print_detail,
     print_error,
@@ -34,7 +36,8 @@ def list_streams(ctx, output_json):
     client = ctx.obj.get_client()
 
     try:
-        streams = client.list_streams()
+        result = client.list_streams()
+        streams = result['data']
 
         if not streams:
             print_info("No streams found")
@@ -46,7 +49,7 @@ def list_streams(ctx, output_json):
                     {
                         "id": s.id,
                         "name": s.name,
-                        "state": s.state,
+                        "is_active": s.is_active,
                         "created_at": s.created_at.isoformat() if s.created_at else None,
                     }
                     for s in streams
@@ -57,7 +60,7 @@ def list_streams(ctx, output_json):
                 {
                     "ID": s.id[:8],
                     "Name": s.name,
-                    "State": s.state,
+                    "Active": "Yes" if s.is_active else "No",
                     "Created": s.created_at.strftime("%Y-%m-%d") if s.created_at else "N/A",
                 }
                 for s in streams
@@ -295,46 +298,47 @@ def consume(ctx, stream_id, limit, output_json):
         sys.exit(1)
 
 
-def _format_identifier_message(index: int, msg: dict):
+def _format_identifier_message(index: int, msg: Identifier):
     """Format an identifier stream message for display."""
     print(f"\n--- Message {index} (Identifier) ---")
 
-    # Get identifier fields (support both camelCase and snake_case)
-    identifier_id = msg.get("identifierId") or msg.get("identifier_id", "N/A")
-    identifier_type = msg.get("type", "unknown")
-    display_value = msg.get("displayValue") or msg.get("display_value", "N/A")
-    confidence = msg.get("confidence", 0.0)
-    published_at = msg.get("publishedAt") or msg.get("published_at", "N/A")
+    # Access typed object properties
+    identifier_id = msg.id or "N/A"
+    identifier_type = msg.type or "unknown"
+    display_value = msg.display_value or "N/A"
+    confidence = msg.confidence or 0.0
+    created_at = msg.created_at.isoformat() if msg.created_at else "N/A"
 
     print(f"Identifier ID: {identifier_id}")
     print(f"Type: {identifier_type}")
     print(f"Value: {display_value}")
     print(f"Confidence: {confidence:.3f}")
-    print(f"Published: {published_at}")
+    print(f"Created: {created_at}")
 
-    # Show tags if present
-    tags = msg.get("tags", [])
-    if tags:
-        tag_names = [t.get("name", t.get("id", "unknown")) for t in tags]
-        print(f"Tags: {', '.join(tag_names)}")
+    # Show data if present (tags, etc. are in the raw data dict)
+    if msg.data:
+        tags = msg.data.get("tags", [])
+        if tags:
+            tag_names = [t.get("name", t.get("id", "unknown")) for t in tags]
+            print(f"Tags: {', '.join(tag_names)}")
 
-    # Show triggering journal entry if present
-    triggering_je = msg.get("triggeringJournalEntry") or msg.get("triggering_journal_entry")
-    if triggering_je:
-        je_type = triggering_je.get("type", "unknown")
-        je_id = triggering_je.get("id", "N/A")
-        performed_at = triggering_je.get("performedAt") or triggering_je.get("performed_at", "N/A")
-        print(f"Triggered by: {je_type} ({je_id[:8]}...) at {performed_at}")
+        # Show triggering journal entry if present in data
+        triggering_je = msg.data.get("triggeringJournalEntry") or msg.data.get("triggering_journal_entry")
+        if triggering_je:
+            je_type = triggering_je.get("type", "unknown")
+            je_id = triggering_je.get("id", "N/A")
+            performed_at = triggering_je.get("performedAt") or triggering_je.get("performed_at", "N/A")
+            print(f"Triggered by: {je_type} ({je_id[:8]}...) at {performed_at}")
 
 
-def _format_journal_entry_message(index: int, msg: dict):
+def _format_journal_entry_message(index: int, msg: JournalEntry):
     """Format a journal entry stream message for display."""
     print(f"\n--- Message {index} (Journal Entry) ---")
 
-    je_id = msg.get("id", "N/A")
-    je_type = msg.get("type", "unknown")
-    description = msg.get("description", "")
-    performed_at = msg.get("performedAt") or msg.get("performed_at", "N/A")
+    je_id = msg.id or "N/A"
+    je_type = msg.type or "unknown"
+    description = msg.description or ""
+    performed_at = msg.performed_at.isoformat() if msg.performed_at else "N/A"
 
     print(f"Journal Entry ID: {je_id}")
     print(f"Type: {je_type}")
@@ -342,14 +346,14 @@ def _format_journal_entry_message(index: int, msg: dict):
         print(f"Description: {description}")
     print(f"Performed: {performed_at}")
 
-    # Show identifiers if present
-    identifiers = msg.get("identifiers", [])
+    # Show identifiers if present (these are typed Identifier objects)
+    identifiers = msg.identifiers or []
     if identifiers:
         print(f"Identifiers ({len(identifiers)}):")
         for ident in identifiers[:5]:  # Show first 5
-            ident_type = ident.get("type", "unknown")
-            ident_value = ident.get("displayValue") or ident.get("display_value", "N/A")
-            ident_conf = ident.get("confidence", 0.0)
+            ident_type = ident.type or "unknown"
+            ident_value = ident.display_value or "N/A"
+            ident_conf = ident.confidence or 0.0
             print(f"  - {ident_type}: {ident_value} (confidence: {ident_conf:.3f})")
         if len(identifiers) > 5:
             print(f"  ... and {len(identifiers) - 5} more")
@@ -609,8 +613,12 @@ def listen_stream(ctx, stream_id, output_json, from_beginning, cursor):
         message_count += 1
 
         if output_json:
-            # Output raw JSON (one per line)
-            print_json(message)
+            # Convert typed object to dictionary for JSON output
+            if isinstance(message, (JournalEntry, Identifier)):
+                message_dict = message.to_dict()
+            else:
+                message_dict = message
+            print_json(message_dict)
         else:
             # Pretty print message
             _format_stream_message(message_count, message)
@@ -634,15 +642,17 @@ def listen_stream(ctx, stream_id, output_json, from_beginning, cursor):
         sys.exit(1)
 
 
-def _format_stream_message(index: int, msg: dict):
+def _format_stream_message(index: int, msg: Union[JournalEntry, Identifier]):
     """Format a stream message for display."""
-    # Detect message type by checking for identifier-specific fields
-    is_identifier = "identifierId" in msg or "identifier_id" in msg
-
-    if is_identifier:
+    # Use isinstance to detect the typed object
+    if isinstance(msg, Identifier):
         _format_identifier_message(index, msg)
-    else:
+    elif isinstance(msg, JournalEntry):
         _format_journal_entry_message(index, msg)
+    else:
+        # Fallback for unexpected type
+        print(f"\n--- Message {index} (Unknown Type) ---")
+        print(msg)
 
 
 @streams.command()

@@ -5,8 +5,9 @@ WebSocket client for real-time Scambus notifications and updates.
 import asyncio
 import json
 import logging
+import random
 import time
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Union
 from urllib.parse import urlparse
 
 import websockets
@@ -14,6 +15,7 @@ from websockets.client import WebSocketClientProtocol
 from websockets.exceptions import ConnectionClosed, WebSocketException
 
 from .config import get_api_url, get_api_token
+from .models import Identifier, JournalEntry
 
 logger = logging.getLogger(__name__)
 
@@ -84,9 +86,17 @@ class ScambusWebSocketClient:
         self._message_handlers: Dict[str, Dict[str, list]] = {}  # channel -> event -> [callbacks]
 
         # Build WebSocket URL (convert http(s):// to ws(s)://)
+        # For production (scambus.net), use live.scambus.net subdomain for direct ALB access
+        # This bypasses CloudFront which doesn't support WebSocket on VPC Origins
         parsed = urlparse(self.api_url)
         ws_scheme = "wss" if parsed.scheme == "https" else "ws"
-        self.ws_url = f"{ws_scheme}://{parsed.netloc}{parsed.path}/ws"
+
+        # Replace domain with live. subdomain for production WebSocket access
+        netloc = parsed.netloc
+        if "scambus.net" in netloc and not netloc.startswith("live."):
+            netloc = "live.scambus.net"
+
+        self.ws_url = f"{ws_scheme}://{netloc}{parsed.path}/ws"
 
         # Set authentication headers
         if api_key_id and api_key_secret:
@@ -99,16 +109,17 @@ class ScambusWebSocketClient:
     async def connect(self) -> None:
         """Establish WebSocket connection with authentication."""
         try:
-            # Create extra headers for authentication
-            extra_headers = {
+            # Create additional headers for authentication (renamed from extra_headers in websockets 14.0+)
+            additional_headers = {
                 self.auth_header[0]: self.auth_header[1],
                 "User-Agent": "scambus-python-client/2.0.0",
             }
 
             logger.info(f"Connecting to WebSocket: {self.ws_url}")
+            logger.debug(f"WebSocket headers: {additional_headers}")
             self._ws = await websockets.connect(
                 self.ws_url,
-                extra_headers=extra_headers,
+                additional_headers=additional_headers,
                 ping_interval=30,  # Send ping every 30 seconds
                 ping_timeout=10,  # Wait 10 seconds for pong
                 close_timeout=10,
@@ -128,6 +139,42 @@ class ScambusWebSocketClient:
             logger.info("Closing WebSocket connection")
             await self._ws.close()
             self._ws = None
+
+    def _convert_stream_data(self, data: Dict[str, Any], channel: str) -> Union[JournalEntry, Identifier, Dict[str, Any]]:
+        """
+        Convert stream message data to typed object.
+
+        Args:
+            data: Raw message data dictionary
+            channel: Channel name (e.g., "stream:abc-123")
+
+        Returns:
+            Typed JournalEntry or Identifier object, or original dict if not a stream message
+        """
+        # Only convert data from stream channels
+        if not channel.startswith("stream:"):
+            return data
+
+        if not data or not isinstance(data, dict):
+            return data
+
+        try:
+            # Detect data type based on fields present
+            # JournalEntry has 'identifiers', 'description', 'performed_at'
+            # Identifier has 'display_value', 'confidence' structure
+            if "display_value" in data or ("confidence" in data and isinstance(data.get("confidence"), dict)):
+                # This is an Identifier
+                return Identifier.from_dict(data)
+            elif "identifiers" in data or "description" in data or "performed_at" in data:
+                # This is a JournalEntry
+                return JournalEntry.from_dict(data)
+            else:
+                # Unknown format, return as-is
+                logger.warning(f"Unable to determine stream data type for channel {channel}, returning raw dict")
+                return data
+        except Exception as e:
+            logger.error(f"Error converting stream data to typed object: {e}", exc_info=True)
+            return data
 
     async def _handle_message(self, message_data: str) -> None:
         """
@@ -158,18 +205,22 @@ class ScambusWebSocketClient:
             if channel in self._message_handlers:
                 channel_handlers = self._message_handlers[channel]
 
+                # Convert stream data to typed objects for event-specific handlers
+                typed_data = self._convert_stream_data(data, channel) if data else data
+
                 # Call event-specific handlers
                 if event in channel_handlers:
                     for handler in channel_handlers[event]:
                         try:
                             if asyncio.iscoroutinefunction(handler):
-                                await handler(data)
+                                await handler(typed_data)
                             else:
-                                handler(data)
+                                handler(typed_data)
                         except Exception as e:
                             logger.error(f"Error in message handler: {e}", exc_info=True)
 
                 # Call wildcard handlers (event = '*')
+                # Wildcard handlers receive the full message (not converted)
                 if "*" in channel_handlers:
                     for handler in channel_handlers["*"]:
                         try:
@@ -234,7 +285,7 @@ class ScambusWebSocketClient:
 
     async def _reconnect(self) -> bool:
         """
-        Attempt to reconnect with exponential backoff.
+        Attempt to reconnect with exponential backoff and jitter.
 
         Returns:
             True if reconnected successfully, False otherwise
@@ -247,8 +298,13 @@ class ScambusWebSocketClient:
             )
             return False
 
-        # Exponential backoff with jitter
-        delay = min(self.reconnect_delay * (2 ** (self.reconnect_attempts - 1)), 60.0)
+        # Exponential backoff with jitter to prevent thundering herd
+        # Calculate base delay with exponential backoff, capped at 60 seconds
+        base_delay = min(self.reconnect_delay * (2 ** (self.reconnect_attempts - 1)), 60.0)
+        # Add jitter: random value between 0 and 25% of base delay
+        jitter = random.uniform(0, base_delay * 0.25)
+        delay = base_delay + jitter
+
         logger.info(
             f"Reconnecting in {delay:.1f}s (attempt {self.reconnect_attempts}/{self.max_reconnect_attempts})"
         )
@@ -437,7 +493,7 @@ class ScambusWebSocketClient:
     async def listen_stream(
         self,
         stream_id: str,
-        on_message: Callable[[Dict[str, Any]], None],
+        on_message: Callable[[Union[JournalEntry, Identifier]], None],
         on_error: Optional[Callable[[Exception], None]] = None,
         cursor: str = "$",
     ) -> None:
@@ -452,7 +508,7 @@ class ScambusWebSocketClient:
 
         Args:
             stream_id: UUID of the export stream to listen to
-            on_message: Callback for stream messages (can be sync or async)
+            on_message: Callback for stream messages (receives JournalEntry or Identifier objects)
             on_error: Optional callback for errors (can be sync or async)
             cursor: Starting position in the stream:
                    - "$" = from end (only new messages, default)
@@ -462,10 +518,15 @@ class ScambusWebSocketClient:
         Example:
             ```python
             async def handle_message(message):
-                print(f"Journal Entry: {message.get('id')}")
-                print(f"Type: {message.get('type')}")
-                for identifier in message.get('identifiers', []):
-                    print(f"  - {identifier['type']}: {identifier['displayValue']}")
+                # message is a typed object (JournalEntry or Identifier)
+                if isinstance(message, JournalEntry):
+                    print(f"Journal Entry: {message.id}")
+                    print(f"Type: {message.type}")
+                    for identifier in message.identifiers:
+                        print(f"  - {identifier.type}: {identifier.display_value}")
+                elif isinstance(message, Identifier):
+                    print(f"Identifier: {message.type}: {message.display_value}")
+                    print(f"Confidence: {message.confidence}")
 
             # Listen from end (only new messages)
             await ws_client.listen_stream("abc-123-def-456", handle_message)

@@ -1228,7 +1228,8 @@ Complete working examples are in the [`examples/`](examples/) directory:
 | [`detection_with_evidence.py`](examples/detection_with_evidence.py) | Detection with screenshot evidence | `upload_media()`, evidence attachment, media workflow |
 | [`phone_call_example.py`](examples/phone_call_example.py) | Report inbound/outbound scam calls | `create_phone_call()`, direction, recording_url, transcript_url |
 | [`email_example.py`](examples/email_example.py) | Report phishing emails | `create_email()`, headers, attachments, HTML body |
-| [`text_conversation_example.py`](examples/text_conversation_example.py) | Report SMS/WhatsApp/Telegram scams | `create_text_conversation()`, platform support |
+| [`text_conversation_example.py`](examples/text_conversation_example.py) | Simple text conversation (SMS/WhatsApp) | `create_text_conversation()`, platform support |
+| [`text_conversation_with_continuation.py`](examples/text_conversation_with_continuation.py) | **Full conversation with message history** | Parent-child structure, `conversation_continuation`, `ConversationMessage`, `MessageIdentifierRef`, non-contiguous messages, byte position calculation |
 | [`bank_account_detection.py`](examples/bank_account_detection.py) | Bank transfer fraud detection | `create_bank_account_identifier()`, financial identifiers |
 
 ### In-Progress Activities
@@ -1255,6 +1256,36 @@ Complete working examples are in the [`examples/`](examples/) directory:
 | Example | Description | Key Concepts |
 |---------|-------------|--------------|
 | [`simple_media_upload.py`](examples/simple_media_upload.py) | Upload evidence files | `upload_media()`, single/multiple files, `media=` parameter |
+
+### Views (Saved Queries)
+
+| Example | Description | Key Concepts |
+|---------|-------------|--------------|
+| [`views_example.py`](examples/views_example.py) | Create and execute saved query views | `create_view()`, `execute_view()`, `ViewFilter`, `ViewSortOrder`, system views |
+
+### Tags
+
+| Example | Description | Key Concepts |
+|---------|-------------|--------------|
+| [`tags_example.py`](examples/tags_example.py) | Create and apply tags | `TagLookup`, boolean vs valued tags, `create_tag()`, `get_effective_tags()` |
+
+### Search
+
+| Example | Description | Key Concepts |
+|---------|-------------|--------------|
+| [`search_example.py`](examples/search_example.py) | Search identifiers, cases, and entries | `search_identifiers()`, `search_cases()`, `query_journal_entries()`, filters |
+
+### Automation Management
+
+| Example | Description | Key Concepts |
+|---------|-------------|--------------|
+| [`automation_management_example.py`](examples/automation_management_example.py) | Manage automation identities and API keys | `create_automation()`, `create_automation_api_key()`, key rotation |
+
+### Reports
+
+| Example | Description | Key Concepts |
+|---------|-------------|--------------|
+| [`reports_example.py`](examples/reports_example.py) | Generate and download reports | `generate_identifier_report()`, `generate_view_report()`, `wait_for_report()`, PDF/CSV formats |
 
 ### Real-time Notifications
 

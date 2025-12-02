@@ -42,6 +42,7 @@ from .models import (
     ObservationDetails,
     Passkey,
     PhoneCallDetails,
+    Report,
     ResearchDetails,
     Session,
     Tag,
@@ -1396,6 +1397,22 @@ class ScambusClient:
 
         return entry
 
+    def delete_journal_entry(self, entry_id: str) -> bool:
+        """
+        Delete a journal entry by ID.
+
+        Args:
+            entry_id: Journal entry UUID to delete
+
+        Returns:
+            True if successfully deleted
+
+        Raises:
+            Exception: If deletion fails (permission denied, not found, etc.)
+        """
+        self._request("DELETE", f"/journal-entries/{entry_id}")
+        return True
+
     def complete_activity(
         self,
         parent_entry: Union[str, JournalEntry],
@@ -1523,6 +1540,8 @@ class ScambusClient:
         cursor: Optional[str] = None,
         include_identifiers: bool = False,
         include_evidence: bool = False,
+        parent_journal_entry_id: Optional[str] = None,
+        include_children: bool = False,
     ) -> Dict[str, Any]:
         """
         Query journal entries with advanced filtering (page size fixed at 100).
@@ -1542,6 +1561,8 @@ class ScambusClient:
             cursor: Cursor for pagination (UUID from previous response)
             include_identifiers: Include related identifiers in response
             include_evidence: Include related evidence in response
+            parent_journal_entry_id: Query children of a specific parent entry
+            include_children: Include child entries in results (default: only shows top-level entries)
 
         Returns:
             Dict with keys:
@@ -1610,6 +1631,11 @@ class ScambusClient:
 
         if details:
             body["details"] = details
+
+        if parent_journal_entry_id:
+            body["parentJournalEntryId"] = parent_journal_entry_id
+        if include_children:
+            body["includeChildren"] = include_children
 
         # Make request
         response = self._request("POST", "/journal/query", json_data=body)
@@ -3827,5 +3853,334 @@ class ScambusClient:
             key_id: API key UUID
         """
         self._request("DELETE", f"/automations/{automation_id}/api-keys/{key_id}")
+
+    # =========================================================================
+    # Report Methods - PDF Report Generation
+    # =========================================================================
+
+    def generate_identifier_report(
+        self,
+        identifier_ids: Optional[List[str]] = None,
+        view_id: Optional[str] = None,
+        include_journal_entries: bool = True,
+        include_evidence: bool = False,
+        sign_report: bool = False,
+        date_range_start: Optional[datetime] = None,
+        date_range_end: Optional[datetime] = None,
+    ) -> Report:
+        """
+        Generate a PDF report for identifiers.
+
+        Creates a court-admissible PDF document containing identifier data with
+        proper certification, chain of custody documentation, and integrity verification.
+
+        Args:
+            identifier_ids: List of identifier UUIDs to include (optional)
+            view_id: View UUID to use for selecting identifiers (optional)
+            include_journal_entries: Include related journal entries (default: True)
+            include_evidence: Include evidence files (default: False)
+            sign_report: Digitally sign the report (default: False)
+            date_range_start: Filter by date range start (optional)
+            date_range_end: Filter by date range end (optional)
+
+        Returns:
+            Report object with status and download information
+
+        Raises:
+            ScambusValidationError: If no identifiers found or invalid parameters
+            ScambusAPIError: If report generation fails
+
+        Example:
+            # Generate report for specific identifiers
+            report = client.generate_identifier_report(
+                identifier_ids=["uuid-1", "uuid-2"],
+                include_journal_entries=True
+            )
+
+            # Generate report from a view
+            report = client.generate_identifier_report(
+                view_id="my-view-uuid",
+                include_evidence=True
+            )
+
+            # Wait for completion and download
+            if report.is_completed:
+                pdf_bytes = client.download_report(report.id)
+        """
+        body: Dict[str, Any] = {
+            "include_journal_entries": include_journal_entries,
+            "include_evidence": include_evidence,
+            "sign_report": sign_report,
+        }
+
+        if identifier_ids:
+            body["identifier_ids"] = identifier_ids
+        if view_id:
+            body["view_id"] = view_id
+        if date_range_start or date_range_end:
+            body["date_range"] = {}
+            if date_range_start:
+                body["date_range"]["start"] = date_range_start.isoformat()
+            if date_range_end:
+                body["date_range"]["end"] = date_range_end.isoformat()
+
+        response = self._request("POST", "/reports/identifiers", json_data=body)
+        return Report.from_dict(response)
+
+    def generate_journal_entry_report(
+        self,
+        journal_entry_ids: Optional[List[str]] = None,
+        view_id: Optional[str] = None,
+        include_identifiers: bool = True,
+        include_evidence: bool = False,
+        include_parent_chain: bool = False,
+        sign_report: bool = False,
+        date_range_start: Optional[datetime] = None,
+        date_range_end: Optional[datetime] = None,
+    ) -> Report:
+        """
+        Generate a PDF report for journal entries.
+
+        Creates a court-admissible PDF document containing journal entry data with
+        proper certification, chain of custody documentation, and integrity verification.
+
+        Args:
+            journal_entry_ids: List of journal entry UUIDs to include (optional)
+            view_id: View UUID to use for selecting entries (optional)
+            include_identifiers: Include related identifiers (default: True)
+            include_evidence: Include evidence files (default: False)
+            include_parent_chain: Include parent entries in hierarchy (default: False)
+            sign_report: Digitally sign the report (default: False)
+            date_range_start: Filter by date range start (optional)
+            date_range_end: Filter by date range end (optional)
+
+        Returns:
+            Report object with status and download information
+
+        Raises:
+            ScambusValidationError: If no entries found or invalid parameters
+            ScambusAPIError: If report generation fails
+
+        Example:
+            # Generate report for specific entries
+            report = client.generate_journal_entry_report(
+                journal_entry_ids=["uuid-1", "uuid-2"],
+                include_identifiers=True
+            )
+
+            # Generate report from a view
+            report = client.generate_journal_entry_report(
+                view_id="my-journal-view-uuid",
+                include_evidence=True
+            )
+        """
+        body: Dict[str, Any] = {
+            "include_identifiers": include_identifiers,
+            "include_evidence": include_evidence,
+            "include_parent_chain": include_parent_chain,
+            "sign_report": sign_report,
+        }
+
+        if journal_entry_ids:
+            body["journal_entry_ids"] = journal_entry_ids
+        if view_id:
+            body["view_id"] = view_id
+        if date_range_start or date_range_end:
+            body["date_range"] = {}
+            if date_range_start:
+                body["date_range"]["start"] = date_range_start.isoformat()
+            if date_range_end:
+                body["date_range"]["end"] = date_range_end.isoformat()
+
+        response = self._request("POST", "/reports/journal-entries", json_data=body)
+        return Report.from_dict(response)
+
+    def generate_view_report(
+        self,
+        view_id: str,
+        include_evidence: bool = False,
+        sign_report: bool = False,
+    ) -> Report:
+        """
+        Generate a PDF report from a saved view.
+
+        This is a convenience method that determines the appropriate report type
+        based on the view's entity_type and generates the report.
+
+        Args:
+            view_id: View UUID or alias
+            include_evidence: Include evidence files (default: False)
+            sign_report: Digitally sign the report (default: False)
+
+        Returns:
+            Report object with status and download information
+
+        Raises:
+            ScambusValidationError: If view not found or unsupported entity type
+            ScambusAPIError: If report generation fails
+
+        Example:
+            report = client.generate_view_report("my-fraud-identifiers-view")
+            if report.is_completed:
+                client.download_report(report.id, "fraud_report.pdf")
+        """
+        # Get the view to determine entity type
+        view = self.get_view(view_id)
+
+        if view.entity_type in ("identifier", "identifiers"):
+            return self.generate_identifier_report(
+                view_id=view_id,
+                include_journal_entries=True,
+                include_evidence=include_evidence,
+                sign_report=sign_report,
+            )
+        elif view.entity_type in ("journal", "journal_entry", "journal_entries"):
+            return self.generate_journal_entry_report(
+                view_id=view_id,
+                include_identifiers=True,
+                include_evidence=include_evidence,
+                sign_report=sign_report,
+            )
+        else:
+            raise ScambusValidationError(
+                f"Unsupported view entity type for reports: {view.entity_type}. "
+                "Reports are only supported for 'identifier' and 'journal' views."
+            )
+
+    def get_report_status(self, report_id: str) -> Report:
+        """
+        Get the status of a report.
+
+        Use this to poll for completion of async report generation.
+
+        Args:
+            report_id: Report UUID
+
+        Returns:
+            Report object with current status
+
+        Raises:
+            ScambusNotFoundError: If report not found
+            ScambusAPIError: If request fails
+
+        Example:
+            import time
+
+            report = client.generate_identifier_report(identifier_ids=[...])
+            while report.is_processing:
+                time.sleep(2)
+                report = client.get_report_status(report.id)
+
+            if report.is_completed:
+                client.download_report(report.id, "output.pdf")
+            elif report.is_failed:
+                print(f"Report failed: {report.error_message}")
+        """
+        response = self._request("GET", f"/reports/{report_id}/status")
+        return Report.from_dict(response)
+
+    def download_report(
+        self,
+        report_id: str,
+        output_path: Optional[Union[str, Path]] = None,
+    ) -> bytes:
+        """
+        Download a generated PDF report.
+
+        Args:
+            report_id: Report UUID
+            output_path: Optional file path to save the PDF. If provided,
+                        the PDF will be written to this file.
+
+        Returns:
+            PDF file content as bytes
+
+        Raises:
+            ScambusNotFoundError: If report not found
+            ScambusValidationError: If report is not ready or has expired
+            ScambusAPIError: If download fails
+
+        Example:
+            # Get PDF bytes
+            pdf_bytes = client.download_report(report.id)
+
+            # Save to file
+            client.download_report(report.id, "fraud_report.pdf")
+
+            # Save to path object
+            from pathlib import Path
+            client.download_report(report.id, Path("reports") / "output.pdf")
+        """
+        url = f"{self.api_url}/reports/{report_id}/download"
+        response = self.session.get(url, timeout=self.timeout)
+
+        if response.status_code == 404:
+            raise ScambusNotFoundError("Report not found")
+        elif response.status_code == 400:
+            raise ScambusValidationError("Report is not ready for download")
+        elif response.status_code == 410:
+            raise ScambusValidationError("Report has expired")
+        elif response.status_code >= 400:
+            self._handle_error_response(response)
+
+        pdf_bytes = response.content
+
+        if output_path:
+            path = Path(output_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(pdf_bytes)
+
+        return pdf_bytes
+
+    def wait_for_report(
+        self,
+        report_id: str,
+        poll_interval: float = 2.0,
+        timeout: Optional[float] = 300.0,
+    ) -> Report:
+        """
+        Wait for a report to complete generation.
+
+        Polls the report status until it's completed, failed, or timeout is reached.
+
+        Args:
+            report_id: Report UUID
+            poll_interval: Seconds between status checks (default: 2.0)
+            timeout: Maximum seconds to wait (default: 300.0 / 5 minutes)
+                    Set to None for no timeout.
+
+        Returns:
+            Report object with final status
+
+        Raises:
+            TimeoutError: If timeout is reached before completion
+            ScambusAPIError: If status check fails
+
+        Example:
+            report = client.generate_identifier_report(identifier_ids=[...])
+            try:
+                report = client.wait_for_report(report.id, timeout=60)
+                if report.is_completed:
+                    client.download_report(report.id, "output.pdf")
+            except TimeoutError:
+                print("Report generation timed out")
+        """
+        import time
+
+        start_time = time.time()
+        report = self.get_report_status(report_id)
+
+        while report.is_processing:
+            if timeout is not None:
+                elapsed = time.time() - start_time
+                if elapsed >= timeout:
+                    raise TimeoutError(
+                        f"Report generation timed out after {timeout} seconds"
+                    )
+
+            time.sleep(poll_interval)
+            report = self.get_report_status(report_id)
+
+        return report
 
     # Group Methods

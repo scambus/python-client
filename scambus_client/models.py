@@ -532,6 +532,8 @@ class ConversationContinuationDetails:
     Attributes:
         messages: List of messages in this continuation
         reason: Why this continuation was created (e.g., "initial import", "new messages")
+        non_contiguous: If True, indicates a time gap before this batch of messages.
+            When rendered, a visual separator is shown before these messages.
 
     Example:
         ```python
@@ -561,6 +563,7 @@ class ConversationContinuationDetails:
 
     messages: List[ConversationMessage]
     reason: Optional[str] = None
+    non_contiguous: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API request."""
@@ -569,6 +572,8 @@ class ConversationContinuationDetails:
         }
         if self.reason:
             data["reason"] = self.reason
+        if self.non_contiguous:
+            data["non_contiguous"] = True
         return data
 
 
@@ -1734,3 +1739,87 @@ class View:
         if self.sort_order:
             data["sort_order"] = self.sort_order
         return data
+
+
+@dataclass
+class Report:
+    """
+    PDF Report from API response.
+
+    Reports are digitally signed PDF documents containing identifiers or journal entries
+    with proper certification and chain of custody documentation. The PDF contains an
+    embedded digital signature that can be verified by any PDF reader.
+
+    Attributes:
+        id: Report UUID
+        report_type: Type of report ("identifier" or "journal_entry")
+        status: Report status ("pending", "processing", "completed", "failed")
+        identifier_count: Number of identifiers in report
+        journal_entry_count: Number of journal entries in report
+        evidence_count: Number of evidence items in report
+        download_url: URL to download the PDF (when completed)
+        generated_at: When the report was generated
+        expires_at: When the report expires
+        created_at: Creation timestamp
+        error_message: Error message if generation failed
+    """
+
+    id: str
+    report_type: str
+    status: str
+    identifier_count: int = 0
+    journal_entry_count: int = 0
+    evidence_count: int = 0
+    download_url: Optional[str] = None
+    generated_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    error_message: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Report":
+        """Create from API response dictionary."""
+        return cls(
+            id=data.get("report_id", data.get("id", "")),
+            report_type=data.get("report_type", data.get("type", "")),
+            status=data.get("status", ""),
+            identifier_count=data.get("identifier_count", 0),
+            journal_entry_count=data.get("journal_entry_count", 0),
+            evidence_count=data.get("evidence_count", 0),
+            download_url=data.get("download_url"),
+            generated_at=Identifier._parse_datetime(data.get("generated_at")),
+            expires_at=Identifier._parse_datetime(data.get("expires_at")),
+            created_at=Identifier._parse_datetime(data.get("created_at")),
+            error_message=data.get("error_message"),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            "id": self.id,
+            "report_type": self.report_type,
+            "status": self.status,
+            "identifier_count": self.identifier_count,
+            "journal_entry_count": self.journal_entry_count,
+            "evidence_count": self.evidence_count,
+            "download_url": self.download_url,
+            "generated_at": self.generated_at.isoformat() if self.generated_at else None,
+            "expires_at": self.expires_at.isoformat() if self.expires_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "error_message": self.error_message,
+        }
+
+    @property
+    def is_completed(self) -> bool:
+        """Check if report generation is completed."""
+        return self.status == "completed"
+
+    @property
+    def is_failed(self) -> bool:
+        """Check if report generation failed."""
+        return self.status == "failed"
+
+    @property
+    def is_processing(self) -> bool:
+        """Check if report is still being generated."""
+        return self.status in ("pending", "processing")

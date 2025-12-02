@@ -138,3 +138,4 @@ clean_client.py
 clean_models.py
 ADMIN_METHODS_TO_REMOVE.md
 venv/
+v*.pdf

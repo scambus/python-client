@@ -181,6 +181,38 @@ def get(ctx, entry_id, output_json):
 
 
 @journal.command()
+@click.argument("entry_id")
+@click.option("--force", "-f", is_flag=True, help="Skip confirmation prompt")
+@click.pass_context
+def delete(ctx, entry_id, force):
+    """Delete a journal entry by ID."""
+    client = ctx.obj.get_client()
+
+    try:
+        # Get entry details first to show what we're deleting
+        entry = client.get_journal_entry(entry_id)
+        entry_desc = (entry.description or "No description")[:60]
+
+        if not force:
+            # Show entry details and ask for confirmation
+            print_info(f"About to delete journal entry:")
+            print_info(f"  ID: {entry.id}")
+            print_info(f"  Type: {entry.type}")
+            print_info(f"  Description: {entry_desc}")
+
+            if not click.confirm("Are you sure you want to delete this entry?"):
+                print_warning("Deletion cancelled")
+                return
+
+        client.delete_journal_entry(entry_id)
+        print_success(f"Successfully deleted journal entry: {entry_id}")
+
+    except Exception as e:
+        print_error(f"Failed to delete journal entry: {e}")
+        sys.exit(1)
+
+
+@journal.command()
 @click.option("--search", help="Full-text search in description")
 @click.option("--type", "entry_type", help="Filter by type (phone_call, email, etc.)")
 @click.option(
@@ -204,6 +236,8 @@ def get(ctx, entry_id, output_json):
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 @click.option("--with-identifiers", is_flag=True, help="Include related identifiers")
 @click.option("--with-evidence", is_flag=True, help="Include related evidence")
+@click.option("--parent", "parent_id", help="Query children of a specific parent journal entry ID")
+@click.option("--include-children", is_flag=True, help="Include child entries in results (default: only top-level)")
 @click.pass_context
 def query(
     ctx,
@@ -223,6 +257,8 @@ def query(
     output_json,
     with_identifiers,
     with_evidence,
+    parent_id,
+    include_children,
 ):
     """
     Query journal entries with advanced filtering.
@@ -290,6 +326,8 @@ def query(
                 cursor=cursor,
                 include_identifiers=with_identifiers,
                 include_evidence=with_evidence,
+                parent_journal_entry_id=parent_id,
+                include_children=include_children,
             )
 
             all_entries.extend(result["data"])
@@ -1776,6 +1814,11 @@ def create_conversation(
 )
 @click.option("--originator-identifier", help="Originator identifier")
 @click.option("--create-originator", is_flag=True, help="Create originator if not exists")
+@click.option(
+    "--non-contiguous",
+    is_flag=True,
+    help="Mark as non-contiguous (shows visual separator for time gap)",
+)
 @click.option("--json", "output_json", is_flag=True, help="Output JSON")
 @click.pass_context
 def add_conversation_messages(
@@ -1789,6 +1832,7 @@ def add_conversation_messages(
     originator_type,
     originator_identifier,
     create_originator,
+    non_contiguous,
     output_json,
 ):
     """Add messages to an existing conversation (creates conversation_continuation entry).
@@ -1837,6 +1881,12 @@ def add_conversation_messages(
         scambus journal add-conversation-messages abc123 \\
             --messages-file new_messages.json \\
             --reason "new messages received"
+
+        # Add messages with a time gap (shows visual separator in UI)
+        scambus journal add-conversation-messages abc123 \\
+            --messages-file later_messages.json \\
+            --reason "messages after time gap" \\
+            --non-contiguous
     """
     client = ctx.obj.get_client()
 
@@ -1859,6 +1909,8 @@ def add_conversation_messages(
         }
         if reason:
             details["reason"] = reason
+        if non_contiguous:
+            details["non_contiguous"] = True
 
         # Use first message timestamp for performed_at
         first_timestamp = messages[0].get("timestamp", now_iso())

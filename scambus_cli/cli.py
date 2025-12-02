@@ -274,7 +274,7 @@ def show_config():
 
 
 # Import command groups - imported here to avoid circular imports
-from .commands import automations, cases, journal, media, profile, search, streams, tags, views  # noqa: E402
+from .commands import automations, cases, journal, media, profile, reports, search, streams, tags, views  # noqa: E402
 
 cli.add_command(journal.journal)
 cli.add_command(media.media)
@@ -285,6 +285,7 @@ cli.add_command(tags.tags)
 cli.add_command(profile.profile)
 cli.add_command(views.views)
 cli.add_command(automations.automations)
+cli.add_command(reports.reports)
 
 
 def main():

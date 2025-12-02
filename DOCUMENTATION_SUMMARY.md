@@ -1218,23 +1218,64 @@ test(models): add tests for in-progress activities
 
 ## 10. Examples
 
-Example scripts in `/examples/`:
+Complete working examples are in the [`examples/`](examples/) directory:
 
-| File | Description |
-|------|-------------|
-| `simple_detection.py` | Basic detection creation |
-| `detection_with_evidence.py` | Detection with media evidence |
-| `phone_call_example.py` | Report phone scam |
-| `email_example.py` | Report phishing email |
-| `text_conversation_example.py` | Report SMS/text scams |
-| `in_progress_activity_example.py` | Track ongoing scams |
-| `case_management.py` | Case creation and updates |
-| `stream_management.py` | Create and consume streams |
-| `identifier_stream_example.py` | Identifier state changes and backfill |
-| `bank_account_detection.py` | Bank fraud detection |
-| `simple_media_upload.py` | Evidence file upload |
-| `websocket_notifications.py` | Real-time notifications |
-| `websocket_custom_handlers.py` | Custom message handlers |
+### Journal Entry Examples
+
+| Example | Description | Key Concepts |
+|---------|-------------|--------------|
+| [`simple_detection.py`](examples/simple_detection.py) | Basic phishing detection with identifiers | `create_detection()`, identifier dictionaries, details field |
+| [`detection_with_evidence.py`](examples/detection_with_evidence.py) | Detection with screenshot evidence | `upload_media()`, evidence attachment, media workflow |
+| [`phone_call_example.py`](examples/phone_call_example.py) | Report inbound/outbound scam calls | `create_phone_call()`, direction, recording_url, transcript_url |
+| [`email_example.py`](examples/email_example.py) | Report phishing emails | `create_email()`, headers, attachments, HTML body |
+| [`text_conversation_example.py`](examples/text_conversation_example.py) | Report SMS/WhatsApp/Telegram scams | `create_text_conversation()`, platform support |
+| [`bank_account_detection.py`](examples/bank_account_detection.py) | Bank transfer fraud detection | `create_bank_account_identifier()`, financial identifiers |
+
+### In-Progress Activities
+
+| Example | Description | Key Concepts |
+|---------|-------------|--------------|
+| [`in_progress_activity_example.py`](examples/in_progress_activity_example.py) | Track ongoing scam interactions | `in_progress=True`, `complete_activity()`, `.complete()` method, completion reasons |
+
+### Export Streams
+
+| Example | Description | Key Concepts |
+|---------|-------------|--------------|
+| [`stream_management.py`](examples/stream_management.py) | Create and consume journal entry streams | `create_stream()`, `consume_stream()`, cursor pagination, recovery |
+| [`identifier_stream_example.py`](examples/identifier_stream_example.py) | Identifier state change streams with backfill | `data_type="identifier"`, `backfill_historical`, structured data extraction |
+
+### Case Management
+
+| Example | Description | Key Concepts |
+|---------|-------------|--------------|
+| [`case_management.py`](examples/case_management.py) | Investigation case workflow | `create_case()`, `update_case()`, `list_cases()`, status management |
+
+### Media & Evidence
+
+| Example | Description | Key Concepts |
+|---------|-------------|--------------|
+| [`simple_media_upload.py`](examples/simple_media_upload.py) | Upload evidence files | `upload_media()`, single/multiple files, `media=` parameter |
+
+### Real-time Notifications
+
+| Example | Description | Key Concepts |
+|---------|-------------|--------------|
+| [`websocket_notifications.py`](examples/websocket_notifications.py) | Listen for real-time notifications | `create_websocket_client()`, async handlers, `listen_notifications()` |
+| [`websocket_custom_handlers.py`](examples/websocket_custom_handlers.py) | Custom WebSocket message handlers | Custom message types, error handling |
+
+### Running Examples
+
+```bash
+# Set environment variables
+export SCAMBUS_API_URL="http://localhost:8080/api"
+export SCAMBUS_API_TOKEN="your-token"
+
+# Run an example
+python examples/simple_detection.py
+
+# Run example with file argument
+python examples/detection_with_evidence.py screenshot.png
+```
 
 ---
 

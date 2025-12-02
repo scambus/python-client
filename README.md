@@ -39,7 +39,7 @@ pip install git+https://github.com/scambus/python-client.git@v0.1.0
 pip install git+https://github.com/scambus/python-client.git@feature-branch
 ```
 
-📖 **See [INSTALL_FROM_GITHUB.md](INSTALL_FROM_GITHUB.md) for detailed instructions and troubleshooting.**
+📖 **See [DOCUMENTATION_SUMMARY.md](DOCUMENTATION_SUMMARY.md) for complete documentation.**
 
 The package includes:
 - Python client library (`scambus_client`)
@@ -315,10 +315,10 @@ scambus profile twofa --enable
 
 ## Documentation
 
-- [Quick Start Guide](docs/quickstart.md)
-- [API Reference](docs/api-reference.md)
-- [CLI Reference](docs/cli-reference.md)
-- [Examples](examples/)
+- [Complete Documentation](DOCUMENTATION_SUMMARY.md) - Full reference guide
+- [Examples](examples/) - Working code examples
+- [Changelog](CHANGELOG.md) - Version history
+- [Security](SECURITY.md) - Security policy
 
 ## Features in Detail
 

@@ -48,9 +48,6 @@ The package includes:
 ### Optional: Install Development Tools
 
 ```bash
-# From PyPI
-pip install scambus[dev]
-
 # From GitHub
 pip install "git+https://github.com/scambus/python-client.git#egg=scambus[dev]"
 ```

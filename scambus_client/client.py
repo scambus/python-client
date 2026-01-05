@@ -10,7 +10,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from .config import get_api_url, get_api_token
+from .config import get_api_url, get_api_token, get_api_key_id, get_api_key_secret
 
 from .exceptions import (
     ScambusAPIError,
@@ -258,28 +258,38 @@ class ScambusClient:
         """
         Initialize the Scambus client.
 
-        If api_url and api_token are not provided, they will be read from:
-        1. Environment variables (SCAMBUS_URL, SCAMBUS_API_TOKEN)
-        2. CLI config file (~/.scambus/config.json)
-        3. Defaults (api_url: https://scambus.net/api)
+        Parameters are loaded with the following priority:
+        1. Explicit parameter values passed to __init__
+        2. Environment variables
+        3. CLI config file (~/.scambus/config.json)
+        4. Defaults (api_url: https://scambus.net/api)
+
+        Environment variables:
+            SCAMBUS_API_URL (or SCAMBUS_URL): API base URL
+            SCAMBUS_API_KEY_ID: API key ID (UUID)
+            SCAMBUS_API_KEY_SECRET: API key secret
+            SCAMBUS_API_TOKEN: JWT token (legacy)
 
         Args:
-            api_url: Base URL of the Scambus API (default: from config or https://scambus.net/api)
+            api_url: Base URL of the Scambus API (default: https://scambus.net/api)
             api_key_id: API key ID (UUID) for authentication
             api_key_secret: API key secret for authentication
-            api_token: API JWT token (auto-loaded from CLI config if not provided)
+            api_token: API JWT token (legacy, prefer api_key_id/api_key_secret)
             timeout: Request timeout in seconds (default: 30)
             max_retries: Maximum number of retries for failed requests (default: 3)
         """
-        # Load from CLI config if parameters not provided
+        # Load configuration with priority: explicit param > env var > config file > default
         api_url = get_api_url(api_url)
+        api_key_id = get_api_key_id(api_key_id)
+        api_key_secret = get_api_key_secret(api_key_secret)
 
         # Ensure /api suffix
         if not api_url.endswith("/api"):
             api_url = f"{api_url}/api"
 
-        if api_token is None and not (api_key_id and api_key_secret):
-            api_token = get_api_token()
+        # Only try to load api_token if api_key auth not available
+        if not (api_key_id and api_key_secret):
+            api_token = get_api_token(api_token)
 
         self.api_url = api_url.rstrip("/") if api_url else "https://scambus.net/api"
         self.timeout = timeout
@@ -316,9 +326,10 @@ class ScambusClient:
         else:
             raise ValueError(
                 "No authentication provided. Either:\n"
-                "1. Run 'scambus auth login' to authenticate via CLI, or\n"
-                "2. Provide api_key_id/api_key_secret, or\n"
-                "3. Set SCAMBUS_API_TOKEN environment variable"
+                "1. Set SCAMBUS_API_KEY_ID and SCAMBUS_API_KEY_SECRET environment variables, or\n"
+                "2. Provide api_key_id/api_key_secret parameters, or\n"
+                "3. Run 'scambus auth login' to authenticate via CLI, or\n"
+                "4. Set SCAMBUS_API_TOKEN environment variable"
             )
 
     def _request(

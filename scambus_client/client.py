@@ -32,6 +32,7 @@ from .models import (
     Evidence,
     ExportDetails,
     ExportStream,
+    FailedIdentifier,
     Identifier,
     IdentifierLookup,
     ImportDetails,
@@ -748,12 +749,22 @@ class ScambusClient:
 
         response = self._request("POST", "/journal-entries", json_data=data)
 
+        # Capture failed_identifiers before fetching full entry
+        failed_identifiers = None
+        if "failed_identifiers" in response:
+            failed_identifiers = [
+                FailedIdentifier.from_dict(fi) for fi in response["failed_identifiers"]
+            ]
+
         # Backend only returns {"id": "..."}, so fetch the full entry
         entry_id = response["id"]
         entry = self.get_journal_entry(entry_id)
 
         # Set client reference so entry.complete() works
         entry._client = self
+
+        # Attach failed identifiers from creation response
+        entry.failed_identifiers = failed_identifiers
 
         return entry
 

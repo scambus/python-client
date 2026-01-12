@@ -39,6 +39,31 @@ class IdentifierLookup:
 
 
 @dataclass
+class FailedIdentifier:
+    """
+    Represents an identifier that failed validation during journal entry creation.
+
+    Attributes:
+        type: Type of identifier that was attempted
+        value: Value that was submitted
+        reason: Why the identifier failed validation
+    """
+
+    type: str
+    value: str
+    reason: str
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "FailedIdentifier":
+        """Create from API response dictionary."""
+        return cls(
+            type=data.get("type", ""),
+            value=data.get("value", ""),
+            reason=data.get("reason", ""),
+        )
+
+
+@dataclass
 class Identifier:
     """
     Identifier from API response.
@@ -1393,6 +1418,8 @@ class JournalEntry:
         signature_algorithm: Algorithm used for signing (optional)
         signed_at: When the entry was signed (optional)
         child_entries: Child entries (e.g., conversation_continuations)
+        failed_identifiers: Identifiers that failed validation during creation (optional).
+            Only populated on entries returned from create_* methods, not from get_journal_entry().
         _client: Internal reference to ScambusClient for calling complete()
         _raw_data: Original API response data with all fields
     """
@@ -1422,6 +1449,7 @@ class JournalEntry:
     signature_algorithm: Optional[str] = None
     signed_at: Optional[datetime] = None
     child_entries: Optional[List["JournalEntry"]] = None
+    failed_identifiers: Optional[List["FailedIdentifier"]] = None
     _client: Optional[Any] = field(default=None, repr=False)
     _raw_data: Optional[Dict[str, Any]] = field(default=None, repr=False)
 

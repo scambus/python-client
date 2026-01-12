@@ -14,7 +14,7 @@ conversation history over time.
 
 import os
 from datetime import datetime
-from scambus_client import ScambusClient
+from scambus_client import ScambusClient, IdentifierLookup
 from scambus_client.models import (
     TextConversationDetails,
     ConversationContinuationDetails,
@@ -54,18 +54,8 @@ def main():
         # Define identifiers for all participants
         # The 'ref' field is used to reference these in messages via sender_ref
         identifier_lookups=[
-            {
-                "type": "phone",
-                "value": "+1555123456",
-                "ref": "scammer",
-                "confidence": 0.9,
-            },
-            {
-                "type": "phone",
-                "value": "+1555987654",
-                "ref": "victim",
-                "confidence": 1.0,
-            },
+            IdentifierLookup(type="phone", value="+1555123456", ref="scammer", confidence=0.9),
+            IdentifierLookup(type="phone", value="+1555987654", ref="victim", confidence=1.0),
         ],
     )
 
@@ -114,8 +104,8 @@ def main():
         ).to_dict(),
         parent_journal_entry_id=parent.id,  # Link to parent conversation
         identifier_lookups=[
-            {"type": "phone", "value": "+1555123456", "ref": "scammer"},
-            {"type": "phone", "value": "+1555987654", "ref": "victim"},
+            IdentifierLookup(type="phone", value="+1555123456", ref="scammer"),
+            IdentifierLookup(type="phone", value="+1555987654", ref="victim"),
         ],
     )
 
@@ -157,8 +147,8 @@ def main():
         ).to_dict(),
         parent_journal_entry_id=parent.id,
         identifier_lookups=[
-            {"type": "phone", "value": "+1555123456", "ref": "scammer"},
-            {"type": "phone", "value": "+1555987654", "ref": "victim"},
+            IdentifierLookup(type="phone", value="+1555123456", ref="scammer"),
+            IdentifierLookup(type="phone", value="+1555987654", ref="victim"),
         ],
     )
 
@@ -220,21 +210,11 @@ def main():
         ).to_dict(),
         parent_journal_entry_id=parent.id,
         identifier_lookups=[
-            {"type": "phone", "value": "+1555123456", "ref": "scammer"},
-            {"type": "phone", "value": "+1555987654", "ref": "victim"},
+            IdentifierLookup(type="phone", value="+1555123456", ref="scammer"),
+            IdentifierLookup(type="phone", value="+1555987654", ref="victim"),
             # New identifiers discovered in this message
-            {
-                "type": "phone",
-                "value": "+1555999888",
-                "ref": "payment_phone",
-                "confidence": 0.95,
-            },
-            {
-                "type": "url",
-                "value": "https://scam-payment.example.com/pay",
-                "ref": "payment_url",
-                "confidence": 1.0,
-            },
+            IdentifierLookup(type="phone", value="+1555999888", ref="payment_phone", confidence=0.95),
+            IdentifierLookup(type="url", value="https://scam-payment.example.com/pay", ref="payment_url", confidence=1.0),
         ],
     )
 

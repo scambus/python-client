@@ -1099,6 +1099,270 @@ class ConfidenceOperationDetails:
 
 
 @dataclass
+class RedactionDetails:
+    """
+    Details for a redaction journal entry.
+
+    Attributes:
+        identifier_id: UUID of the identifier being redacted
+        identifier_type: Type of the identifier being redacted
+        original_hash: HMAC hash of original value for verification
+        redacted_fields: List of field names that were redacted
+        redacted_at: When the redaction occurred
+        reason: Reason for the redaction (optional)
+    """
+
+    identifier_id: str
+    identifier_type: str
+    original_hash: str
+    redacted_fields: List[str]
+    redacted_at: datetime
+    reason: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for API request."""
+        data = {
+            "identifier_id": self.identifier_id,
+            "identifier_type": self.identifier_type,
+            "original_hash": self.original_hash,
+            "redacted_fields": self.redacted_fields,
+            "redacted_at": self.redacted_at.isoformat(),
+        }
+        if self.reason:
+            data["reason"] = self.reason
+        return data
+
+
+@dataclass
+class CaseUpdateDetails:
+    """
+    Details for a case_update journal entry.
+
+    Attributes:
+        case_id: UUID of the case being updated
+        update_type: Type of update ("status", "priority", "assignment", "closure", "relationship")
+        new_value: New value after update
+        old_value: Previous value before update (optional)
+        notes: Additional notes about the update (optional)
+        metadata: Additional context (optional)
+    """
+
+    case_id: str
+    update_type: str
+    new_value: str
+    old_value: Optional[str] = None
+    notes: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for API request."""
+        data = {
+            "case_id": self.case_id,
+            "update_type": self.update_type,
+            "new_value": self.new_value,
+        }
+        if self.old_value:
+            data["old_value"] = self.old_value
+        if self.notes:
+            data["notes"] = self.notes
+        if self.metadata:
+            data["metadata"] = self.metadata
+        return data
+
+
+@dataclass
+class CaseIdentifierLinkDetails:
+    """
+    Details for a case_identifier_link or case_identifier_unlink journal entry.
+
+    Attributes:
+        operation: Operation type ("link" or "unlink")
+        case_id: UUID of the case
+        identifier_id: UUID of the identifier
+        reason: Reason for the link/unlink operation (optional)
+        metadata: Additional context (optional)
+        case_ref: Case reference number (enriched by server, optional)
+        case_title: Case title (enriched by server, optional)
+        identifier_type: Identifier type (enriched by server, optional)
+        identifier_value: Identifier display value (enriched by server, optional)
+    """
+
+    operation: str
+    case_id: str
+    identifier_id: str
+    reason: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    case_ref: Optional[str] = None
+    case_title: Optional[str] = None
+    identifier_type: Optional[str] = None
+    identifier_value: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for API request."""
+        data = {
+            "operation": self.operation,
+            "case_id": self.case_id,
+            "identifier_id": self.identifier_id,
+        }
+        if self.reason:
+            data["reason"] = self.reason
+        if self.metadata:
+            data["metadata"] = self.metadata
+        return data
+
+
+@dataclass
+class KarmaComponent:
+    """
+    A single component of a karma breakdown.
+
+    Attributes:
+        type: Component type ("base", "first_reporter_bonus", etc.)
+        amount: Karma amount for this component
+        description: Human-readable description
+        config_id: Configuration ID that generated this component (optional)
+    """
+
+    type: str
+    amount: int
+    description: str
+    config_id: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for API request."""
+        data = {
+            "type": self.type,
+            "amount": self.amount,
+            "description": self.description,
+        }
+        if self.config_id:
+            data["config_id"] = self.config_id
+        return data
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "KarmaComponent":
+        """Create from API response dictionary."""
+        return cls(
+            type=data["type"],
+            amount=data["amount"],
+            description=data["description"],
+            config_id=data.get("config_id"),
+        )
+
+
+@dataclass
+class KarmaBreakdown:
+    """
+    Breakdown of karma calculation.
+
+    Attributes:
+        components: List of karma components
+        total: Total karma amount
+    """
+
+    components: List[KarmaComponent]
+    total: int
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for API request."""
+        return {
+            "components": [c.to_dict() for c in self.components],
+            "total": self.total,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "KarmaBreakdown":
+        """Create from API response dictionary."""
+        return cls(
+            components=[KarmaComponent.from_dict(c) for c in data.get("components", [])],
+            total=data.get("total", 0),
+        )
+
+
+@dataclass
+class KarmaAdjustmentDetails:
+    """
+    Details for a karma_adjustment journal entry.
+
+    Attributes:
+        amount: Karma amount (positive or negative)
+        reason: Reason for the adjustment
+        trigger_type: What triggered this adjustment ("scam_report", "identifier_verified", "tag_applied", "manual")
+        metadata: Additional context (optional)
+        breakdown: Karma calculation breakdown (optional)
+    """
+
+    amount: int
+    reason: str
+    trigger_type: str
+    metadata: Optional[Dict[str, Any]] = None
+    breakdown: Optional[KarmaBreakdown] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for API request."""
+        data = {
+            "amount": self.amount,
+            "reason": self.reason,
+            "trigger_type": self.trigger_type,
+        }
+        if self.metadata:
+            data["metadata"] = self.metadata
+        if self.breakdown:
+            data["breakdown"] = self.breakdown.to_dict()
+        return data
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "KarmaAdjustmentDetails":
+        """Create from API response dictionary."""
+        breakdown = None
+        if data.get("breakdown"):
+            breakdown = KarmaBreakdown.from_dict(data["breakdown"])
+        return cls(
+            amount=data["amount"],
+            reason=data["reason"],
+            trigger_type=data["trigger_type"],
+            metadata=data.get("metadata"),
+            breakdown=breakdown,
+        )
+
+
+@dataclass
+class JournalEntryChildSummary:
+    """
+    Summary of a child journal entry.
+
+    Used in parent entries to show child entries without full details.
+
+    Attributes:
+        id: Child entry UUID
+        type: Entry type
+        platform: Platform for conversations (optional)
+        direction: Direction for communications (optional)
+        parent_journal_entry_id: Parent entry ID (optional)
+        performed_at: When the child entry was performed (optional)
+    """
+
+    id: str
+    type: str
+    platform: Optional[str] = None
+    direction: Optional[str] = None
+    parent_journal_entry_id: Optional[str] = None
+    performed_at: Optional[datetime] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "JournalEntryChildSummary":
+        """Create from API response dictionary."""
+        return cls(
+            id=data["id"],
+            type=data["type"],
+            platform=data.get("platform"),
+            direction=data.get("direction"),
+            parent_journal_entry_id=data.get("parent_journal_entry_id"),
+            performed_at=Identifier._parse_datetime(data.get("performed_at")),
+        )
+
+
+@dataclass
 class JournalEntry:
     """
     Journal entry from API response.
@@ -1110,9 +1374,25 @@ class JournalEntry:
         details: Type-specific details
         performed_at: When the action/event occurred
         created_at: When entry was created
-        identifiers: List of linked identifiers
+        updated_at: When entry was last updated
+        identifiers: List of linked suspect/scammer identifiers
+        our_identifiers: List of linked honeypot/bot identifiers (our side)
+        evidence: List of evidence attached to this entry
+        case_id: UUID of linked case (optional)
         start_time: When the activity started (optional)
         end_time: When the activity ended (optional)
+        parent_journal_entry_id: Parent entry for causal linking (optional)
+        batch_id: Batch ID for grouped entries (optional)
+        tags: Tag display information from server (optional)
+        total_karma: Total karma points (optional)
+        karma_breakdown: Karma calculation breakdown (optional)
+        is_draft: Whether this is a draft entry
+        draft_metadata: Draft-specific UI state (optional)
+        signature: Digital signature (optional)
+        signed_by: Who signed the entry (optional)
+        signature_algorithm: Algorithm used for signing (optional)
+        signed_at: When the entry was signed (optional)
+        child_entries: Child entries (e.g., conversation_continuations)
         _client: Internal reference to ScambusClient for calling complete()
         _raw_data: Original API response data with all fields
     """
@@ -1125,10 +1405,23 @@ class JournalEntry:
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     identifiers: List[Identifier] = field(default_factory=list)
+    our_identifiers: List[Identifier] = field(default_factory=list)
     evidence: Optional[List[Dict[str, Any]]] = None
     case_id: Optional[str] = None
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
+    parent_journal_entry_id: Optional[str] = None
+    batch_id: Optional[str] = None
+    tags: Optional[List[Dict[str, Any]]] = None
+    total_karma: Optional[int] = None
+    karma_breakdown: Optional[Dict[str, Any]] = None
+    is_draft: bool = False
+    draft_metadata: Optional[Dict[str, Any]] = None
+    signature: Optional[str] = None
+    signed_by: Optional[str] = None
+    signature_algorithm: Optional[str] = None
+    signed_at: Optional[datetime] = None
+    child_entries: Optional[List["JournalEntry"]] = None
     _client: Optional[Any] = field(default=None, repr=False)
     _raw_data: Optional[Dict[str, Any]] = field(default=None, repr=False)
 
@@ -1189,6 +1482,15 @@ class JournalEntry:
         if "identifiers" in data and data["identifiers"]:
             identifiers = [Identifier.from_dict(i) for i in data["identifiers"]]
 
+        our_identifiers = []
+        if "our_identifiers" in data and data["our_identifiers"]:
+            our_identifiers = [Identifier.from_dict(i) for i in data["our_identifiers"]]
+
+        # Parse child entries recursively
+        child_entries = None
+        if "child_journal_entries" in data and data["child_journal_entries"]:
+            child_entries = [JournalEntry.from_dict(c) for c in data["child_journal_entries"]]
+
         entry = cls(
             id=data["id"],
             type=data.get("type", "unknown"),  # Backend may not always return type
@@ -1198,10 +1500,23 @@ class JournalEntry:
             created_at=Identifier._parse_datetime(data.get("created_at")),
             updated_at=Identifier._parse_datetime(data.get("updated_at")),
             identifiers=identifiers,
+            our_identifiers=our_identifiers,
             evidence=data.get("evidence"),
             case_id=data.get("case_id"),
             start_time=Identifier._parse_datetime(data.get("start_time")),
             end_time=Identifier._parse_datetime(data.get("end_time")),
+            parent_journal_entry_id=data.get("parent_journal_entry_id"),
+            batch_id=data.get("batch_id"),
+            tags=data.get("tag_display") or data.get("tags"),
+            total_karma=data.get("total_karma"),
+            karma_breakdown=data.get("karma_breakdown"),
+            is_draft=data.get("is_draft", False),
+            draft_metadata=data.get("draft_metadata"),
+            signature=data.get("signature"),
+            signed_by=data.get("signed_by"),
+            signature_algorithm=data.get("signature_algorithm"),
+            signed_at=Identifier._parse_datetime(data.get("signed_at")),
+            child_entries=child_entries,
         )
 
         # Store the complete raw response for to_dict()
@@ -1418,11 +1733,13 @@ class Tag:
         title: Tag title
         description: Tag description
         tag_type: Tag type (boolean or valued)
-        applicable_models: Models this tag can be applied to
+        aliases: Alternative names for tag lookup
+        applicable_models: Models this tag can be applied to (deprecated)
         color: Optional hex color for UI
         icon: Optional icon identifier
         active: Whether tag is active
         is_system: Whether this is a system tag
+        is_global: Whether tag is visible to all organizations
         flows_up_to_case: Tag flows up to cases
         flows_down_to_evidence: Tag flows down to evidence
         allocates_karma: Karma points awarded
@@ -1435,13 +1752,15 @@ class Tag:
     title: str
     tag_type: str = "valued"
     description: Optional[str] = None
+    aliases: List[str] = field(default_factory=list)
     applicable_models: List[str] = field(default_factory=list)
     color: Optional[str] = None
     icon: Optional[str] = None
     active: bool = True
     is_system: bool = False
-    flows_up_to_case: bool = False
-    flows_down_to_evidence: bool = False
+    is_global: bool = False
+    flows_up_to_case: bool = True
+    flows_down_to_evidence: bool = True
     allocates_karma: Optional[int] = None
     owner_org_id: Optional[str] = None
     created_at: Optional[datetime] = None
@@ -1455,13 +1774,15 @@ class Tag:
             title=data["title"],
             tag_type=data.get("tag_type", "valued"),
             description=data.get("description"),
+            aliases=data.get("aliases", []),
             applicable_models=data.get("applicable_models", []),
             color=data.get("color"),
             icon=data.get("icon"),
             active=data.get("active", True),
             is_system=data.get("is_system", False),
-            flows_up_to_case=data.get("flows_up_to_case", False),
-            flows_down_to_evidence=data.get("flows_down_to_evidence", False),
+            is_global=data.get("is_global", False),
+            flows_up_to_case=data.get("flows_up_to_case", True),
+            flows_down_to_evidence=data.get("flows_down_to_evidence", True),
             allocates_karma=data.get("allocates_karma"),
             owner_org_id=data.get("owner_org_id"),
             created_at=Identifier._parse_datetime(data.get("created_at")),

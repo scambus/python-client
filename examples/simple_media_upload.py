@@ -9,7 +9,7 @@ with media using the new 'media' parameter.
 import os
 import sys
 from pathlib import Path
-from scambus_client import ScambusClient
+from scambus_client import ScambusClient, IdentifierLookup, DetectionDetails
 
 # Configuration
 API_URL = os.getenv("SCAMBUS_API_URL", "http://localhost:8080/api")
@@ -31,10 +31,10 @@ def example_single_media(screenshot_path: str):
 
     entry = client.create_detection(
         description="Phishing website detected",
-        details={"category": "phishing", "confidence": 0.95},
+        details=DetectionDetails(category="phishing", confidence=0.95),
         identifiers=[
-            {"type": "email", "value": "scammer@example.com", "confidence": 0.95},
-            {"type": "phone", "value": "+12125551234", "confidence": 0.9},
+            IdentifierLookup(type="email", value="scammer@example.com", confidence=0.95),
+            IdentifierLookup(type="phone", value="+12125551234", confidence=0.9),
         ],
         media=media,  # Simple! Just pass the media object
     )
@@ -69,9 +69,9 @@ def example_multiple_media():
         # Create detection with both media files
         entry = client.create_detection(
             description="Phishing email with multiple attachments",
-            details={"category": "phishing"},
+            details=DetectionDetails(category="phishing"),
             identifiers=[
-                {"type": "email", "value": "phisher@scam.com", "confidence": 1.0}
+                IdentifierLookup(type="email", value="phisher@scam.com", confidence=1.0),
             ],
             media=[media1, media2],  # Pass list of media objects
         )
@@ -94,7 +94,7 @@ def example_no_media():
     entry = client.create_detection(
         description="Suspicious email reported",
         identifiers=[
-            {"type": "email", "value": "suspicious@example.com", "confidence": 0.8}
+            IdentifierLookup(type="email", value="suspicious@example.com", confidence=0.8),
         ],
     )
 

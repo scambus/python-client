@@ -760,11 +760,18 @@ class ScambusClient:
     def create_detection(
         self,
         description: str,
-        details: Optional[Dict[str, Any]] = None,
+        details: Optional[Union[DetectionDetails, Dict[str, Any]]] = None,
         identifiers: Optional[List[Union[Dict[str, Any], IdentifierLookup]]] = None,
+        our_identifier_lookups: Optional[List[Union[Dict[str, Any], IdentifierLookup]]] = None,
         evidence: Optional[Union[Dict[str, Any], Evidence]] = None,
         media: Optional[Union[Media, List[Media]]] = None,
         case_id: Optional[str] = None,
+        tags: Optional[List[TagLookupInput]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        parent_journal_entry_id: Optional[str] = None,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        in_progress: bool = False,
         originator_type: Optional[str] = None,
         originator_identifier: Optional[str] = None,
         create_originator: bool = False,
@@ -777,11 +784,18 @@ class ScambusClient:
 
         Args:
             description: Detection description
-            details: Detection details (category, confidence, etc.)
-            identifiers: List of identifiers found
+            details: Detection details - use DetectionDetails or dict with category, confidence, etc.
+            identifiers: List of suspect/scammer identifiers found
+            our_identifier_lookups: List of honeypot/bot identifiers (our side)
             evidence: Evidence (screenshots, etc.)
             media: Single Media object or list of Media objects from upload_media()
-            case_id: Optional case ID
+            case_id: Optional case ID to link this detection to
+            tags: Tags to apply to this entry (use TagLookup objects or dicts)
+            metadata: Additional metadata for tracking (e.g., test_batch, environment)
+            parent_journal_entry_id: Parent entry ID for causal linking
+            start_time: When detection started (optional)
+            end_time: When detection ended (optional)
+            in_progress: If True, creates an in-progress entry (omits end_time)
             originator_type: Optional originator type (user, automation)
             originator_identifier: Identifier for the originator (email, discord username, etc.)
             create_originator: Create originator record if it doesn't exist
@@ -791,36 +805,41 @@ class ScambusClient:
 
         Example:
             ```python
-            # Simple example with media
+            from datetime import datetime, timezone
+            from scambus_client import (
+                DetectionDetails, IdentifierLookup, TagLookup
+            )
+
+            # Using typed classes (recommended)
+            entry = client.create_detection(
+                description="Phishing website detected",
+                details=DetectionDetails(
+                    category="phishing",
+                    detected_at=datetime.now(timezone.utc),
+                    confidence=0.95,
+                ),
+                identifiers=[
+                    IdentifierLookup(
+                        type="email",
+                        value="scammer@example.com",
+                        confidence=0.95,
+                    )
+                ],
+                tags=[
+                    TagLookup(tag_name="HighPriority"),
+                    TagLookup(tag_name="ScamType", tag_value="Phishing"),
+                ],
+            )
+
+            # With media files
             media = client.upload_media("screenshot.png")
             entry = client.create_detection(
-                description="Phishing website detected",
-                details={"category": "phishing", "confidence": 0.95},
+                description="Phishing site screenshot",
                 identifiers=[
-                    {"type": "email", "value": "scammer@example.com", "confidence": 0.95}
+                    IdentifierLookup(type="url", value="https://fake-bank.com")
                 ],
-                media=media
-            )
-
-            # Multiple media files
-            media1 = client.upload_media("screenshot1.png")
-            media2 = client.upload_media("screenshot2.png")
-            entry = client.create_detection(
-                description="Multi-page phishing site",
-                media=[media1, media2]
-            )
-
-            # Or with explicit evidence (advanced)
-            entry = client.create_detection(
-                description="Phishing website detected",
-                identifiers=[
-                    {"type": "email", "value": "scammer@example.com", "confidence": 0.95}
-                ],
-                evidence={
-                    "type": "screenshot",
-                    "title": "Phishing Site",
-                    "media_ids": [media_id]
-                }
+                media=media,
+                tags=[TagLookup(tag_name="EvidenceCollected")],
             )
             ```
         """
@@ -852,14 +871,26 @@ class ScambusClient:
                         evidence["media_ids"] = []
                     evidence["media_ids"].extend(media_ids)
 
+        # Handle details - convert DetectionDetails to dict if needed
+        details_dict = details
+        if isinstance(details, DetectionDetails):
+            details_dict = details.to_dict()
+
         return self.create_journal_entry(
             entry_type="detection",
             description=description,
-            details=details,
+            details=details_dict,
             performed_at=datetime.now(timezone.utc),
             case_id=case_id,
             identifier_lookups=identifiers,
+            our_identifier_lookups=our_identifier_lookups,
             evidence=evidence,
+            tags=tags,
+            metadata=metadata,
+            parent_journal_entry_id=parent_journal_entry_id,
+            start_time=start_time,
+            end_time=end_time,
+            in_progress=in_progress,
             originator_type=originator_type,
             originator_identifier=originator_identifier,
             create_originator=create_originator,
@@ -874,7 +905,13 @@ class ScambusClient:
         recording_url: Optional[str] = None,
         transcript_url: Optional[str] = None,
         identifiers: Optional[List[Union[Dict[str, Any], IdentifierLookup]]] = None,
+        our_identifier_lookups: Optional[List[Union[Dict[str, Any], IdentifierLookup]]] = None,
+        evidence: Optional[Union[Dict[str, Any], Evidence]] = None,
+        media: Optional[Union[Media, List[Media]]] = None,
         case_id: Optional[str] = None,
+        tags: Optional[List[TagLookupInput]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        parent_journal_entry_id: Optional[str] = None,
         originator_type: Optional[str] = None,
         originator_identifier: Optional[str] = None,
         create_originator: bool = False,
@@ -890,8 +927,14 @@ class ScambusClient:
             end_time: When the call ended
             recording_url: Optional URL to call recording
             transcript_url: Optional URL to call transcript
-            identifiers: List of identifiers (e.g., phone numbers)
-            case_id: Optional case ID
+            identifiers: List of suspect/scammer identifiers (e.g., phone numbers)
+            our_identifier_lookups: List of honeypot/bot identifiers (our side)
+            evidence: Evidence (recordings, screenshots, etc.)
+            media: Single Media object or list of Media objects from upload_media()
+            case_id: Optional case ID to link this call to
+            tags: Tags to apply to this entry (use TagLookup objects or dicts)
+            metadata: Additional metadata for tracking
+            parent_journal_entry_id: Parent entry ID for causal linking
             originator_type: Optional originator type
             originator_identifier: Identifier for the originator
             create_originator: Create originator record if it doesn't exist
@@ -902,9 +945,10 @@ class ScambusClient:
 
         Example:
             ```python
-            from datetime import datetime, timedelta
+            from datetime import datetime, timedelta, timezone
+            from scambus_client import IdentifierLookup, TagLookup
 
-            # Simple outbound call
+            # Outbound call with typed classes
             now = datetime.now(timezone.utc)
             entry = client.create_phone_call(
                 description="Called suspect regarding fraudulent transaction",
@@ -912,20 +956,24 @@ class ScambusClient:
                 start_time=now,
                 end_time=now + timedelta(minutes=5),
                 identifiers=[
-                    {"type": "phone", "value": "+12125551234", "confidence": 1.0}
-                ]
+                    IdentifierLookup(type="phone", value="+12125551234", confidence=1.0)
+                ],
+                tags=[
+                    TagLookup(tag_name="ScamType", tag_value="TechSupport"),
+                ],
             )
 
-            # Inbound call with recording
+            # Inbound call with recording and tags
             entry = client.create_phone_call(
                 description="Received suspicious call claiming to be IRS",
                 direction="inbound",
-                start_time=datetime(2024, 1, 15, 10, 30),
-                end_time=datetime(2024, 1, 15, 10, 35),
+                start_time=datetime(2024, 1, 15, 10, 30, tzinfo=timezone.utc),
+                end_time=datetime(2024, 1, 15, 10, 35, tzinfo=timezone.utc),
                 recording_url="https://storage.example.com/call-recording.mp3",
                 identifiers=[
-                    {"type": "phone", "value": "+18005551234", "confidence": 0.9}
-                ]
+                    IdentifierLookup(type="phone", value="+18005551234", confidence=0.9)
+                ],
+                tags=[TagLookup(tag_name="HighPriority")],
             )
 
             # In-progress call
@@ -936,8 +984,8 @@ class ScambusClient:
                 end_time=now,  # Required but will be ignored when in_progress=True
                 in_progress=True,
                 identifiers=[
-                    {"type": "phone", "value": "+12125551234", "confidence": 1.0}
-                ]
+                    IdentifierLookup(type="phone", value="+12125551234", confidence=1.0)
+                ],
             )
             # Complete later with: entry.complete()
             ```
@@ -948,6 +996,28 @@ class ScambusClient:
             transcript_url=transcript_url,
         )
 
+        # Handle media parameter
+        if media is not None:
+            media_list = media if isinstance(media, list) else [media]
+            media_ids = [m.id for m in media_list]
+
+            if evidence is None:
+                evidence = {
+                    "type": "recording" if any(m.mime_type.startswith("audio/") for m in media_list) else "file",
+                    "title": "Phone Call Evidence",
+                    "description": f"Evidence for phone call: {description}",
+                    "source": "Phone Call Recording",
+                    "collected_at": start_time.isoformat(),
+                    "media_ids": media_ids,
+                }
+            else:
+                if isinstance(evidence, Evidence):
+                    evidence.media_ids.extend(media_ids)
+                elif isinstance(evidence, dict):
+                    if "media_ids" not in evidence:
+                        evidence["media_ids"] = []
+                    evidence["media_ids"].extend(media_ids)
+
         return self.create_journal_entry(
             entry_type="phone_call",
             description=description,
@@ -955,6 +1025,11 @@ class ScambusClient:
             performed_at=start_time,
             case_id=case_id,
             identifier_lookups=identifiers,
+            our_identifier_lookups=our_identifier_lookups,
+            evidence=evidence,
+            tags=tags,
+            metadata=metadata,
+            parent_journal_entry_id=parent_journal_entry_id,
             originator_type=originator_type,
             originator_identifier=originator_identifier,
             create_originator=create_originator,
@@ -975,9 +1050,16 @@ class ScambusClient:
         headers: Optional[Dict[str, str]] = None,
         attachments: Optional[List[str]] = None,
         identifiers: Optional[List[Union[Dict[str, Any], IdentifierLookup]]] = None,
+        our_identifier_lookups: Optional[List[Union[Dict[str, Any], IdentifierLookup]]] = None,
         media: Optional[Union[Media, List[Media]]] = None,
         evidence: Optional[Union[Dict[str, Any], Evidence]] = None,
         case_id: Optional[str] = None,
+        tags: Optional[List[TagLookupInput]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        parent_journal_entry_id: Optional[str] = None,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        in_progress: bool = False,
         originator_type: Optional[str] = None,
         originator_identifier: Optional[str] = None,
         create_originator: bool = False,
@@ -995,10 +1077,17 @@ class ScambusClient:
             message_id: Email message ID (optional)
             headers: Email headers as key-value pairs (optional)
             attachments: List of attachment filenames (optional)
-            identifiers: List of identifiers (e.g., email addresses)
+            identifiers: List of suspect/scammer identifiers (e.g., email addresses)
+            our_identifier_lookups: List of honeypot/bot identifiers (our side)
             media: Single Media object or list of Media objects (e.g., email screenshots)
             evidence: Optional evidence structure
-            case_id: Optional case ID
+            case_id: Optional case ID to link this email to
+            tags: Tags to apply to this entry (use TagLookup objects or dicts)
+            metadata: Additional metadata for tracking
+            parent_journal_entry_id: Parent entry ID for causal linking
+            start_time: When email interaction started (optional)
+            end_time: When email interaction ended (optional)
+            in_progress: If True, creates an in-progress entry (omits end_time)
             originator_type: Optional originator type
             originator_identifier: Identifier for the originator
             create_originator: Create originator record if it doesn't exist
@@ -1008,14 +1097,15 @@ class ScambusClient:
 
         Example:
             ```python
-            from datetime import datetime
+            from datetime import datetime, timezone
+            from scambus_client import IdentifierLookup, TagLookup
 
-            # Inbound phishing email
+            # Inbound phishing email with typed classes
             entry = client.create_email(
                 description="Phishing email impersonating PayPal",
                 direction="inbound",
                 subject="Urgent: Verify your PayPal account",
-                sent_at=datetime(2024, 1, 15, 9, 15),
+                sent_at=datetime(2024, 1, 15, 9, 15, tzinfo=timezone.utc),
                 body="Click here to verify your account...",
                 message_id="<12345@suspicious-domain.com>",
                 headers={
@@ -1023,8 +1113,12 @@ class ScambusClient:
                     "dkim": "fail"
                 },
                 identifiers=[
-                    {"type": "email", "value": "security@paypa1.com", "confidence": 1.0}
-                ]
+                    IdentifierLookup(type="email", value="security@paypa1.com", confidence=1.0)
+                ],
+                tags=[
+                    TagLookup(tag_name="ScamType", tag_value="Phishing"),
+                    TagLookup(tag_name="HighPriority"),
+                ],
             )
 
             # Outbound reply with screenshot
@@ -1035,7 +1129,8 @@ class ScambusClient:
                 subject="Re: Verify your PayPal account",
                 sent_at=datetime.now(timezone.utc),
                 body="I received your email...",
-                media=screenshot
+                media=screenshot,
+                tags=[TagLookup(tag_name="EvidenceCollected")],
             )
             ```
         """
@@ -1079,7 +1174,14 @@ class ScambusClient:
             performed_at=sent_at,
             case_id=case_id,
             identifier_lookups=identifiers,
+            our_identifier_lookups=our_identifier_lookups,
             evidence=evidence,
+            tags=tags,
+            metadata=metadata,
+            parent_journal_entry_id=parent_journal_entry_id,
+            start_time=start_time,
+            end_time=end_time,
+            in_progress=in_progress,
             originator_type=originator_type,
             originator_identifier=originator_identifier,
             create_originator=create_originator,
@@ -1092,9 +1194,13 @@ class ScambusClient:
         start_time: datetime,
         end_time: datetime,
         identifiers: Optional[List[Union[Dict[str, Any], IdentifierLookup]]] = None,
+        our_identifier_lookups: Optional[List[Union[Dict[str, Any], IdentifierLookup]]] = None,
         media: Optional[Union[Media, List[Media]]] = None,
         evidence: Optional[Union[Dict[str, Any], Evidence]] = None,
         case_id: Optional[str] = None,
+        tags: Optional[List[TagLookupInput]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        parent_journal_entry_id: Optional[str] = None,
         originator_type: Optional[str] = None,
         originator_identifier: Optional[str] = None,
         create_originator: bool = False,
@@ -1108,10 +1214,14 @@ class ScambusClient:
             platform: Messaging platform (e.g., "SMS", "WhatsApp", "Telegram", "Signal")
             start_time: When the conversation began
             end_time: When the conversation ended
-            identifiers: List of identifiers (e.g., phone numbers, social media handles)
+            identifiers: List of suspect/scammer identifiers (e.g., phone numbers, social media handles)
+            our_identifier_lookups: List of honeypot/bot identifiers (our side)
             media: Single Media object or list of Media objects (e.g., screenshots)
             evidence: Optional evidence structure
-            case_id: Optional case ID
+            case_id: Optional case ID to link this conversation to
+            tags: Tags to apply to this entry (use TagLookup objects or dicts)
+            metadata: Additional metadata for tracking
+            parent_journal_entry_id: Parent entry ID for causal linking
             originator_type: Optional originator type
             originator_identifier: Identifier for the originator
             create_originator: Create originator record if it doesn't exist
@@ -1122,9 +1232,10 @@ class ScambusClient:
 
         Example:
             ```python
-            from datetime import datetime, timedelta
+            from datetime import datetime, timedelta, timezone
+            from scambus_client import IdentifierLookup, TagLookup
 
-            # WhatsApp conversation
+            # WhatsApp conversation with typed classes
             start = datetime.now(timezone.utc)
             entry = client.create_text_conversation(
                 description="WhatsApp conversation with suspected scammer",
@@ -1132,22 +1243,26 @@ class ScambusClient:
                 start_time=start,
                 end_time=start + timedelta(hours=1),
                 identifiers=[
-                    {"type": "phone", "value": "+12125551234", "confidence": 0.95}
-                ]
+                    IdentifierLookup(type="phone", value="+12125551234", confidence=0.95)
+                ],
+                tags=[
+                    TagLookup(tag_name="ScamType", tag_value="Romance"),
+                ],
             )
 
-            # SMS with screenshots
+            # SMS with screenshots and tags
             screenshot1 = client.upload_media("sms-screenshot-1.png")
             screenshot2 = client.upload_media("sms-screenshot-2.png")
             entry = client.create_text_conversation(
                 description="Suspicious SMS messages requesting payment",
                 platform="SMS",
-                start_time=datetime(2024, 1, 15, 14, 0),
-                end_time=datetime(2024, 1, 15, 14, 30),
+                start_time=datetime(2024, 1, 15, 14, 0, tzinfo=timezone.utc),
+                end_time=datetime(2024, 1, 15, 14, 30, tzinfo=timezone.utc),
                 media=[screenshot1, screenshot2],
                 identifiers=[
-                    {"type": "phone", "value": "+18005551234", "confidence": 0.9}
-                ]
+                    IdentifierLookup(type="phone", value="+18005551234", confidence=0.9)
+                ],
+                tags=[TagLookup(tag_name="EvidenceCollected")],
             )
 
             # In-progress conversation
@@ -1158,8 +1273,8 @@ class ScambusClient:
                 end_time=start,  # Required but ignored when in_progress=True
                 in_progress=True,
                 identifiers=[
-                    {"type": "phone", "value": "+12125551234", "confidence": 0.95}
-                ]
+                    IdentifierLookup(type="phone", value="+12125551234", confidence=0.95)
+                ],
             )
             # Complete later with: entry.complete()
             ```
@@ -1197,7 +1312,11 @@ class ScambusClient:
             performed_at=start_time,
             case_id=case_id,
             identifier_lookups=identifiers,
+            our_identifier_lookups=our_identifier_lookups,
             evidence=evidence,
+            tags=tags,
+            metadata=metadata,
+            parent_journal_entry_id=parent_journal_entry_id,
             originator_type=originator_type,
             originator_identifier=originator_identifier,
             create_originator=create_originator,
@@ -1209,10 +1328,19 @@ class ScambusClient:
     def create_note(
         self,
         description: str,
-        details: Optional[Dict[str, Any]] = None,
+        details: Optional[Union[NoteDetails, Dict[str, Any]]] = None,
         identifiers: Optional[List[Union[Dict[str, Any], IdentifierLookup]]] = None,
+        our_identifier_lookups: Optional[List[Union[Dict[str, Any], IdentifierLookup]]] = None,
+        evidence: Optional[Union[Dict[str, Any], Evidence]] = None,
+        media: Optional[Union[Media, List[Media]]] = None,
         case_id: Optional[str] = None,
+        tags: Optional[List[TagLookupInput]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        parent_journal_entry_id: Optional[str] = None,
         performed_at: Optional[datetime] = None,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        in_progress: bool = False,
         originator_type: Optional[str] = None,
         originator_identifier: Optional[str] = None,
         create_originator: bool = False,
@@ -1222,10 +1350,19 @@ class ScambusClient:
 
         Args:
             description: Note content/description
-            details: Optional additional details
-            identifiers: List of identifiers to link
-            case_id: Optional case ID
+            details: Optional additional details - use NoteDetails or dict
+            identifiers: List of suspect/scammer identifiers to link
+            our_identifier_lookups: List of honeypot/bot identifiers (our side)
+            evidence: Evidence to attach (e.g., screenshots, documents)
+            media: Single Media object or list of Media objects from upload_media()
+            case_id: Optional case ID to link this note to
+            tags: Tags to apply to this entry (use TagLookup objects or dicts)
+            metadata: Additional metadata for tracking
+            parent_journal_entry_id: Parent entry ID for causal linking
             performed_at: When the note was made (defaults to now)
+            start_time: When activity started (optional)
+            end_time: When activity ended (optional)
+            in_progress: If True, creates an in-progress entry (omits end_time)
             originator_type: Optional originator type
             originator_identifier: Identifier for the originator
             create_originator: Create originator record if it doesn't exist
@@ -1235,18 +1372,28 @@ class ScambusClient:
 
         Example:
             ```python
-            # Simple note
+            from scambus_client import IdentifierLookup, TagLookup, NoteDetails
+
+            # Simple note with typed classes
             entry = client.create_note(
                 description="Suspect uses multiple aliases",
-                details={"aliases": ["John Smith", "Jane Doe"]}
+                details=NoteDetails(
+                    content="Detailed observation about aliases",
+                    category="observation",
+                ),
+                tags=[TagLookup(tag_name="NeedsReview")],
             )
 
-            # Note with identifiers
+            # Note with identifiers and tags
             entry = client.create_note(
                 description="Community member reported suspicious activity",
                 identifiers=[
-                    {"type": "phone", "value": "+12125551234", "confidence": 0.8}
-                ]
+                    IdentifierLookup(type="phone", value="+12125551234", confidence=0.8)
+                ],
+                tags=[
+                    TagLookup(tag_name="CommunityReport"),
+                    TagLookup(tag_name="HighPriority"),
+                ],
             )
 
             # Note on behalf of community member
@@ -1254,17 +1401,53 @@ class ScambusClient:
                 description="Community member flagged this identifier",
                 originator_type="community_member",
                 originator_identifier="discord_user#1234",
-                create_originator=True
+                create_originator=True,
+                tags=[TagLookup(tag_name="CommunityReport")],
             )
             ```
         """
+        # Handle details - convert NoteDetails to dict if needed
+        details_dict = details
+        if isinstance(details, NoteDetails):
+            details_dict = details.to_dict()
+
+        # Handle media parameter
+        if media is not None:
+            media_list = media if isinstance(media, list) else [media]
+            media_ids = [m.id for m in media_list]
+
+            if evidence is None:
+                evidence = {
+                    "type": "document",
+                    "title": "Note Evidence",
+                    "description": f"Evidence for note: {description}",
+                    "source": "Note Attachment",
+                    "collected_at": (performed_at or datetime.now(timezone.utc)).isoformat(),
+                    "media_ids": media_ids,
+                }
+            else:
+                if isinstance(evidence, Evidence):
+                    evidence.media_ids.extend(media_ids)
+                elif isinstance(evidence, dict):
+                    if "media_ids" not in evidence:
+                        evidence["media_ids"] = []
+                    evidence["media_ids"].extend(media_ids)
+
         return self.create_journal_entry(
             entry_type="note",
             description=description,
-            details=details,
+            details=details_dict,
             performed_at=performed_at or datetime.now(timezone.utc),
             case_id=case_id,
             identifier_lookups=identifiers,
+            our_identifier_lookups=our_identifier_lookups,
+            evidence=evidence,
+            tags=tags,
+            metadata=metadata,
+            parent_journal_entry_id=parent_journal_entry_id,
+            start_time=start_time,
+            end_time=end_time,
+            in_progress=in_progress,
             originator_type=originator_type,
             originator_identifier=originator_identifier,
             create_originator=create_originator,

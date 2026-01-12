@@ -8,7 +8,7 @@ for various platforms (SMS, WhatsApp, Telegram, Signal, etc.).
 
 import os
 from datetime import datetime, timedelta
-from scambus_client import ScambusClient
+from scambus_client import ScambusClient, IdentifierLookup, TagLookup
 
 # Configuration
 API_URL = os.getenv("SCAMBUS_API_URL", "http://localhost:8080/api")
@@ -34,8 +34,11 @@ def main():
         start_time=start,
         end_time=start + timedelta(minutes=30),
         identifiers=[
-            {"type": "phone", "value": "+18005551234", "confidence": 0.9}
-        ]
+            IdentifierLookup(type="phone", value="+18005551234", confidence=0.9)
+        ],
+        tags=[
+            TagLookup(tag_name="ScamType", tag_value="SMS"),
+        ],
     )
 
     print(f"✓ Created SMS conversation entry: {entry.id}")
@@ -52,8 +55,11 @@ def main():
         start_time=start,
         end_time=start + timedelta(hours=2),
         identifiers=[
-            {"type": "phone", "value": "+12125551234", "confidence": 0.95}
-        ]
+            IdentifierLookup(type="phone", value="+12125551234", confidence=0.95)
+        ],
+        tags=[
+            TagLookup(tag_name="ScamType", tag_value="Crypto"),
+        ],
     )
 
     print(f"✓ Created WhatsApp conversation entry: {entry.id}")
@@ -70,8 +76,11 @@ def main():
         start_time=start,
         end_time=start + timedelta(hours=3),
         identifiers=[
-            {"type": "social_media", "value": "telegram:@crypto_scammer123", "confidence": 0.9}
-        ]
+            IdentifierLookup(type="social_media", value="telegram:@crypto_scammer123", confidence=0.9)
+        ],
+        tags=[
+            TagLookup(tag_name="ScamType", tag_value="Investment"),
+        ],
     )
 
     print(f"✓ Created Telegram conversation entry: {entry.id}")
@@ -88,8 +97,11 @@ def main():
         start_time=start,
         end_time=start + timedelta(hours=1, minutes=15),
         identifiers=[
-            {"type": "phone", "value": "+447123456789", "confidence": 0.85}
-        ]
+            IdentifierLookup(type="phone", value="+447123456789", confidence=0.85)
+        ],
+        tags=[
+            TagLookup(tag_name="ScamType", tag_value="Romance"),
+        ],
     )
 
     print(f"✓ Created Signal conversation entry: {entry.id}")
@@ -116,8 +128,8 @@ def main():
         end_time=start + timedelta(hours=1),
         media=[screenshot1, screenshot2],  # Automatically creates evidence
         identifiers=[
-            {"type": "phone", "value": "+12125551234", "confidence": 0.95}
-        ]
+            IdentifierLookup(type="phone", value="+12125551234", confidence=0.95)
+        ],
     )
     """)
 

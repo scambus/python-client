@@ -2,12 +2,18 @@
 """
 Bank Account Detection Example
 
-This example demonstrates creating a detection with a bank account identifier.
+This example demonstrates creating a detection with a bank account identifier,
+using typed classes for identifiers, details, and tags.
 """
 
 import os
-from datetime import datetime
-from scambus_client import ScambusClient
+from datetime import datetime, timezone
+from scambus_client import (
+    ScambusClient,
+    DetectionDetails,
+    IdentifierLookup,
+    TagLookup,
+)
 
 # Configuration
 API_URL = os.getenv("SCAMBUS_API_URL", "http://localhost:8080/api")
@@ -18,7 +24,7 @@ client = ScambusClient(api_url=API_URL, api_token=API_TOKEN)
 
 
 def main():
-    """Create a detection with bank account identifier."""
+    """Create a detection with bank account identifier using typed classes."""
 
     print("=" * 60)
     print("Bank Account Detection Example")
@@ -35,29 +41,36 @@ def main():
         country="US",
         confidence=0.85,
     )
-    print("✓ Bank account identifier created")
+    print("Bank account identifier created")
     print(f"  Account: {bank_identifier['value']}")
 
-    # Create detection with multiple identifier types
+    # Create detection with multiple identifier types using typed classes
     print("\n2. Creating detection with identifiers...")
     entry = client.create_detection(
         description="Bank transfer scam detected",
-        details={
-            "category": "bank_transfer_scam",
-            "confidence": 0.9,
-            "detectedAt": datetime.now().isoformat(),
-            "reportSource": "Customer Report",
-            "amountLost": 5000.00,
-            "currency": "USD",
-        },
+        details=DetectionDetails(
+            category="bank_transfer_scam",
+            detected_at=datetime.now(timezone.utc),
+            confidence=0.9,
+            details={
+                "reportSource": "Customer Report",
+                "amountLost": 5000.00,
+                "currency": "USD",
+            },
+        ),
         identifiers=[
-            bank_identifier,
-            {"type": "phone", "value": "+12125551234", "confidence": 0.9},
-            {"type": "email", "value": "scammer@fraudulent-site.com", "confidence": 0.95},
+            bank_identifier,  # Bank account from helper
+            IdentifierLookup(type="phone", value="+12125551234", confidence=0.9),
+            IdentifierLookup(type="email", value="scammer@fraudulent-site.com", confidence=0.95),
+        ],
+        tags=[
+            TagLookup(tag_name="ScamType", tag_value="BankTransfer"),
+            TagLookup(tag_name="HighPriority"),
+            TagLookup(tag_name="FinancialLoss"),
         ],
     )
 
-    print(f"✓ Created journal entry: {entry.id}")
+    print(f"Created journal entry: {entry.id}")
     print(f"  Type: {entry.type}")
     print(f"  Description: {entry.description}")
     print(f"  Identifiers: {len(entry.identifiers)}")
@@ -70,12 +83,12 @@ def main():
         )
         print(f"    - {identifier.type}: {identifier.display_value}{confidence_str}")
 
-    print("\n✓ Detection with bank account created successfully!")
+    print("\nDetection with bank account created successfully!")
 
 
 if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        print(f"\n✗ Error: {e}")
+        print(f"\nError: {e}")
         raise

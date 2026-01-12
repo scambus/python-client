@@ -8,7 +8,7 @@ properly typed details and optional media attachments.
 
 import os
 from datetime import datetime
-from scambus_client import ScambusClient
+from scambus_client import ScambusClient, IdentifierLookup, TagLookup
 
 # Configuration
 API_URL = os.getenv("SCAMBUS_API_URL", "http://localhost:8080/api")
@@ -41,9 +41,12 @@ def main():
             "spf": "fail"
         },
         identifiers=[
-            {"type": "email", "value": "security@paypa1.com", "confidence": 1.0},
-            {"type": "email", "value": "noreply@suspicious-domain.com", "confidence": 0.95}
-        ]
+            IdentifierLookup(type="email", value="security@paypa1.com", confidence=1.0),
+            IdentifierLookup(type="email", value="noreply@suspicious-domain.com", confidence=0.95),
+        ],
+        tags=[
+            TagLookup(tag_name="ScamType", tag_value="Phishing"),
+        ],
     )
 
     print(f"✓ Created email entry: {entry.id}")
@@ -60,8 +63,8 @@ def main():
         sent_at=datetime.now(),
         body="I received your email and would like to verify my account details...",
         identifiers=[
-            {"type": "email", "value": "security@paypa1.com", "confidence": 1.0}
-        ]
+            IdentifierLookup(type="email", value="security@paypa1.com", confidence=1.0),
+        ],
     )
 
     print(f"✓ Created email entry: {entry.id}")
@@ -80,8 +83,12 @@ def main():
         message_id="<wire-transfer-scam@fake-ceo.com>",
         attachments=["wire_transfer_form.pdf", "banking_details.xlsx"],
         identifiers=[
-            {"type": "email", "value": "ceo@fake-company.com", "confidence": 0.95}
-        ]
+            IdentifierLookup(type="email", value="ceo@fake-company.com", confidence=0.95),
+        ],
+        tags=[
+            TagLookup(tag_name="ScamType", tag_value="BEC"),
+            TagLookup(tag_name="HighPriority"),
+        ],
     )
 
     print(f"✓ Created email entry: {entry.id}")
@@ -107,8 +114,8 @@ def main():
         sent_at=datetime.now(),
         media=screenshot,  # Automatically creates evidence
         identifiers=[
-            {"type": "email", "value": "scammer@example.com", "confidence": 0.95}
-        ]
+            IdentifierLookup(type="email", value="scammer@example.com", confidence=0.95),
+        ],
     )
     """)
 

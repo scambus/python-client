@@ -10,7 +10,7 @@ This example demonstrates how to work with tags:
 """
 
 import os
-from scambus_client import ScambusClient, TagLookup
+from scambus_client import ScambusClient, TagLookup, IdentifierLookup
 
 # Configuration
 API_URL = os.getenv("SCAMBUS_API_URL", "http://localhost:8080/api")
@@ -69,11 +69,11 @@ def main():
     # =========================================================================
     print("\n4. Creating detection with typed TagLookup...")
 
-    # Using TagLookup class (AWS CDK-style, recommended)
+    # Using typed classes (recommended)
     entry = client.create_detection(
         description="Phishing email detected from fake bank",
         identifiers=[
-            {"type": "email", "value": "scammer@fake-bank.com", "confidence": 0.95}
+            IdentifierLookup(type="email", value="scammer@fake-bank.com", confidence=0.95)
         ],
         tags=[
             TagLookup(tag_name="HighPriority"),  # Boolean tag
@@ -85,23 +85,23 @@ def main():
     print(f"   ✓ Created entry with tags: {entry.id}")
 
     # =========================================================================
-    # Apply Tags to Journal Entry (Dictionary - Alternative)
+    # Apply Tags to Another Journal Entry
     # =========================================================================
-    print("\n5. Creating detection with dictionary tags...")
+    print("\n5. Creating another detection with tags...")
 
-    # Dictionary format also works (backward compatible)
+    # Multiple tags on a single entry
     entry2 = client.create_detection(
         description="Tech support scam call",
         identifiers=[
-            {"type": "phone", "value": "+18005551234", "confidence": 0.9}
+            IdentifierLookup(type="phone", value="+18005551234", confidence=0.9)
         ],
         tags=[
-            {"tag_name": "HighPriority"},  # Boolean tag
-            {"tag_name": "ScamCategory", "tag_value": "TechSupport"},  # Valued tag
+            TagLookup(tag_name="HighPriority"),  # Boolean tag
+            TagLookup(tag_name="ScamCategory", tag_value="TechSupport"),  # Valued tag
         ],
     )
 
-    print(f"   ✓ Created entry with tags: {entry2.id}")
+    print(f"   Created entry with tags: {entry2.id}")
 
     # =========================================================================
     # Get Effective Tags for Entity

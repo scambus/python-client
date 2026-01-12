@@ -10,7 +10,7 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from scambus_client import ScambusClient
+from scambus_client import ScambusClient, IdentifierLookup, DetectionDetails, Evidence
 
 # Configuration
 API_URL = os.getenv("SCAMBUS_API_URL", "http://localhost:8080/api")
@@ -48,23 +48,25 @@ def create_detection_with_screenshot(screenshot_path: str, url: str, identifiers
     print(f"\n2. Creating detection with evidence...")
     entry = client.create_detection(
         description=f"Phishing website detected: {url}",
-        details={
-            "category": "phishing",
-            "confidence": 0.95,
-            "detectedAt": datetime.now().isoformat(),
-            "maliciousUrl": url,
-            "scanEngine": "PhishDetector v2.1",
-            "riskScore": 95,
-        },
+        details=DetectionDetails(
+            category="phishing",
+            confidence=0.95,
+            detected_at=datetime.now(),
+            details={
+                "maliciousUrl": url,
+                "scanEngine": "PhishDetector v2.1",
+                "riskScore": 95,
+            },
+        ),
         identifiers=identifiers,
-        evidence={
-            "type": "screenshot",
-            "title": "Phishing Website Screenshot",
-            "description": f"Screenshot showing fraudulent website at {url}",
-            "source": "Automated Web Scanner - PhishDetector v2.1",
-            "collectedAt": datetime.now().isoformat(),
-            "mediaIds": [media.id],
-        },
+        evidence=Evidence(
+            type="screenshot",
+            title="Phishing Website Screenshot",
+            description=f"Screenshot showing fraudulent website at {url}",
+            source="Automated Web Scanner - PhishDetector v2.1",
+            collected_at=datetime.now(),
+            media_ids=[media.id],
+        ),
     )
 
     print(f"✓ Created journal entry: {entry.id}")
@@ -105,8 +107,8 @@ def main():
     # Example data
     url = "http://chase-secure-login.suspicious-domain.com"
     identifiers = [
-        {"type": "phone", "value": "+12125551234", "confidence": 0.9},
-        {"type": "email", "value": "scammer@fraudulent-site.com", "confidence": 0.95},
+        IdentifierLookup(type="phone", value="+12125551234", confidence=0.9),
+        IdentifierLookup(type="email", value="scammer@fraudulent-site.com", confidence=0.95),
     ]
 
     # Create detection

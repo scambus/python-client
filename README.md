@@ -871,6 +871,30 @@ except ScambusAPIError as e:
     print(f"API error: {e}")
 ```
 
+### Handling Failed Identifiers
+
+When creating journal entries, invalid identifiers are skipped rather than failing the request. Check `failed_identifiers` on the returned entry:
+
+```python
+from scambus_client import IdentifierLookup
+
+entry = client.create_detection(
+    description="Suspicious activity",
+    identifiers=[
+        IdentifierLookup(type="phone", value="+12025551234"),  # Valid
+        IdentifierLookup(type="phone", value="555-1234"),      # Invalid - will be skipped
+    ],
+)
+
+# Entry is created with valid identifiers
+print(f"Created: {entry.id}")
+
+# Check for skipped identifiers
+if entry.failed_identifiers:
+    for failed in entry.failed_identifiers:
+        print(f"Warning: {failed.type}={failed.value} skipped: {failed.reason}")
+```
+
 ## Examples
 
 See the [examples/](examples/) directory for complete examples:

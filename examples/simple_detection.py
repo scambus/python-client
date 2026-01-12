@@ -3,7 +3,8 @@
 Simple Detection Example
 
 This example demonstrates the basic workflow for creating a detection
-with identifiers, tags, and typed classes.
+with identifiers, tags, and typed classes. It also shows how to handle
+identifiers that fail validation.
 """
 
 import os
@@ -13,6 +14,7 @@ from scambus_client import (
     DetectionDetails,
     IdentifierLookup,
     TagLookup,
+    FailedIdentifier,
 )
 
 # Configuration
@@ -73,9 +75,65 @@ def main():
     print("\nDetection created successfully!")
 
 
+def example_with_failed_identifiers():
+    """
+    Demonstrate handling of failed identifier validation.
+
+    When creating journal entries, identifiers that fail validation are
+    skipped rather than failing the entire request. The returned entry
+    includes a `failed_identifiers` field with details about what failed.
+    """
+
+    print("\n" + "=" * 60)
+    print("Example: Handling Failed Identifier Validation")
+    print("=" * 60)
+
+    # Create detection with mix of valid and invalid identifiers
+    print("\n1. Creating detection with mixed valid/invalid identifiers...")
+    entry = client.create_detection(
+        description="Detection with identifier validation examples",
+        details=DetectionDetails(
+            category="test",
+            detected_at=datetime.now(timezone.utc),
+            confidence=0.9,
+        ),
+        identifiers=[
+            # Valid identifiers
+            IdentifierLookup(type="phone", value="+12025551234", confidence=0.95),
+            IdentifierLookup(type="email", value="valid@example.com", confidence=0.9),
+            # Invalid identifiers (will be skipped)
+            IdentifierLookup(type="phone", value="555-1234", confidence=0.8),  # Not E.164
+            IdentifierLookup(type="email", value="not-an-email", confidence=0.7),  # Invalid format
+        ],
+    )
+
+    print(f"\nEntry created: {entry.id}")
+    print(f"Valid identifiers linked: {len(entry.identifiers)}")
+
+    # Display linked identifiers
+    print("\n  Successfully linked identifiers:")
+    for identifier in entry.identifiers:
+        print(f"    - {identifier.type}: {identifier.display_value}")
+
+    # Check for failed identifiers
+    if entry.failed_identifiers:
+        print(f"\n  Failed identifiers ({len(entry.failed_identifiers)}):")
+        for failed in entry.failed_identifiers:
+            print(f"    - {failed.type}={failed.value}")
+            print(f"      Reason: {failed.reason}")
+    else:
+        print("\n  No identifiers failed validation.")
+
+    print("\nNote: The entry was created successfully even though some")
+    print("identifiers failed validation. Always check `failed_identifiers`")
+    print("if you need to know which identifiers were skipped.")
+
+
 if __name__ == "__main__":
     try:
         main()
+        # Uncomment to see failed identifier handling example:
+        # example_with_failed_identifiers()
     except Exception as e:
         print(f"\nError: {e}")
         raise

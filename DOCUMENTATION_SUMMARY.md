@@ -338,6 +338,58 @@ scambus journal create-detection \
     --tag "Industry:Banking"
 ```
 
+#### Identifier Validation and Failed Identifiers
+
+When creating journal entries, identifiers are validated based on their type:
+- **phone**: Must be E.164 format (e.g., `+12025551234`)
+- **email**: Must be valid RFC email format
+- **url**: Must be valid URL format
+
+If an identifier fails validation, the journal entry is **still created** - only the invalid identifier is skipped. The `failed_identifiers` field on the returned entry contains details about any skipped identifiers:
+
+```python
+from scambus_client import ScambusClient, IdentifierLookup, FailedIdentifier
+
+client = ScambusClient()
+
+# Create detection with mix of valid and invalid identifiers
+entry = client.create_detection(
+    description="Suspicious activity detected",
+    identifiers=[
+        IdentifierLookup(type="phone", value="+12025551234"),  # Valid
+        IdentifierLookup(type="phone", value="555-1234"),      # Invalid format
+        IdentifierLookup(type="email", value="test@example.com"),  # Valid
+        IdentifierLookup(type="email", value="not-an-email"),  # Invalid format
+    ],
+)
+
+# Entry is created successfully with valid identifiers
+print(f"Created entry: {entry.id}")
+print(f"Valid identifiers: {len(entry.identifiers)}")  # 2
+
+# Check for any identifiers that failed validation
+if entry.failed_identifiers:
+    print(f"\nWarning: {len(entry.failed_identifiers)} identifier(s) failed validation:")
+    for failed in entry.failed_identifiers:
+        print(f"  - {failed.type}={failed.value}: {failed.reason}")
+```
+
+**Output:**
+```
+Created entry: abc-123-def
+Valid identifiers: 2
+
+Warning: 2 identifier(s) failed validation:
+  - phone=555-1234: phone number must be in E.164 format (e.g., +1234567890)
+  - email=not-an-email: invalid email format
+```
+
+**Key points:**
+- Journal entry creation succeeds even if some identifiers fail validation
+- `failed_identifiers` is `None` when all identifiers are valid
+- `failed_identifiers` is only populated on entries returned from `create_*` methods, not from `get_journal_entry()`
+- The `FailedIdentifier` type has `type`, `value`, and `reason` fields
+
 #### In-Progress Activities
 
 Track ongoing scam interactions:

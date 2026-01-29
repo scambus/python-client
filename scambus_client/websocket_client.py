@@ -422,7 +422,7 @@ class ScambusWebSocketClient:
         else:
             await self.run()
 
-    async def subscribe_stream(self, stream_id: str, cursor: str = "$") -> None:
+    async def subscribe_stream(self, stream_id: str, cursor: str = "$", include_test: bool = False) -> None:
         """
         Subscribe to an export stream for real-time messages.
 
@@ -434,6 +434,7 @@ class ScambusWebSocketClient:
                    - "$" = from end (only new messages, default)
                    - "0-0" = from beginning (all messages)
                    - "<message-id>" = from specific message ID (e.g., "1234567890-0")
+            include_test: If True, also receive test data (is_test=true entries)
 
         Example:
             ```python
@@ -443,8 +444,8 @@ class ScambusWebSocketClient:
             # Subscribe from beginning (get all messages)
             await ws_client.subscribe_stream("abc-123-def-456", cursor="0-0")
 
-            # Resume from specific position
-            await ws_client.subscribe_stream("abc-123-def-456", cursor="1700000000000-0")
+            # Subscribe with test data
+            await ws_client.subscribe_stream("abc-123-def-456", include_test=True)
 
             # Register handler for stream messages
             def handle_stream_message(data):
@@ -457,14 +458,16 @@ class ScambusWebSocketClient:
             raise RuntimeError("WebSocket not connected. Call connect() first.")
 
         # Send subscribe message to server with cursor
+        # Always send include_test to ensure server state is updated
         subscribe_msg = {
             "action": "subscribe",
             "channel": f"stream:{stream_id}",
-            "cursor": cursor
+            "cursor": cursor,
+            "include_test": include_test,
         }
 
         await self._ws.send(json.dumps(subscribe_msg))
-        logger.info(f"Sent subscribe request for stream: {stream_id} (cursor: {cursor})")
+        logger.info(f"Sent subscribe request for stream: {stream_id} (cursor: {cursor}, include_test: {include_test})")
 
     async def unsubscribe_stream(self, stream_id: str) -> None:
         """
@@ -496,6 +499,7 @@ class ScambusWebSocketClient:
         on_message: Callable[[Union[JournalEntry, Identifier]], None],
         on_error: Optional[Callable[[Exception], None]] = None,
         cursor: str = "$",
+        include_test: bool = False,
     ) -> None:
         """
         Convenience method to listen for export stream messages.
@@ -514,6 +518,7 @@ class ScambusWebSocketClient:
                    - "$" = from end (only new messages, default)
                    - "0-0" = from beginning (all messages)
                    - "<message-id>" = from specific message ID
+            include_test: If True, also receive test data (is_test=true entries)
 
         Example:
             ```python
@@ -533,6 +538,9 @@ class ScambusWebSocketClient:
 
             # Listen from beginning (get all historical messages)
             await ws_client.listen_stream("abc-123-def-456", handle_message, cursor="0-0")
+
+            # Listen with test data
+            await ws_client.listen_stream("abc-123-def-456", handle_message, include_test=True)
             ```
         """
         # Register message handler
@@ -542,8 +550,8 @@ class ScambusWebSocketClient:
         # Connect to WebSocket
         await self.connect()
 
-        # Subscribe to stream with cursor
-        await self.subscribe_stream(stream_id, cursor=cursor)
+        # Subscribe to stream with cursor and test data option
+        await self.subscribe_stream(stream_id, cursor=cursor, include_test=include_test)
 
         # Register error handler if provided
         if on_error:

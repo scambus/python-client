@@ -77,9 +77,15 @@ def get_api_token(api_token: Optional[str] = None) -> Optional[str]:
     if env_token:
         return env_token
 
-    # Check config file
+    # Check config file (CLI stores token under different keys depending on auth type)
     config = load_cli_config()
-    return config.get("token")
+    # Try nested "auth.token" (device flow, freshest), then "jwt_token", then legacy "token"
+    auth = config.get("auth")
+    if isinstance(auth, dict):
+        token = auth.get("token")
+        if token:
+            return token
+    return config.get("jwt_token") or config.get("token")
 
 
 def get_api_key_id(api_key_id: Optional[str] = None) -> Optional[str]:

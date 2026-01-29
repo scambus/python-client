@@ -7,6 +7,15 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 
+def _get_value(data: Dict[str, Any], snake_key: str, camel_key: str, default: Any = None) -> Any:
+    """Get a value from a dict, trying snake_case first, then camelCase."""
+    if snake_key in data:
+        return data[snake_key]
+    if camel_key in data:
+        return data[camel_key]
+    return default
+
+
 @dataclass
 class IdentifierLookup:
     """
@@ -83,6 +92,7 @@ class Identifier:
     data: Optional[Dict[str, Any]] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    is_test: bool = False  # Whether this is test/demo data (excluded from normal queries)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Identifier":
@@ -94,11 +104,12 @@ class Identifier:
         return cls(
             id=data["id"],
             type=data["type"],
-            display_value=data.get("display_value", ""),
+            display_value=_get_value(data, "display_value", "displayValue", ""),
             confidence=confidence,
             data=data.get("data"),
-            created_at=cls._parse_datetime(data.get("created_at")),
-            updated_at=cls._parse_datetime(data.get("updated_at")),
+            created_at=cls._parse_datetime(_get_value(data, "created_at", "createdAt")),
+            updated_at=cls._parse_datetime(_get_value(data, "updated_at", "updatedAt")),
+            is_test=_get_value(data, "is_test", "isTest", False),
         )
 
     @staticmethod
@@ -141,6 +152,7 @@ class Evidence:
     media_ids: List[str] = field(default_factory=list)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    is_test: bool = False  # Whether this is test/demo data (excluded from normal queries)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Evidence":
@@ -155,6 +167,7 @@ class Evidence:
             media_ids=data.get("media_ids", []),
             created_at=Identifier._parse_datetime(data.get("created_at")),
             updated_at=Identifier._parse_datetime(data.get("updated_at")),
+            is_test=data.get("is_test", False),
         )
 
 
@@ -188,12 +201,12 @@ class Media:
         return cls(
             id=data["id"],
             type=data["type"],
-            file_name=data.get("file_name", ""),
-            mime_type=data.get("mime_type", ""),
-            file_size=data.get("file_size", 0),
+            file_name=_get_value(data, "file_name", "fileName", ""),
+            mime_type=_get_value(data, "mime_type", "mimeType", ""),
+            file_size=_get_value(data, "file_size", "fileSize", 0),
             notes=data.get("notes"),
-            uploaded_at=Identifier._parse_datetime(data.get("uploaded_at")),
-            journal_entry_id=data.get("journal_entry_id"),
+            uploaded_at=Identifier._parse_datetime(_get_value(data, "uploaded_at", "uploadedAt")),
+            journal_entry_id=_get_value(data, "journal_entry_id", "journalEntryId"),
         )
 
 
@@ -1443,6 +1456,7 @@ class JournalEntry:
     total_karma: Optional[int] = None
     karma_breakdown: Optional[Dict[str, Any]] = None
     is_draft: bool = False
+    is_test: bool = False  # Whether this is test/demo data (excluded from normal queries)
     draft_metadata: Optional[Dict[str, Any]] = None
     signature: Optional[str] = None
     signed_by: Optional[str] = None
@@ -1501,6 +1515,8 @@ class JournalEntry:
             data["start_time"] = self.start_time.isoformat()
         if self.end_time:
             data["end_time"] = self.end_time.isoformat()
+        if self.is_test:
+            data["is_test"] = self.is_test
         return data
 
     @classmethod
@@ -1511,39 +1527,42 @@ class JournalEntry:
             identifiers = [Identifier.from_dict(i) for i in data["identifiers"]]
 
         our_identifiers = []
-        if "our_identifiers" in data and data["our_identifiers"]:
-            our_identifiers = [Identifier.from_dict(i) for i in data["our_identifiers"]]
+        our_idents_data = _get_value(data, "our_identifiers", "ourIdentifiers")
+        if our_idents_data:
+            our_identifiers = [Identifier.from_dict(i) for i in our_idents_data]
 
         # Parse child entries recursively
         child_entries = None
-        if "child_journal_entries" in data and data["child_journal_entries"]:
-            child_entries = [JournalEntry.from_dict(c) for c in data["child_journal_entries"]]
+        child_data = _get_value(data, "child_journal_entries", "childJournalEntries")
+        if child_data:
+            child_entries = [JournalEntry.from_dict(c) for c in child_data]
 
         entry = cls(
             id=data["id"],
             type=data.get("type", "unknown"),  # Backend may not always return type
             description=data.get("description", ""),
             details=data.get("details"),
-            performed_at=Identifier._parse_datetime(data.get("performed_at")),
-            created_at=Identifier._parse_datetime(data.get("created_at")),
-            updated_at=Identifier._parse_datetime(data.get("updated_at")),
+            performed_at=Identifier._parse_datetime(_get_value(data, "performed_at", "performedAt")),
+            created_at=Identifier._parse_datetime(_get_value(data, "created_at", "createdAt")),
+            updated_at=Identifier._parse_datetime(_get_value(data, "updated_at", "updatedAt")),
             identifiers=identifiers,
             our_identifiers=our_identifiers,
             evidence=data.get("evidence"),
-            case_id=data.get("case_id"),
-            start_time=Identifier._parse_datetime(data.get("start_time")),
-            end_time=Identifier._parse_datetime(data.get("end_time")),
-            parent_journal_entry_id=data.get("parent_journal_entry_id"),
-            batch_id=data.get("batch_id"),
-            tags=data.get("tag_display") or data.get("tags"),
-            total_karma=data.get("total_karma"),
-            karma_breakdown=data.get("karma_breakdown"),
-            is_draft=data.get("is_draft", False),
-            draft_metadata=data.get("draft_metadata"),
+            case_id=_get_value(data, "case_id", "caseId"),
+            start_time=Identifier._parse_datetime(_get_value(data, "start_time", "startTime")),
+            end_time=Identifier._parse_datetime(_get_value(data, "end_time", "endTime")),
+            parent_journal_entry_id=_get_value(data, "parent_journal_entry_id", "parentJournalEntryId"),
+            batch_id=_get_value(data, "batch_id", "batchId"),
+            tags=_get_value(data, "tag_display", "tagDisplay") or data.get("tags"),
+            total_karma=_get_value(data, "total_karma", "totalKarma"),
+            karma_breakdown=_get_value(data, "karma_breakdown", "karmaBreakdown"),
+            is_draft=_get_value(data, "is_draft", "isDraft", False),
+            is_test=_get_value(data, "is_test", "isTest", False),
+            draft_metadata=_get_value(data, "draft_metadata", "draftMetadata"),
             signature=data.get("signature"),
-            signed_by=data.get("signed_by"),
-            signature_algorithm=data.get("signature_algorithm"),
-            signed_at=Identifier._parse_datetime(data.get("signed_at")),
+            signed_by=_get_value(data, "signed_by", "signedBy"),
+            signature_algorithm=_get_value(data, "signature_algorithm", "signatureAlgorithm"),
+            signed_at=Identifier._parse_datetime(_get_value(data, "signed_at", "signedAt")),
             child_entries=child_entries,
         )
 
@@ -1633,6 +1652,7 @@ class Case:
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     created_by: Optional[str] = None
+    is_test: bool = False  # Whether this is test/demo data (excluded from normal queries)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Case":
@@ -1643,9 +1663,10 @@ class Case:
             notes=data.get("notes"),
             status=data.get("status"),
             priority=data.get("priority"),
-            created_at=Identifier._parse_datetime(data.get("created_at")),
-            updated_at=Identifier._parse_datetime(data.get("updated_at")),
-            created_by=data.get("created_by"),
+            created_at=Identifier._parse_datetime(_get_value(data, "created_at", "createdAt")),
+            updated_at=Identifier._parse_datetime(_get_value(data, "updated_at", "updatedAt")),
+            created_by=_get_value(data, "created_by", "createdBy"),
+            is_test=_get_value(data, "is_test", "isTest", False),
         )
 
 
@@ -1687,15 +1708,16 @@ class ExportStream:
         return cls(
             id=data["id"],
             name=data["name"],
-            data_type=data.get("data_type", "journal_entry"),
-            identifier_types=data.get("identifier_types", []),
-            min_confidence=data.get("min_confidence", 0.0),
-            max_confidence=data.get("max_confidence", 1.0),
-            is_active=data.get("is_active", True),
-            consumer_key=data.get("consumer_key"),
-            retention_days=data.get("retention_days", 30),
-            created_at=Identifier._parse_datetime(data.get("created_at")),
-            updated_at=Identifier._parse_datetime(data.get("updated_at")),
+            data_type=_get_value(data, "data_type", "dataType", "journal_entry"),
+            identifier_types=_get_value(data, "identifier_types", "identifierTypes", []),
+            min_confidence=_get_value(data, "min_confidence", "minConfidence", 0.0),
+            max_confidence=_get_value(data, "max_confidence", "maxConfidence", 1.0),
+            is_active=_get_value(data, "is_active", "isActive", True),
+            consumer_key=_get_value(data, "consumer_key", "consumerKey"),
+            retention_days=_get_value(data, "retention_days", "retentionDays", 30),
+            filter_expression=_get_value(data, "filter_expression", "filterExpression"),
+            created_at=Identifier._parse_datetime(_get_value(data, "created_at", "createdAt")),
+            updated_at=Identifier._parse_datetime(_get_value(data, "updated_at", "updatedAt")),
         )
 
 

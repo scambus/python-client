@@ -529,8 +529,13 @@ def query(
     multiple=True,
     help="Tag to apply. Format: 'TagName' for boolean tags or 'TagName:ValueName' for valued tags. Can be specified multiple times.",
 )
+@click.option(
+    "--is-test",
+    is_flag=True,
+    help="Mark entry as test/demo data (excluded from normal queries)",
+)
 @click.pass_context
-def create_note(ctx, description, identifier, our_identifier, confidence, attach, case_id, originator_type, originator_identifier, create_originator, tag):
+def create_note(ctx, description, identifier, our_identifier, confidence, attach, case_id, originator_type, originator_identifier, create_originator, tag, is_test):
     """Create a note entry."""
     client = ctx.obj.get_client()
 
@@ -620,6 +625,10 @@ def create_note(ctx, description, identifier, our_identifier, confidence, attach
                     tag_lookups.append({"tag_name": tag_str.strip()})
             data["tag_lookups"] = tag_lookups
 
+        # Add is_test flag if set
+        if is_test:
+            data["is_test"] = is_test
+
         entry = client._request("POST", "/journal-entries", json_data=data)
         print_success(f"Note created: {entry['id']}")
         print_detail(entry, title="Created Entry")
@@ -688,6 +697,11 @@ def create_note(ctx, description, identifier, our_identifier, confidence, attach
     multiple=True,
     help="Tag to apply. Format: 'TagName' for boolean tags or 'TagName:ValueName' for valued tags. Can be specified multiple times.",
 )
+@click.option(
+    "--is-test",
+    is_flag=True,
+    help="Mark entry as test/demo data (excluded from normal queries)",
+)
 @click.option("--json", "output_json", is_flag=True, help="Output JSON")
 @click.pass_context
 def create_phone_call(
@@ -710,6 +724,7 @@ def create_phone_call(
     originator_identifier,
     create_originator,
     tag,
+    is_test,
     platform,
     output_json,
 ):
@@ -879,6 +894,10 @@ def create_phone_call(
                     tag_lookups.append({"tag_name": tag_str.strip()})
             data["tag_lookups"] = tag_lookups
 
+        # Add is_test flag if set
+        if is_test:
+            data["is_test"] = is_test
+
         entry = client._request("POST", "/journal-entries", json_data=data)
 
         if output_json:
@@ -939,6 +958,11 @@ def create_phone_call(
     multiple=True,
     help="Tag to apply. Format: 'TagName' for boolean tags or 'TagName:ValueName' for valued tags. Can be specified multiple times.",
 )
+@click.option(
+    "--is-test",
+    is_flag=True,
+    help="Mark entry as test/demo data (excluded from normal queries)",
+)
 @click.pass_context
 def create_email(
     ctx,
@@ -951,6 +975,7 @@ def create_email(
     confidence,
     body,
     tag,
+    is_test,
     screenshot,
     eml_file,
     attach,
@@ -1068,6 +1093,9 @@ def create_email(
                     tag_lookups.append({"tag_name": tag_str.strip()})
             data["tag_lookups"] = tag_lookups
 
+        if is_test:
+            data["is_test"] = is_test
+
         entry = client._request("POST", "/journal-entries", json_data=data)
         print_success(f"Email entry created: {entry['id']}")
         print_detail(entry, title="Created Entry")
@@ -1118,9 +1146,14 @@ def create_email(
     multiple=True,
     help="Tag to apply. Format: 'TagName' for boolean tags or 'TagName:ValueName' for valued tags. Can be specified multiple times.",
 )
+@click.option(
+    "--is-test",
+    is_flag=True,
+    help="Mark entry as test/demo data (excluded from normal queries)",
+)
 @click.pass_context
 def create_text_conversation(
-    ctx, description, platform, phone, identifier, confidence, screenshot, attach, case_id, originator_type, originator_identifier, create_originator, tag
+    ctx, description, platform, phone, identifier, confidence, screenshot, attach, case_id, originator_type, originator_identifier, create_originator, tag, is_test
 ):
     """Create a text conversation entry.
 
@@ -1226,6 +1259,9 @@ def create_text_conversation(
                     tag_lookups.append({"tag_name": tag_str.strip()})
             data["tag_lookups"] = tag_lookups
 
+        if is_test:
+            data["is_test"] = is_test
+
         entry = client._request("POST", "/journal-entries", json_data=data)
         print_success(f"Text conversation entry created: {entry['id']}")
         print_detail(entry, title="Created Entry")
@@ -1267,9 +1303,14 @@ def create_text_conversation(
     multiple=True,
     help="Tag to apply. Format: 'TagName' for boolean tags or 'TagName:ValueName' for valued tags. Can be specified multiple times.",
 )
+@click.option(
+    "--is-test",
+    is_flag=True,
+    help="Mark entry as test/demo data (excluded from normal queries)",
+)
 @click.pass_context
 def create_detection(
-    ctx, description, confidence, identifiers, screenshot, attach, case_id, originator_type, originator_identifier, create_originator, tag
+    ctx, description, confidence, identifiers, screenshot, attach, case_id, originator_type, originator_identifier, create_originator, tag, is_test
 ):
     """Create a detection entry."""
     client = ctx.obj.get_client()
@@ -1351,6 +1392,9 @@ def create_detection(
                 else:
                     tag_lookups.append({"tag_name": tag_str.strip()})
             data["tag_lookups"] = tag_lookups
+
+        if is_test:
+            data["is_test"] = is_test
 
         entry = client._request("POST", "/journal-entries", json_data=data)
         print_success(f"Detection entry created: {entry['id']}")
@@ -1563,6 +1607,11 @@ def in_progress(ctx, output_json):
     multiple=True,
     help="Tag to apply: 'TagName' or 'TagName:ValueName'",
 )
+@click.option(
+    "--is-test",
+    is_flag=True,
+    help="Mark entry as test/demo data (excluded from normal queries)",
+)
 @click.option("--json", "output_json", is_flag=True, help="Output JSON")
 @click.pass_context
 def create_conversation(
@@ -1587,6 +1636,7 @@ def create_conversation(
     originator_identifier,
     create_originator,
     tag,
+    is_test,
     output_json,
 ):
     """Create a text_conversation entry with optional metadata.
@@ -1772,6 +1822,9 @@ def create_conversation(
                 else:
                     tag_lookups.append({"tag_name": tag_str.strip()})
             data["tag_lookups"] = tag_lookups
+
+        if is_test:
+            data["is_test"] = is_test
 
         entry = client._request("POST", "/journal-entries", json_data=data)
 

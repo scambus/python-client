@@ -116,9 +116,14 @@ def get(ctx, case_id, output_json):
 @click.option("--title", required=True, help="Case title")
 @click.option("--description", help="Case description")
 @click.option("--status", default="open", help="Case status (default: open)")
+@click.option(
+    "--is-test",
+    is_flag=True,
+    help="Mark case as test/demo data (excluded from normal queries)",
+)
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 @click.pass_context
-def create(ctx, title, description, status, output_json):
+def create(ctx, title, description, status, is_test, output_json):
     """Create a new case.
 
     Examples:
@@ -127,7 +132,7 @@ def create(ctx, title, description, status, output_json):
     client = ctx.obj.get_client()
 
     try:
-        case = client.create_case(title=title, notes=description, status=status)
+        case = client.create_case(title=title, notes=description, status=status, is_test=is_test)
 
         if output_json:
             print_json(
@@ -158,8 +163,13 @@ def create(ctx, title, description, status, output_json):
 @click.option("--title", help="New title")
 @click.option("--description", help="New description")
 @click.option("--status", help="New status")
+@click.option(
+    "--is-test/--no-is-test",
+    default=None,
+    help="Set test data flag",
+)
 @click.pass_context
-def update(ctx, case_id, title, description, status):
+def update(ctx, case_id, title, description, status, is_test):
     """Update a case.
 
     Examples:
@@ -176,6 +186,8 @@ def update(ctx, case_id, title, description, status):
             updates["notes"] = description
         if status:
             updates["status"] = status
+        if is_test is not None:
+            updates["is_test"] = is_test
 
         if not updates:
             print_error("No updates specified")

@@ -538,8 +538,9 @@ def recovery_info(ctx, stream_id, output_json):
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON (one per line)")
 @click.option("--from-beginning", is_flag=True, help="Start from beginning of stream (default: only new messages)")
 @click.option("--cursor", help="Start from specific message ID (e.g., '1700000000000-0')")
+@click.option("--test", is_flag=True, help="Include test data (is_test=true entries)")
 @click.pass_context
-def listen_stream(ctx, stream_id, output_json, from_beginning, cursor):
+def listen_stream(ctx, stream_id, output_json, from_beginning, cursor, test):
     """Listen to a stream in real-time via WebSocket.
 
     This command establishes a WebSocket connection and streams messages
@@ -549,6 +550,8 @@ def listen_stream(ctx, stream_id, output_json, from_beginning, cursor):
     By default, only new messages are shown. Use --from-beginning to
     replay all historical messages first, or --cursor to start from
     a specific position.
+
+    Use --test to also receive test data (entries created with is_test=true).
 
     Press Ctrl+C to stop listening.
 
@@ -561,6 +564,9 @@ def listen_stream(ctx, stream_id, output_json, from_beginning, cursor):
 
         # Start from a specific message ID
         scambus streams listen <stream-id> --cursor 1700000000000-0
+
+        # Listen with test data
+        scambus streams listen <stream-id> --test
 
         # Listen and output JSON (one per line)
         scambus streams listen <stream-id> --json
@@ -603,6 +609,8 @@ def listen_stream(ctx, stream_id, output_json, from_beginning, cursor):
 
     print_info(f"Connecting to stream {stream_id}...")
     print_info(f"Starting position: {cursor_desc}")
+    if test:
+        print_info("Test data: enabled")
     print_info("Press Ctrl+C to stop\n")
 
     message_count = 0
@@ -633,7 +641,8 @@ def listen_stream(ctx, stream_id, output_json, from_beginning, cursor):
             stream_id=stream_id,
             on_message=handle_message,
             on_error=handle_error,
-            cursor=stream_cursor
+            cursor=stream_cursor,
+            include_test=test,
         ))
     except KeyboardInterrupt:
         print_info(f"\n\nStopped listening. Received {message_count} messages.")

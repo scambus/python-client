@@ -588,6 +588,7 @@ class ScambusClient:
         end_time: Optional[datetime] = None,
         in_progress: bool = False,
         metadata: Optional[Dict[str, Any]] = None,
+        is_test: bool = False,
     ) -> JournalEntry:
         """
         Create a journal entry with automatic identifier resolution.
@@ -629,6 +630,7 @@ class ScambusClient:
             in_progress: If True, creates an in-progress activity (omits end_time from request).
                 Use entry.complete() later to mark as complete.
             metadata: Optional metadata dictionary for additional tracking (e.g., test_batch, environment)
+            is_test: If True, marks entry as test/demo data (excluded from normal queries)
 
         Returns:
             Created JournalEntry object
@@ -730,6 +732,10 @@ class ScambusClient:
         if metadata:
             data["metadata"] = metadata
 
+        # Add is_test flag if set
+        if is_test:
+            data["is_test"] = is_test
+
         # Handle start_time and end_time
         if start_time:
             data["start_time"] = start_time.isoformat()
@@ -786,6 +792,7 @@ class ScambusClient:
         originator_type: Optional[str] = None,
         originator_identifier: Optional[str] = None,
         create_originator: bool = False,
+        is_test: bool = False,
     ) -> JournalEntry:
         """
         Convenience method to create a 'detection' type journal entry.
@@ -810,6 +817,7 @@ class ScambusClient:
             originator_type: Optional originator type (user, automation)
             originator_identifier: Identifier for the originator (email, discord username, etc.)
             create_originator: Create originator record if it doesn't exist
+            is_test: If True, marks entry as test/demo data (excluded from normal queries)
 
         Returns:
             Created JournalEntry object
@@ -905,6 +913,7 @@ class ScambusClient:
             originator_type=originator_type,
             originator_identifier=originator_identifier,
             create_originator=create_originator,
+            is_test=is_test,
         )
 
     def create_phone_call(
@@ -1747,6 +1756,7 @@ class ScambusClient:
         include_evidence: bool = False,
         parent_journal_entry_id: Optional[str] = None,
         include_children: bool = False,
+        include_test: bool = False,
     ) -> Dict[str, Any]:
         """
         Query journal entries with advanced filtering (page size fixed at 100).
@@ -1768,6 +1778,7 @@ class ScambusClient:
             include_evidence: Include related evidence in response
             parent_journal_entry_id: Query children of a specific parent entry
             include_children: Include child entries in results (default: only shows top-level entries)
+            include_test: Include test/demo data in results (default: False, test data excluded)
 
         Returns:
             Dict with keys:
@@ -1841,6 +1852,8 @@ class ScambusClient:
             body["parentJournalEntryId"] = parent_journal_entry_id
         if include_children:
             body["includeChildren"] = include_children
+        if include_test:
+            body["includeTest"] = include_test
 
         # Make request
         response = self._request("POST", "/journal/query", json_data=body)
@@ -2274,6 +2287,7 @@ class ScambusClient:
         status: Optional[str] = None,
         priority: Optional[str] = None,
         category: Optional[str] = None,
+        include_test: bool = False,
     ) -> List[Case]:
         """
         List cases with optional filtering.
@@ -2284,6 +2298,7 @@ class ScambusClient:
             status: Filter by status (active, closed, etc.)
             priority: Filter by priority (low, medium, high, critical)
             category: Filter by category
+            include_test: Include test/demo data in results (default: False)
 
         Returns:
             List of Case objects
@@ -2301,6 +2316,9 @@ class ScambusClient:
 
             # Filter by priority and status
             high_priority = client.list_cases(status="active", priority="high")
+
+            # Include test data
+            all_cases = client.list_cases(include_test=True)
             ```
         """
         params = {"page": page, "limit": limit}
@@ -2310,6 +2328,8 @@ class ScambusClient:
             params["priority"] = priority
         if category:
             params["category"] = category
+        if include_test:
+            params["includeTest"] = "true"
 
         response = self._request("GET", "/cases", params=params)
 
@@ -2347,6 +2367,7 @@ class ScambusClient:
         status: str = "open",
         priority: str = "medium",
         metadata: Optional[Dict[str, Any]] = None,
+        is_test: bool = False,
     ) -> Case:
         """
         Create a new case.
@@ -2357,6 +2378,7 @@ class ScambusClient:
             status: Case status (default: "open")
             priority: Case priority (default: "medium")
             metadata: Optional metadata dictionary for additional tracking (e.g., test_batch, environment)
+            is_test: If True, marks case as test/demo data (excluded from normal queries)
 
         Returns:
             Created Case object
@@ -2381,6 +2403,8 @@ class ScambusClient:
             data["notes"] = notes
         if metadata:
             data["metadata"] = metadata
+        if is_test:
+            data["is_test"] = is_test
 
         response = self._request("POST", "/cases", json_data=data)
         return Case.from_dict(response)
@@ -2392,6 +2416,7 @@ class ScambusClient:
         notes: Optional[str] = None,
         status: Optional[str] = None,
         priority: Optional[str] = None,
+        is_test: Optional[bool] = None,
     ) -> Case:
         """
         Update an existing case.
@@ -2402,6 +2427,7 @@ class ScambusClient:
             notes: New investigation notes (optional)
             status: New status (optional)
             priority: New priority (optional)
+            is_test: Set test data flag (optional)
 
         Returns:
             Updated Case object
@@ -2431,6 +2457,8 @@ class ScambusClient:
             data["status"] = status
         if priority is not None:
             data["priority"] = priority
+        if is_test is not None:
+            data["is_test"] = is_test
 
         if not data:
             raise ScambusValidationError("At least one field must be provided for update")
@@ -3568,6 +3596,7 @@ class ScambusClient:
         min_confidence: Optional[float] = None,
         max_confidence: Optional[float] = None,
         limit: int = 50,
+        include_test: bool = False,
     ) -> List[Identifier]:
         """
         Search identifiers.
@@ -3578,6 +3607,7 @@ class ScambusClient:
             min_confidence: Minimum confidence score
             max_confidence: Maximum confidence score
             limit: Maximum number of results
+            include_test: Include test/demo data in results (default: False)
 
         Returns:
             List of Identifier objects
@@ -3589,6 +3619,9 @@ class ScambusClient:
                 types=["email", "phone"],
                 min_confidence=0.8
             )
+
+            # Include test data
+            all_identifiers = client.search_identifiers(include_test=True)
             ```
         """
         data = {"limit": limit}
@@ -3606,6 +3639,8 @@ class ScambusClient:
             data["minConfidence"] = min_confidence
         if max_confidence is not None:
             data["maxConfidence"] = max_confidence
+        if include_test:
+            data["includeTest"] = include_test
 
         response = self._request("POST", "/search/identifiers", json_data=data)
         # Backend returns {data: [], nextCursor, hasMore}

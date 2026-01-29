@@ -64,3 +64,14 @@ repos:
       - id: pydocstyle
         args: ['--convention=google']
         exclude: ^(tests/|examples/)
+
+  # Run tests on push
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: python -m pytest tests/ -v --ignore=tests/integration -x
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

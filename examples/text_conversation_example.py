@@ -33,9 +33,7 @@ def main():
         platform="SMS",
         start_time=start,
         end_time=start + timedelta(minutes=30),
-        identifiers=[
-            IdentifierLookup(type="phone", value="+18005551234", confidence=0.9)
-        ],
+        identifiers=[IdentifierLookup(type="phone", value="+18005551234", confidence=0.9)],
         tags=[
             TagLookup(tag_name="ScamType", tag_value="SMS"),
         ],
@@ -54,9 +52,7 @@ def main():
         platform="WhatsApp",
         start_time=start,
         end_time=start + timedelta(hours=2),
-        identifiers=[
-            IdentifierLookup(type="phone", value="+12125551234", confidence=0.95)
-        ],
+        identifiers=[IdentifierLookup(type="phone", value="+12125551234", confidence=0.95)],
         tags=[
             TagLookup(tag_name="ScamType", tag_value="Crypto"),
         ],
@@ -76,7 +72,9 @@ def main():
         start_time=start,
         end_time=start + timedelta(hours=3),
         identifiers=[
-            IdentifierLookup(type="social_media", value="telegram:@crypto_scammer123", confidence=0.9)
+            IdentifierLookup(
+                type="social_media", value="telegram:@crypto_scammer123", confidence=0.9
+            )
         ],
         tags=[
             TagLookup(tag_name="ScamType", tag_value="Investment"),
@@ -96,9 +94,7 @@ def main():
         platform="Signal",
         start_time=start,
         end_time=start + timedelta(hours=1, minutes=15),
-        identifiers=[
-            IdentifierLookup(type="phone", value="+447123456789", confidence=0.85)
-        ],
+        identifiers=[IdentifierLookup(type="phone", value="+447123456789", confidence=0.85)],
         tags=[
             TagLookup(tag_name="ScamType", tag_value="Romance"),
         ],
@@ -114,7 +110,8 @@ def main():
     # Example with media
     print("\n5. Example with screenshot evidence...")
     print("Note: This requires actual image files. Example code:")
-    print("""
+    print(
+        """
     # Upload conversation screenshots
     screenshot1 = client.upload_media("chat-screenshot-1.png")
     screenshot2 = client.upload_media("chat-screenshot-2.png")
@@ -131,7 +128,8 @@ def main():
             IdentifierLookup(type="phone", value="+12125551234", confidence=0.95)
         ],
     )
-    """)
+    """
+    )
 
 
 if __name__ == "__main__":

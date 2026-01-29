@@ -64,7 +64,9 @@ from .types import (
 )
 
 
-def build_identifier_type_filter(identifier_types: Union[str, List[str]], data_type: str = "identifier") -> str:
+def build_identifier_type_filter(
+    identifier_types: Union[str, List[str]], data_type: str = "identifier"
+) -> str:
     """
     Build a JSONPath filter expression for filtering by identifier type(s).
 
@@ -101,7 +103,15 @@ def build_identifier_type_filter(identifier_types: Union[str, List[str]], data_t
         raise ValueError("identifier_types cannot be empty")
 
     # Validate types
-    valid_types = {"phone", "email", "url", "bank_account", "crypto_wallet", "social_media", "payment_token"}
+    valid_types = {
+        "phone",
+        "email",
+        "url",
+        "bank_account",
+        "crypto_wallet",
+        "social_media",
+        "payment_token",
+    }
     for itype in identifier_types:
         if itype not in valid_types:
             raise ValueError(
@@ -125,9 +135,11 @@ def build_identifier_type_filter(identifier_types: Union[str, List[str]], data_t
         else:
             conditions = [f'@.type == "{itype}"' for itype in identifier_types]
             inner_condition = " || ".join(conditions)
-            return f'exists($.identifiers[*] ? ({inner_condition}))'
+            return f"exists($.identifiers[*] ? ({inner_condition}))"
     else:
-        raise ValueError(f"Invalid data_type: {data_type}. Valid types are: identifier, journal_entry")
+        raise ValueError(
+            f"Invalid data_type: {data_type}. Valid types are: identifier, journal_entry"
+        )
 
 
 def build_combined_filter(
@@ -135,7 +147,7 @@ def build_combined_filter(
     min_confidence: Optional[float] = None,
     max_confidence: Optional[float] = None,
     custom_expression: Optional[str] = None,
-    data_type: str = "identifier"
+    data_type: str = "identifier",
 ) -> Optional[str]:
     """
     Build a complex JSONPath filter expression combining multiple conditions.
@@ -546,6 +558,7 @@ class ScambusClient:
         if metadata:
             # Metadata needs to be JSON-serialized for multipart form data
             import json
+
             data["metadata"] = json.dumps(metadata)
 
         # Upload from buffer
@@ -1023,7 +1036,11 @@ class ScambusClient:
 
             if evidence is None:
                 evidence = {
-                    "type": "recording" if any(m.mime_type.startswith("audio/") for m in media_list) else "file",
+                    "type": (
+                        "recording"
+                        if any(m.mime_type.startswith("audio/") for m in media_list)
+                        else "file"
+                    ),
                     "title": "Phone Call Evidence",
                     "description": f"Evidence for phone call: {description}",
                     "source": "Phone Call Recording",
@@ -1902,8 +1919,16 @@ class ScambusClient:
             entry_types=[entry_type] if entry_type else None,
             min_confidence=min_confidence,
             max_confidence=max_confidence,
-            performed_after=performed_after.isoformat() if isinstance(performed_after, datetime) else performed_after,
-            performed_before=performed_before.isoformat() if isinstance(performed_before, datetime) else performed_before,
+            performed_after=(
+                performed_after.isoformat()
+                if isinstance(performed_after, datetime)
+                else performed_after
+            ),
+            performed_before=(
+                performed_before.isoformat()
+                if isinstance(performed_before, datetime)
+                else performed_before
+            ),
             search_query=search_query,
         )
 
@@ -2129,7 +2154,9 @@ class ScambusClient:
         response = self._request("GET", "/views/my-pinboard")
         return View.from_dict(response)
 
-    def execute_my_journal_entries(self, cursor: Optional[str] = None, limit: Optional[int] = None) -> Dict[str, Any]:
+    def execute_my_journal_entries(
+        self, cursor: Optional[str] = None, limit: Optional[int] = None
+    ) -> Dict[str, Any]:
         """
         Execute the "My Journal Entries" view and return results.
 
@@ -2145,7 +2172,9 @@ class ScambusClient:
         view = self.get_my_journal_entries_view()
         return self.execute_view(view.id, cursor=cursor, limit=limit)
 
-    def execute_my_pinboard(self, cursor: Optional[str] = None, limit: Optional[int] = None) -> Dict[str, Any]:
+    def execute_my_pinboard(
+        self, cursor: Optional[str] = None, limit: Optional[int] = None
+    ) -> Dict[str, Any]:
         """
         Execute the "My Pinboard" view and return results.
 
@@ -2532,11 +2561,11 @@ class ScambusClient:
         if isinstance(response, dict) and "data" in response:
             # Return full response with pagination info
             return {
-                'data': [ExportStream.from_dict(s) for s in response["data"]],
-                'pagination': response.get('pagination', {})
+                "data": [ExportStream.from_dict(s) for s in response["data"]],
+                "pagination": response.get("pagination", {}),
             }
         else:
-            return {'data': [], 'pagination': {}}
+            return {"data": [], "pagination": {}}
 
     @staticmethod
     def build_stream_filter(
@@ -3078,7 +3107,9 @@ class ScambusClient:
         if stream_id is not None:
             params["streamId"] = stream_id
 
-        response = self._request("GET", "/redis/recovery/history", params=params if params else None)
+        response = self._request(
+            "GET", "/redis/recovery/history", params=params if params else None
+        )
         return response
 
     def get_stream_recovery_info(self, stream_id: str) -> Dict[str, Any]:
@@ -4414,9 +4445,7 @@ class ScambusClient:
             if timeout is not None:
                 elapsed = time.time() - start_time
                 if elapsed >= timeout:
-                    raise TimeoutError(
-                        f"Report generation timed out after {timeout} seconds"
-                    )
+                    raise TimeoutError(f"Report generation timed out after {timeout} seconds")
 
             time.sleep(poll_interval)
             report = self.get_report_status(report_id)

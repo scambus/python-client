@@ -301,7 +301,9 @@ class DeviceAuthManager:
         except Exception:
             return None
 
-    def assume_automation(self, name_or_id: str, description: Optional[str] = None) -> Optional[str]:
+    def assume_automation(
+        self, name_or_id: str, description: Optional[str] = None
+    ) -> Optional[str]:
         """
         Assume an automation identity.
 
@@ -330,9 +332,9 @@ class DeviceAuthManager:
         try:
             # Check if input looks like a UUID
             import re
+
             uuid_pattern = re.compile(
-                r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-                re.IGNORECASE
+                r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
             )
             is_uuid = bool(uuid_pattern.match(name_or_id))
 
@@ -443,7 +445,11 @@ class DeviceAuthManager:
 
             if token:
                 # Get automation name for display
-                display_name = name_or_id if not is_uuid else automation_name if 'automation_name' in locals() else automation_id[:8]
+                display_name = (
+                    name_or_id
+                    if not is_uuid
+                    else automation_name if "automation_name" in locals() else automation_id[:8]
+                )
                 console.print(f"[green]✓[/green] Now operating as automation: {display_name}")
                 return token
             else:

@@ -1478,16 +1478,27 @@ class JournalEntry:
             data = dict(self._raw_data)
 
             # Ensure datetime fields are serialized to ISO format
-            for key in ['performed_at', 'created_at', 'updated_at', 'start_time', 'end_time', 'signed_at']:
+            for key in [
+                "performed_at",
+                "created_at",
+                "updated_at",
+                "start_time",
+                "end_time",
+                "signed_at",
+            ]:
                 if key in data and isinstance(data[key], datetime):
                     data[key] = data[key].isoformat()
 
             # Handle nested datetime in relationships
-            if 'parent_journal_entry' in data and data['parent_journal_entry']:
-                if isinstance(data['parent_journal_entry'], dict):
-                    for key in ['performed_at', 'created_at', 'updated_at']:
-                        if key in data['parent_journal_entry'] and isinstance(data['parent_journal_entry'][key], datetime):
-                            data['parent_journal_entry'][key] = data['parent_journal_entry'][key].isoformat()
+            if "parent_journal_entry" in data and data["parent_journal_entry"]:
+                if isinstance(data["parent_journal_entry"], dict):
+                    for key in ["performed_at", "created_at", "updated_at"]:
+                        if key in data["parent_journal_entry"] and isinstance(
+                            data["parent_journal_entry"][key], datetime
+                        ):
+                            data["parent_journal_entry"][key] = data["parent_journal_entry"][
+                                key
+                            ].isoformat()
 
             return data
 
@@ -1542,7 +1553,9 @@ class JournalEntry:
             type=data.get("type", "unknown"),  # Backend may not always return type
             description=data.get("description", ""),
             details=data.get("details"),
-            performed_at=Identifier._parse_datetime(_get_value(data, "performed_at", "performedAt")),
+            performed_at=Identifier._parse_datetime(
+                _get_value(data, "performed_at", "performedAt")
+            ),
             created_at=Identifier._parse_datetime(_get_value(data, "created_at", "createdAt")),
             updated_at=Identifier._parse_datetime(_get_value(data, "updated_at", "updatedAt")),
             identifiers=identifiers,
@@ -1551,7 +1564,9 @@ class JournalEntry:
             case_id=_get_value(data, "case_id", "caseId"),
             start_time=Identifier._parse_datetime(_get_value(data, "start_time", "startTime")),
             end_time=Identifier._parse_datetime(_get_value(data, "end_time", "endTime")),
-            parent_journal_entry_id=_get_value(data, "parent_journal_entry_id", "parentJournalEntryId"),
+            parent_journal_entry_id=_get_value(
+                data, "parent_journal_entry_id", "parentJournalEntryId"
+            ),
             batch_id=_get_value(data, "batch_id", "batchId"),
             tags=_get_value(data, "tag_display", "tagDisplay") or data.get("tags"),
             total_karma=_get_value(data, "total_karma", "totalKarma"),

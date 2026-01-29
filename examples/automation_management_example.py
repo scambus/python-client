@@ -46,8 +46,7 @@ def main():
     print("\n2. Creating new automation...")
 
     automation = client.create_automation(
-        name="Phishing Detector Bot",
-        description="Automated phishing detection and reporting"
+        name="Phishing Detector Bot", description="Automated phishing detection and reporting"
     )
 
     automation_id = automation.get("id")
@@ -59,10 +58,7 @@ def main():
     # =========================================================================
     print("\n3. Creating API key for automation...")
 
-    key_data = client.create_automation_api_key(
-        automation_id=automation_id,
-        name="Production Key"
-    )
+    key_data = client.create_automation_api_key(automation_id=automation_id, name="Production Key")
 
     access_key_id = key_data.get("accessKeyId")
     secret_key = key_data.get("secretAccessKey")
@@ -91,8 +87,7 @@ def main():
     print("\n5. Creating additional key for rotation...")
 
     new_key_data = client.create_automation_api_key(
-        automation_id=automation_id,
-        name="Rotation Key"
+        automation_id=automation_id, name="Rotation Key"
     )
     new_key_id = new_key_data.get("accessKeyId")
     print(f"   ✓ Created new key: {new_key_id[:8]}...")
@@ -165,7 +160,8 @@ def key_rotation_workflow():
     print("Key Rotation Workflow")
     print("=" * 60)
 
-    print("""
+    print(
+        """
     Key rotation steps:
 
     1. Create new key (while old key still works):
@@ -199,7 +195,8 @@ def key_rotation_workflow():
 
     # Delete old key
     scambus automations delete-key AUTOMATION_ID OLD_KEY_ID
-    """)
+    """
+    )
 
 
 if __name__ == "__main__":

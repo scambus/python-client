@@ -36,23 +36,19 @@ def main():
     results = client.search_identifiers(query="+1234567890")
     print(f"      Found {len(results)} identifiers")
     for identifier in results[:3]:
-        print(f"      - {identifier.type}: {identifier.display_value} "
-              f"(confidence: {identifier.confidence})")
+        print(
+            f"      - {identifier.type}: {identifier.display_value} "
+            f"(confidence: {identifier.confidence})"
+        )
 
     # Search by email domain
     print("\n   b) Search by email domain:")
-    results = client.search_identifiers(
-        query="@suspicious-domain.com",
-        identifier_type="email"
-    )
+    results = client.search_identifiers(query="@suspicious-domain.com", identifier_type="email")
     print(f"      Found {len(results)} email identifiers")
 
     # Search by type only
     print("\n   c) List phone identifiers:")
-    results = client.search_identifiers(
-        identifier_type="phone",
-        limit=5
-    )
+    results = client.search_identifiers(identifier_type="phone", limit=5)
     print(f"      Found {len(results)} phone identifiers")
     for identifier in results[:3]:
         print(f"      - {identifier.display_value} (confidence: {identifier.confidence})")
@@ -62,11 +58,7 @@ def main():
     # =========================================================================
     print("\n2. Listing identifiers with filters...")
 
-    identifiers = client.list_identifiers(
-        identifier_type="email",
-        min_confidence=0.8,
-        limit=10
-    )
+    identifiers = client.list_identifiers(identifier_type="email", min_confidence=0.8, limit=10)
     print(f"   Found {len(identifiers)} high-confidence email identifiers")
     for identifier in identifiers[:3]:
         print(f"   - {identifier.display_value}")
@@ -90,11 +82,7 @@ def main():
 
     # Combined search
     print("\n   c) Search open cases about fraud:")
-    fraud_cases = client.search_cases(
-        query="fraud",
-        status="open",
-        limit=5
-    )
+    fraud_cases = client.search_cases(query="fraud", status="open", limit=5)
     print(f"      Found {len(fraud_cases)} matching cases")
 
     # =========================================================================
@@ -104,27 +92,17 @@ def main():
 
     # Basic search
     print("\n   a) Search journal entries by keyword:")
-    entries = client.query_journal_entries(
-        search_query="suspicious",
-        limit=10
-    )
+    entries = client.query_journal_entries(search_query="suspicious", limit=10)
     print(f"      Found {len(entries)} entries")
 
     # Filter by entry type
     print("\n   b) Search phone call entries:")
-    phone_entries = client.query_journal_entries(
-        entry_type="phone_call",
-        limit=5
-    )
+    phone_entries = client.query_journal_entries(entry_type="phone_call", limit=5)
     print(f"      Found {len(phone_entries)} phone call entries")
 
     # Filter by confidence
     print("\n   c) Search high-confidence detections:")
-    detections = client.query_journal_entries(
-        entry_type="detection",
-        min_confidence=0.9,
-        limit=5
-    )
+    detections = client.query_journal_entries(entry_type="detection", min_confidence=0.9, limit=5)
     print(f"      Found {len(detections)} high-confidence detections")
     for entry in detections[:3]:
         print(f"      - {entry.description[:50]}...")
@@ -132,9 +110,7 @@ def main():
     # Filter by date range
     print("\n   d) Search entries from specific date range:")
     recent_entries = client.query_journal_entries(
-        performed_after="2025-01-01T00:00:00Z",
-        performed_before="2025-12-31T23:59:59Z",
-        limit=5
+        performed_after="2025-01-01T00:00:00Z", performed_before="2025-12-31T23:59:59Z", limit=5
     )
     print(f"      Found {len(recent_entries)} entries in 2025")
 
@@ -145,7 +121,7 @@ def main():
         entry_type="phone_call",
         min_confidence=0.8,
         performed_after="2025-01-01T00:00:00Z",
-        limit=10
+        limit=10,
     )
     print(f"      Found {len(filtered_entries)} matching entries")
 

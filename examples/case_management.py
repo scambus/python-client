@@ -20,8 +20,8 @@ def create_case_example():
     case = client.create_case(
         title="Phishing Campaign - January 2025",
         description="Large-scale phishing operation targeting financial institutions. "
-                    "Multiple victims reported email scams with fake bank portals.",
-        status="active"
+        "Multiple victims reported email scams with fake bank portals.",
+        status="active",
     )
 
     print(f"✓ Created case: {case.id}")
@@ -47,7 +47,7 @@ def update_case_example(case_id: str):
     updated_case = client.update_case(
         case_id=case_id,
         description="Large-scale phishing operation targeting financial institutions. "
-                    "Investigation ongoing. 15 victims identified so far."
+        "Investigation ongoing. 15 victims identified so far.",
     )
 
     print(f"\n✓ Updated case: {updated_case.id}")
@@ -69,10 +69,7 @@ def get_case_details(case_id: str):
 
 def close_case_example(case_id: str):
     """Close a case when investigation is complete."""
-    updated_case = client.update_case(
-        case_id=case_id,
-        status="closed"
-    )
+    updated_case = client.update_case(case_id=case_id, status="closed")
 
     print(f"\n✓ Closed case: {updated_case.id}")
     print(f"  Status: {updated_case.status}")

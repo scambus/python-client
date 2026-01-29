@@ -33,9 +33,7 @@ def main():
         direction="outbound",
         start_time=now,
         end_time=now + timedelta(minutes=1),
-        identifiers=[
-            IdentifierLookup(type="phone", value="+12125551234", confidence=1.0)
-        ],
+        identifiers=[IdentifierLookup(type="phone", value="+12125551234", confidence=1.0)],
         tags=[
             TagLookup(tag_name="ScamType", tag_value="Financial"),
         ],
@@ -79,9 +77,7 @@ def main():
         end_time=start + timedelta(minutes=12),
         recording_url="https://storage.example.com/recordings/tech-scam.mp3",
         transcript_url="https://storage.example.com/transcripts/tech-scam.txt",
-        identifiers=[
-            IdentifierLookup(type="phone", value="+18005551234", confidence=0.95)
-        ],
+        identifiers=[IdentifierLookup(type="phone", value="+18005551234", confidence=0.95)],
         tags=[
             TagLookup(tag_name="ScamType", tag_value="TechSupport"),
             TagLookup(tag_name="EvidenceCollected"),

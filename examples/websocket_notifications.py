@@ -23,9 +23,7 @@ if not API_KEY_ID or not API_KEY_SECRET:
 async def main():
     """Listen for real-time notifications via WebSocket."""
     # Initialize HTTP client
-    client = ScambusClient(
-        api_url=API_URL, api_key_id=API_KEY_ID, api_key_secret=API_KEY_SECRET
-    )
+    client = ScambusClient(api_url=API_URL, api_key_id=API_KEY_ID, api_key_secret=API_KEY_SECRET)
 
     # Create WebSocket client
     ws_client = client.create_websocket_client()

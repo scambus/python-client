@@ -28,15 +28,35 @@ def reports():
 
 @reports.command("identifier")
 @click.argument("identifier_id")
-@click.option("--output", "-o", type=click.Path(), help="Output file path (default: auto-generated)")
-@click.option("--include-journal-entries/--no-journal-entries", default=True, help="Include related journal entries")
+@click.option(
+    "--output", "-o", type=click.Path(), help="Output file path (default: auto-generated)"
+)
+@click.option(
+    "--include-journal-entries/--no-journal-entries",
+    default=True,
+    help="Include related journal entries",
+)
 @click.option("--include-evidence", is_flag=True, help="Include evidence files in report")
 @click.option("--sign", is_flag=True, help="Digitally sign the report")
 @click.option("--wait/--no-wait", default=True, help="Wait for report completion (default: wait)")
-@click.option("--timeout", type=int, default=300, help="Timeout in seconds when waiting (default: 300)")
-@click.option("--json", "output_json", is_flag=True, help="Output report metadata as JSON (no download)")
+@click.option(
+    "--timeout", type=int, default=300, help="Timeout in seconds when waiting (default: 300)"
+)
+@click.option(
+    "--json", "output_json", is_flag=True, help="Output report metadata as JSON (no download)"
+)
 @click.pass_context
-def report_identifier(ctx, identifier_id, output, include_journal_entries, include_evidence, sign, wait, timeout, output_json):
+def report_identifier(
+    ctx,
+    identifier_id,
+    output,
+    include_journal_entries,
+    include_evidence,
+    sign,
+    wait,
+    timeout,
+    output_json,
+):
     """Generate a PDF report for a single identifier.
 
     Creates a court-admissible PDF document containing the identifier data
@@ -86,16 +106,35 @@ def report_identifier(ctx, identifier_id, output, include_journal_entries, inclu
 
 @reports.command("journal-entry")
 @click.argument("entry_id")
-@click.option("--output", "-o", type=click.Path(), help="Output file path (default: auto-generated)")
-@click.option("--include-identifiers/--no-identifiers", default=True, help="Include related identifiers")
+@click.option(
+    "--output", "-o", type=click.Path(), help="Output file path (default: auto-generated)"
+)
+@click.option(
+    "--include-identifiers/--no-identifiers", default=True, help="Include related identifiers"
+)
 @click.option("--include-evidence", is_flag=True, help="Include evidence files in report")
 @click.option("--include-parents", is_flag=True, help="Include parent entries in hierarchy")
 @click.option("--sign", is_flag=True, help="Digitally sign the report")
 @click.option("--wait/--no-wait", default=True, help="Wait for report completion (default: wait)")
-@click.option("--timeout", type=int, default=300, help="Timeout in seconds when waiting (default: 300)")
-@click.option("--json", "output_json", is_flag=True, help="Output report metadata as JSON (no download)")
+@click.option(
+    "--timeout", type=int, default=300, help="Timeout in seconds when waiting (default: 300)"
+)
+@click.option(
+    "--json", "output_json", is_flag=True, help="Output report metadata as JSON (no download)"
+)
 @click.pass_context
-def report_journal_entry(ctx, entry_id, output, include_identifiers, include_evidence, include_parents, sign, wait, timeout, output_json):
+def report_journal_entry(
+    ctx,
+    entry_id,
+    output,
+    include_identifiers,
+    include_evidence,
+    include_parents,
+    sign,
+    wait,
+    timeout,
+    output_json,
+):
     """Generate a PDF report for a single journal entry.
 
     Creates a court-admissible PDF document containing the journal entry data
@@ -146,12 +185,18 @@ def report_journal_entry(ctx, entry_id, output, include_identifiers, include_evi
 
 @reports.command("view")
 @click.argument("view_id")
-@click.option("--output", "-o", type=click.Path(), help="Output file path (default: auto-generated)")
+@click.option(
+    "--output", "-o", type=click.Path(), help="Output file path (default: auto-generated)"
+)
 @click.option("--include-evidence", is_flag=True, help="Include evidence files in report")
 @click.option("--sign", is_flag=True, help="Digitally sign the report")
 @click.option("--wait/--no-wait", default=True, help="Wait for report completion (default: wait)")
-@click.option("--timeout", type=int, default=300, help="Timeout in seconds when waiting (default: 300)")
-@click.option("--json", "output_json", is_flag=True, help="Output report metadata as JSON (no download)")
+@click.option(
+    "--timeout", type=int, default=300, help="Timeout in seconds when waiting (default: 300)"
+)
+@click.option(
+    "--json", "output_json", is_flag=True, help="Output report metadata as JSON (no download)"
+)
 @click.pass_context
 def report_view(ctx, view_id, output, include_evidence, sign, wait, timeout, output_json):
     """Generate a PDF report from a saved view.
@@ -264,7 +309,9 @@ def report_status(ctx, report_id, output_json):
 
 @reports.command("download")
 @click.argument("report_id")
-@click.option("--output", "-o", type=click.Path(), help="Output file path (default: auto-generated)")
+@click.option(
+    "--output", "-o", type=click.Path(), help="Output file path (default: auto-generated)"
+)
 @click.pass_context
 def download_report(ctx, report_id, output):
     """Download a completed report.
@@ -282,7 +329,9 @@ def download_report(ctx, report_id, output):
 
         if not report.is_completed:
             if report.is_processing:
-                print_error("Report is still being generated. Please wait or use --wait flag when generating.")
+                print_error(
+                    "Report is still being generated. Please wait or use --wait flag when generating."
+                )
             elif report.is_failed:
                 print_error(f"Report generation failed: {report.error_message}")
             else:
@@ -297,6 +346,7 @@ def download_report(ctx, report_id, output):
 
 
 # Helper functions
+
 
 def _wait_and_download(client, report, output_path, timeout):
     """Wait for report completion and download."""

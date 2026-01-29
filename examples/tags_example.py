@@ -92,9 +92,7 @@ def main():
     # Multiple tags on a single entry
     entry2 = client.create_detection(
         description="Tech support scam call",
-        identifiers=[
-            IdentifierLookup(type="phone", value="+18005551234", confidence=0.9)
-        ],
+        identifiers=[IdentifierLookup(type="phone", value="+18005551234", confidence=0.9)],
         tags=[
             TagLookup(tag_name="HighPriority"),  # Boolean tag
             TagLookup(tag_name="ScamCategory", tag_value="TechSupport"),  # Valued tag
@@ -112,8 +110,7 @@ def main():
     if entry.identifiers:
         identifier_id = entry.identifiers[0].id
         effective_tags = client.get_effective_tags(
-            entity_type="identifier",
-            entity_id=identifier_id
+            entity_type="identifier", entity_id=identifier_id
         )
         print(f"   Effective tags for identifier {identifier_id}:")
         for tag in effective_tags:
@@ -134,8 +131,7 @@ def main():
 
     # Update tag
     updated_tag = client.update_tag(
-        bool_tag.id,
-        description="Updated description for high priority items"
+        bool_tag.id, description="Updated description for high priority items"
     )
     print(f"   ✓ Updated tag description")
 

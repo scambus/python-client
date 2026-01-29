@@ -27,7 +27,7 @@ def create_phone_stream_example():
         min_confidence=0.7,
         max_confidence=1.0,
         is_active=True,
-        retention_days=90
+        retention_days=90,
     )
 
     print(f"✓ Created journal entry stream: {stream.id}")
@@ -52,7 +52,7 @@ def create_identifier_stream_example():
         is_active=True,
         retention_days=30,
         backfill_historical=True,  # Backfill existing identifiers
-        backfill_from_date="2025-01-01T00:00:00Z"  # Only from this date
+        backfill_from_date="2025-01-01T00:00:00Z",  # Only from this date
     )
 
     print(f"\n✓ Created identifier stream with backfill: {stream.id}")
@@ -98,15 +98,15 @@ def consume_stream_example(stream_id: str):
         stream_id=stream_id,
         cursor="0",  # Start from beginning
         order="asc",  # Oldest first
-        limit=10  # Get 10 messages
+        limit=10,  # Get 10 messages
     )
 
-    messages = result.get('messages', [])
-    next_cursor = result.get('nextCursor')
+    messages = result.get("messages", [])
+    next_cursor = result.get("nextCursor")
 
     print(f"\n✓ Consumed {len(messages)} messages:")
     for msg in messages:
-        if 'displayValue' in msg:
+        if "displayValue" in msg:
             # Identifier message
             print(f"  - Identifier: {msg.get('type')} = {msg.get('displayValue')}")
         else:
@@ -123,7 +123,7 @@ def recover_stream_example(stream_id: str):
     result = client.recover_stream(
         stream_id=stream_id,
         ignore_checkpoint=False,  # Use checkpoint
-        clear_stream=True  # Clear and rebuild
+        clear_stream=True,  # Clear and rebuild
     )
 
     print(f"\n✓ Recovery Status:")
@@ -147,7 +147,7 @@ def backfill_stream_example(stream_id: str):
     # Only works for identifier-centric streams
     result = client.backfill_stream(
         stream_id=stream_id,
-        from_date="2025-01-01T00:00:00Z"  # Optional: only backfill from this date
+        from_date="2025-01-01T00:00:00Z",  # Optional: only backfill from this date
     )
 
     print(f"\n✓ Backfill Status:")

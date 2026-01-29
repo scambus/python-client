@@ -48,11 +48,8 @@ class TestScambusClientJournalEntries:
         get_response = Mock()
         get_response.status_code = 200
         get_response.json.return_value = {
-            "journal_entry": {
-                "journal_entry": mock_journal_entry_data,
-                "can_edit": True
-            },
-            "cases": []
+            "journal_entry": {"journal_entry": mock_journal_entry_data, "can_edit": True},
+            "cases": [],
         }
 
         # Configure mock to return different responses for POST and GET
@@ -82,11 +79,8 @@ class TestScambusClientJournalEntries:
         get_response = Mock()
         get_response.status_code = 200
         get_response.json.return_value = {
-            "journal_entry": {
-                "journal_entry": mock_phone_call_data,
-                "can_edit": True
-            },
-            "cases": []
+            "journal_entry": {"journal_entry": mock_phone_call_data, "can_edit": True},
+            "cases": [],
         }
 
         client.session.request.side_effect = [post_response, get_response]
@@ -129,11 +123,8 @@ class TestScambusClientJournalEntries:
         get_response = Mock()
         get_response.status_code = 200
         get_response.json.return_value = {
-            "journal_entry": {
-                "journal_entry": in_progress_data,
-                "can_edit": True
-            },
-            "cases": []
+            "journal_entry": {"journal_entry": in_progress_data, "can_edit": True},
+            "cases": [],
         }
 
         client.session.request.side_effect = [post_response, get_response]
@@ -169,7 +160,7 @@ class TestScambusClientSearch:
         mock_response.json.return_value = {
             "data": [mock_identifier_data],
             "nextCursor": None,
-            "hasMore": False
+            "hasMore": False,
         }
         client.session.request.return_value = mock_response
 
@@ -180,10 +171,10 @@ class TestScambusClientSearch:
         call_args = client.session.request.call_args
 
         # Verify correct parameters were sent
-        json_data = call_args.kwargs['json']
-        assert json_data['searchQuery'] == "scammer@example.com"  # Backend expects searchQuery
-        assert json_data['type'] == "email"  # Backend expects type (singular)
-        assert 'types' not in json_data  # Backend doesn't accept types (plural)
+        json_data = call_args.kwargs["json"]
+        assert json_data["searchQuery"] == "scammer@example.com"  # Backend expects searchQuery
+        assert json_data["type"] == "email"  # Backend expects type (singular)
+        assert "types" not in json_data  # Backend doesn't accept types (plural)
 
         assert len(results) == 1
         assert isinstance(results[0], Identifier)
@@ -195,11 +186,7 @@ class TestScambusClientSearch:
 
         mock_response = Mock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "data": [],
-            "nextCursor": None,
-            "hasMore": False
-        }
+        mock_response.json.return_value = {"data": [], "nextCursor": None, "hasMore": False}
         client.session.request.return_value = mock_response
 
         results = client.search_identifiers(query="nonexistent")
@@ -354,7 +341,7 @@ class TestIsTestFiltering:
             "data": [mock_journal_entry_data],
             "nextCursor": None,
             "hasMore": False,
-            "count": 1
+            "count": 1,
         }
         client.session.request.return_value = mock_response
 
@@ -362,10 +349,12 @@ class TestIsTestFiltering:
 
         # Verify the request was made without includeTest
         call_args = client.session.request.call_args
-        json_data = call_args.kwargs.get('json')
+        json_data = call_args.kwargs.get("json")
         assert "includeTest" not in json_data
 
-    def test_query_journal_entries_includes_test_when_specified(self, client, mock_journal_entry_data):
+    def test_query_journal_entries_includes_test_when_specified(
+        self, client, mock_journal_entry_data
+    ):
         """Test that query_journal_entries includes test data when include_test=True."""
         from unittest.mock import Mock
 
@@ -375,7 +364,7 @@ class TestIsTestFiltering:
             "data": [mock_journal_entry_data],
             "nextCursor": None,
             "hasMore": False,
-            "count": 1
+            "count": 1,
         }
         client.session.request.return_value = mock_response
 
@@ -383,7 +372,7 @@ class TestIsTestFiltering:
 
         # Verify the request was made with includeTest=True
         call_args = client.session.request.call_args
-        json_data = call_args.kwargs.get('json')
+        json_data = call_args.kwargs.get("json")
         assert json_data.get("includeTest") is True
 
     def test_list_cases_excludes_test_by_default(self, client, mock_case_data):
@@ -399,7 +388,7 @@ class TestIsTestFiltering:
 
         # Verify the request was made without includeTest param
         call_args = client.session.request.call_args
-        params = call_args.kwargs.get('params', {})
+        params = call_args.kwargs.get("params", {})
         assert "includeTest" not in params
 
     def test_list_cases_includes_test_when_specified(self, client, mock_case_data):
@@ -415,7 +404,7 @@ class TestIsTestFiltering:
 
         # Verify the request was made with includeTest=true param
         call_args = client.session.request.call_args
-        params = call_args.kwargs.get('params', {})
+        params = call_args.kwargs.get("params", {})
         assert params.get("includeTest") == "true"
 
     def test_search_identifiers_excludes_test_by_default(self, client, mock_identifier_data):
@@ -427,7 +416,7 @@ class TestIsTestFiltering:
         mock_response.json.return_value = {
             "data": [mock_identifier_data],
             "nextCursor": None,
-            "hasMore": False
+            "hasMore": False,
         }
         client.session.request.return_value = mock_response
 
@@ -435,7 +424,7 @@ class TestIsTestFiltering:
 
         # Verify the request was made without includeTest
         call_args = client.session.request.call_args
-        json_data = call_args.kwargs.get('json')
+        json_data = call_args.kwargs.get("json")
         assert "includeTest" not in json_data
 
     def test_search_identifiers_includes_test_when_specified(self, client, mock_identifier_data):
@@ -447,7 +436,7 @@ class TestIsTestFiltering:
         mock_response.json.return_value = {
             "data": [mock_identifier_data],
             "nextCursor": None,
-            "hasMore": False
+            "hasMore": False,
         }
         client.session.request.return_value = mock_response
 
@@ -455,7 +444,7 @@ class TestIsTestFiltering:
 
         # Verify the request was made with includeTest=True
         call_args = client.session.request.call_args
-        json_data = call_args.kwargs.get('json')
+        json_data = call_args.kwargs.get("json")
         assert json_data.get("includeTest") is True
 
     def test_create_journal_entry_with_is_test(self, client, mock_journal_entry_data):
@@ -473,24 +462,19 @@ class TestIsTestFiltering:
         get_response = Mock()
         get_response.status_code = 200
         get_response.json.return_value = {
-            "journal_entry": {
-                "journal_entry": test_entry_data,
-                "can_edit": True
-            },
-            "cases": []
+            "journal_entry": {"journal_entry": test_entry_data, "can_edit": True},
+            "cases": [],
         }
 
         client.session.request.side_effect = [post_response, get_response]
 
         entry = client.create_detection(
-            description="Test detection",
-            identifiers=["email:test@example.com"],
-            is_test=True
+            description="Test detection", identifiers=["email:test@example.com"], is_test=True
         )
 
         # Verify the POST request included is_test
         post_call = client.session.request.call_args_list[0]
-        json_data = post_call.kwargs.get('json')
+        json_data = post_call.kwargs.get("json")
         assert json_data.get("is_test") is True
 
     def test_create_case_with_is_test(self, client, mock_case_data):
@@ -509,5 +493,5 @@ class TestIsTestFiltering:
 
         # Verify the POST request included is_test
         call_args = client.session.request.call_args
-        json_data = call_args.kwargs.get('json')
+        json_data = call_args.kwargs.get("json")
         assert json_data.get("is_test") is True

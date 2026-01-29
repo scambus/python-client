@@ -72,11 +72,11 @@ def test_build_combined_filter():
 
     # Test multiple types with confidence range
     result = build_combined_filter(
-        identifier_types=["phone", "email"],
-        min_confidence=0.9,
-        max_confidence=1.0
+        identifier_types=["phone", "email"], min_confidence=0.9, max_confidence=1.0
     )
-    expected = '($.type == "phone" || $.type == "email") && $.confidence >= 0.9 && $.confidence <= 1.0'
+    expected = (
+        '($.type == "phone" || $.type == "email") && $.confidence >= 0.9 && $.confidence <= 1.0'
+    )
     assert result == expected, f"Expected: {expected}, Got: {result}"
     print(f"  ✓ Multiple types + confidence range: {result}")
 
@@ -90,9 +90,11 @@ def test_build_combined_filter():
     result = build_combined_filter(
         identifier_types="social_media",
         min_confidence=0.85,
-        custom_expression='$.details.platform == "telegram"'
+        custom_expression='$.details.platform == "telegram"',
     )
-    expected = '$.type == "social_media" && $.confidence >= 0.85 && $.details.platform == "telegram"'
+    expected = (
+        '$.type == "social_media" && $.confidence >= 0.85 && $.details.platform == "telegram"'
+    )
     assert result == expected, f"Expected: {expected}, Got: {result}"
     print(f"  ✓ All options combined: {result}")
 
@@ -125,17 +127,14 @@ def test_real_world_examples():
     print(f"  ✓ Contact info (phone or email):\n    {result}")
 
     # High confidence identifiers
-    result = build_combined_filter(
-        identifier_types=["phone", "email", "url"],
-        min_confidence=0.9
-    )
+    result = build_combined_filter(identifier_types=["phone", "email", "url"], min_confidence=0.9)
     print(f"  ✓ High confidence contact identifiers:\n    {result}")
 
     # WhatsApp only with high confidence
     result = build_combined_filter(
         identifier_types="social_media",
         min_confidence=0.85,
-        custom_expression='$.details.platform == "whatsapp"'
+        custom_expression='$.details.platform == "whatsapp"',
     )
     print(f"  ✓ WhatsApp identifiers (high confidence):\n    {result}")
 

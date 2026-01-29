@@ -20,9 +20,21 @@ def search():
     "identifier_type",
     help="Filter by identifier type (optional). Available types: email, phone, bank_account, crypto_wallet, social_media, zelle",
 )
-@click.option("--limit", type=int, default=20, help="Maximum results to return (default: 20, only for search)")
-@click.option("--min-confidence", type=float, default=0.0, help="Minimum confidence (0.0-1.0, only for --follow)")
-@click.option("--follow", "-f", is_flag=True, help="Follow mode: create temporary stream and watch for new identifiers in real-time")
+@click.option(
+    "--limit", type=int, default=20, help="Maximum results to return (default: 20, only for search)"
+)
+@click.option(
+    "--min-confidence",
+    type=float,
+    default=0.0,
+    help="Minimum confidence (0.0-1.0, only for --follow)",
+)
+@click.option(
+    "--follow",
+    "-f",
+    is_flag=True,
+    help="Follow mode: create temporary stream and watch for new identifiers in real-time",
+)
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON format")
 @click.pass_context
 def identifiers(ctx, query, identifier_type, limit, min_confidence, follow, output_json):
@@ -76,7 +88,7 @@ def identifiers(ctx, query, identifier_type, limit, min_confidence, follow, outp
             stream = client.create_temporary_stream(
                 data_type="identifier",
                 identifier_types=[identifier_type],
-                min_confidence=min_confidence
+                min_confidence=min_confidence,
             )
             stream_id = stream.id
 
@@ -104,6 +116,7 @@ def identifiers(ctx, query, identifier_type, limit, min_confidence, follow, outp
                 else:
                     # Format identifier message
                     from scambus_cli.commands.streams import _format_identifier_message
+
                     _format_identifier_message(message_count, message)
 
             # Define error handler
@@ -111,18 +124,21 @@ def identifiers(ctx, query, identifier_type, limit, min_confidence, follow, outp
                 print_error(f"WebSocket error: {error}")
 
             # Run WebSocket client
-            asyncio.run(ws_client.listen_stream(
-                stream_id=stream_id,
-                on_message=handle_message,
-                on_error=handle_error,
-                cursor="$"  # Start from now (only new messages)
-            ))
+            asyncio.run(
+                ws_client.listen_stream(
+                    stream_id=stream_id,
+                    on_message=handle_message,
+                    on_error=handle_error,
+                    cursor="$",  # Start from now (only new messages)
+                )
+            )
 
         except KeyboardInterrupt:
             print_info(f"\n\nStopped following. Received {message_count} identifiers.")
         except Exception as e:
             print_error(f"Failed to follow identifiers: {e}")
             import traceback
+
             traceback.print_exc()
             sys.exit(1)
         finally:
@@ -146,9 +162,7 @@ def identifiers(ctx, query, identifier_type, limit, min_confidence, follow, outp
         # Convert single type to list if provided
         types = [identifier_type] if identifier_type else None
 
-        results = client.search_identifiers(
-            query=query, types=types, limit=limit
-        )
+        results = client.search_identifiers(query=query, types=types, limit=limit)
 
         if not results:
             print_info("No identifiers found")

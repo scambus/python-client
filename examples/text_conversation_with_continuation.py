@@ -213,8 +213,15 @@ def main():
             IdentifierLookup(type="phone", value="+1555123456", ref="scammer"),
             IdentifierLookup(type="phone", value="+1555987654", ref="victim"),
             # New identifiers discovered in this message
-            IdentifierLookup(type="phone", value="+1555999888", ref="payment_phone", confidence=0.95),
-            IdentifierLookup(type="url", value="https://scam-payment.example.com/pay", ref="payment_url", confidence=1.0),
+            IdentifierLookup(
+                type="phone", value="+1555999888", ref="payment_phone", confidence=0.95
+            ),
+            IdentifierLookup(
+                type="url",
+                value="https://scam-payment.example.com/pay",
+                ref="payment_url",
+                confidence=1.0,
+            ),
         ],
     )
 

@@ -36,9 +36,7 @@ def create_detection_with_screenshot(screenshot_path: str, url: str, identifiers
 
     # Step 1: Upload screenshot
     print(f"\n1. Uploading screenshot: {screenshot_path}")
-    media = client.upload_media(
-        screenshot_path, notes=f"Screenshot of phishing site: {url}"
-    )
+    media = client.upload_media(screenshot_path, notes=f"Screenshot of phishing site: {url}")
     print(f"✓ Uploaded media: {media.id}")
     print(f"  Filename: {media.file_name}")
     print(f"  Size: {media.file_size} bytes")
@@ -77,9 +75,7 @@ def create_detection_with_screenshot(screenshot_path: str, url: str, identifiers
     # Display identifiers
     print("\n  Linked Identifiers:")
     for identifier in entry.identifiers:
-        confidence_str = (
-            f" (confidence: {identifier.confidence})" if identifier.confidence else ""
-        )
+        confidence_str = f" (confidence: {identifier.confidence})" if identifier.confidence else ""
         print(f"    - {identifier.type}: {identifier.display_value}{confidence_str}")
 
     print("\n✓ Detection with evidence created successfully!")

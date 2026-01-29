@@ -38,7 +38,7 @@ def main():
             "from": "security@paypa1.com",
             "reply-to": "noreply@suspicious-domain.com",
             "dkim": "fail",
-            "spf": "fail"
+            "spf": "fail",
         },
         identifiers=[
             IdentifierLookup(type="email", value="security@paypa1.com", confidence=1.0),
@@ -102,7 +102,8 @@ def main():
     print("\n4. Creating email entry with screenshot...")
     print("Note: This requires an actual image file. Skipping upload for this example.")
     print("To use media, first upload with client.upload_media() then pass to create_email():")
-    print("""
+    print(
+        """
     # Upload screenshot
     screenshot = client.upload_media("phishing-email.png")
 
@@ -117,7 +118,8 @@ def main():
             IdentifierLookup(type="email", value="scammer@example.com", confidence=0.95),
         ],
     )
-    """)
+    """
+    )
 
 
 if __name__ == "__main__":

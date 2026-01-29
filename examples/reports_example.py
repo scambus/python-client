@@ -132,10 +132,7 @@ def main():
 
     # Create a report
     if identifiers:
-        report = client.generate_identifier_report(
-            identifier_id=identifiers[0].id,
-            format="pdf"
-        )
+        report = client.generate_identifier_report(identifier_id=identifiers[0].id, format="pdf")
         report_id = report.get("id")
 
         # Poll for status manually
@@ -167,7 +164,8 @@ def report_formats():
     print("Report Formats")
     print("=" * 60)
 
-    print("""
+    print(
+        """
     Available formats:
 
     PDF:
@@ -199,7 +197,8 @@ def report_formats():
     - Results from a saved query
     - Bulk export of matching entries
     - Useful for periodic reporting
-    """)
+    """
+    )
 
 
 if __name__ == "__main__":

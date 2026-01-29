@@ -51,9 +51,7 @@ def list_views(ctx, output_json):
                         "entity_type": v.entity_type,
                         "visibility": v.visibility,
                         "is_system": v.is_system,
-                        "created_at": (
-                            v.created_at.isoformat() if v.created_at else None
-                        ),
+                        "created_at": (v.created_at.isoformat() if v.created_at else None),
                     }
                     for v in view_list
                 ]
@@ -145,7 +143,12 @@ def get_view(ctx, view_id, output_json):
 @click.argument("view_id")
 @click.option("--limit", type=int, help="Maximum number of results")
 @click.option("--cursor", help="Pagination cursor")
-@click.option("--follow", "-f", is_flag=True, help="Follow mode: show results then stream new matches (journal views only)")
+@click.option(
+    "--follow",
+    "-f",
+    is_flag=True,
+    help="Follow mode: show results then stream new matches (journal views only)",
+)
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 @click.pass_context
 def execute_view(ctx, view_id, limit, cursor, follow, output_json):
@@ -194,14 +197,14 @@ def execute_view(ctx, view_id, limit, cursor, follow, output_json):
                         "ID": item.get("id", "")[:8] if isinstance(item, dict) else str(item)[:8],
                         "Type": item.get("type", "N/A") if isinstance(item, dict) else "N/A",
                         "Created": (
-                            item.get("created_at", "N/A")[:19]
-                            if isinstance(item, dict)
-                            else "N/A"
+                            item.get("created_at", "N/A")[:19] if isinstance(item, dict) else "N/A"
                         ),
                     }
                     for item in data[:20]  # Limit display to 20 items
                 ]
-                print_table(table_data, title=f"View Results - {entity_type.title()} ({count} total)")
+                print_table(
+                    table_data, title=f"View Results - {entity_type.title()} ({count} total)"
+                )
             else:
                 # Generic display for other entity types
                 print_info(f"Found {count} {entity_type} entries")
@@ -265,16 +268,22 @@ def execute_view(ctx, view_id, limit, cursor, follow, output_json):
                             "ID": entry_data.get("id", "")[:8],
                             "Type": entry_data.get("type", "N/A"),
                             "Description": entry_data.get("description", "")[:80],
-                            "Performed": entry_data.get("performed_at", "N/A")[:19] if entry_data.get("performed_at") else "N/A",
+                            "Performed": (
+                                entry_data.get("performed_at", "N/A")[:19]
+                                if entry_data.get("performed_at")
+                                else "N/A"
+                            ),
                         }
                         print_detail(entry_summary)
 
                 # Run WebSocket listener
-                asyncio.run(ws_client.listen_stream(
-                    stream_id=stream.id,
-                    on_message=handle_new_entry,
-                    cursor="$"  # Only new messages
-                ))
+                asyncio.run(
+                    ws_client.listen_stream(
+                        stream_id=stream.id,
+                        on_message=handle_new_entry,
+                        cursor="$",  # Only new messages
+                    )
+                )
 
             except KeyboardInterrupt:
                 print_info(f"\n\nFollow mode stopped. Received {new_count} new entries.")
@@ -287,6 +296,7 @@ def execute_view(ctx, view_id, limit, cursor, follow, output_json):
             except Exception as follow_error:
                 print_error(f"Follow mode failed: {follow_error}")
                 import traceback
+
                 traceback.print_exc()
                 # Try to clean up stream on error
                 try:
@@ -320,7 +330,9 @@ def execute_view(ctx, view_id, limit, cursor, follow, output_json):
 @click.option("--filter-criteria", help="Filter criteria as JSON string")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 @click.pass_context
-def create_view(ctx, name, entity_type, description, alias, visibility, filter_criteria, output_json):
+def create_view(
+    ctx, name, entity_type, description, alias, visibility, filter_criteria, output_json
+):
     """Create a new view (saved query).
 
     Examples:
@@ -497,9 +509,7 @@ def my_journal(ctx, limit, output_json):
                     "ID": item.get("id", "")[:8] if isinstance(item, dict) else str(item)[:8],
                     "Type": item.get("type", "N/A") if isinstance(item, dict) else "N/A",
                     "Created": (
-                        item.get("created_at", "N/A")[:19]
-                        if isinstance(item, dict)
-                        else "N/A"
+                        item.get("created_at", "N/A")[:19] if isinstance(item, dict) else "N/A"
                     ),
                 }
                 for item in data[:20]  # Limit display to 20 items

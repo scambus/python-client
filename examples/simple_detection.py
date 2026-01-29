@@ -70,7 +70,9 @@ def main():
     # Display identifiers
     print("\n  Linked Identifiers:")
     for identifier in entry.identifiers:
-        print(f"    - {identifier.type}: {identifier.display_value} (confidence: {identifier.confidence})")
+        print(
+            f"    - {identifier.type}: {identifier.display_value} (confidence: {identifier.confidence})"
+        )
 
     print("\nDetection created successfully!")
 

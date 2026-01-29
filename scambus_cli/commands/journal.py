@@ -59,7 +59,7 @@ def parse_time_or_relative(time_str):
         return datetime.now(timezone.utc)
 
     # Check if it's a relative time (starts with + or -)
-    relative_pattern = r'^([+-])(\d+)([smhd])$'
+    relative_pattern = r"^([+-])(\d+)([smhd])$"
     match = re.match(relative_pattern, time_str)
 
     if match:
@@ -67,19 +67,19 @@ def parse_time_or_relative(time_str):
         amount = int(amount)
 
         # Calculate timedelta based on unit
-        if unit == 's':
+        if unit == "s":
             delta = timedelta(seconds=amount)
-        elif unit == 'm':
+        elif unit == "m":
             delta = timedelta(minutes=amount)
-        elif unit == 'h':
+        elif unit == "h":
             delta = timedelta(hours=amount)
-        elif unit == 'd':
+        elif unit == "d":
             delta = timedelta(days=amount)
         else:
             raise ValueError(f"Invalid time unit: {unit}. Use s, m, h, or d.")
 
         # Apply sign
-        if sign == '-':
+        if sign == "-":
             return datetime.now(timezone.utc) - delta
         else:
             return datetime.now(timezone.utc) + delta
@@ -87,6 +87,7 @@ def parse_time_or_relative(time_str):
     # Try to parse as ISO 8601
     try:
         from dateutil import parser as date_parser
+
         parsed = date_parser.isoparse(time_str)
         # Ensure it has timezone info
         if parsed.tzinfo is None:
@@ -232,12 +233,21 @@ def delete(ctx, entry_id, force):
 @click.option("--order-by", default="performed_at", help="Sort column (default: performed_at)")
 @click.option("--order-desc/--order-asc", default=True, help="Sort order (default: descending)")
 @click.option("--limit", type=int, help="Max results to fetch (fetches in pages of 100)")
-@click.option("--follow", "-f", is_flag=True, help="Follow mode: show results then stream new matches in real-time")
+@click.option(
+    "--follow",
+    "-f",
+    is_flag=True,
+    help="Follow mode: show results then stream new matches in real-time",
+)
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 @click.option("--with-identifiers", is_flag=True, help="Include related identifiers")
 @click.option("--with-evidence", is_flag=True, help="Include related evidence")
 @click.option("--parent", "parent_id", help="Query children of a specific parent journal entry ID")
-@click.option("--include-children", is_flag=True, help="Include child entries in results (default: only top-level)")
+@click.option(
+    "--include-children",
+    is_flag=True,
+    help="Include child entries in results (default: only top-level)",
+)
 @click.pass_context
 def query(
     ctx,
@@ -441,7 +451,11 @@ def query(
                             "ID": entry_data.get("id", "")[:8],
                             "Type": entry_data.get("type", "N/A"),
                             "Description": entry_data.get("description", "")[:80],
-                            "Performed": entry_data.get("performed_at", "N/A")[:19] if entry_data.get("performed_at") else "N/A",
+                            "Performed": (
+                                entry_data.get("performed_at", "N/A")[:19]
+                                if entry_data.get("performed_at")
+                                else "N/A"
+                            ),
                         }
                         if with_identifiers and entry_data.get("identifiers"):
                             entry_summary["Identifiers"] = ", ".join(
@@ -451,11 +465,13 @@ def query(
                         print_detail(entry_summary)
 
                 # Run WebSocket listener
-                asyncio.run(ws_client.listen_stream(
-                    stream_id=stream.id,
-                    on_message=handle_new_entry,
-                    cursor="$"  # Only new messages
-                ))
+                asyncio.run(
+                    ws_client.listen_stream(
+                        stream_id=stream.id,
+                        on_message=handle_new_entry,
+                        cursor="$",  # Only new messages
+                    )
+                )
 
             except KeyboardInterrupt:
                 print_info(f"\n\nFollow mode stopped. Received {new_count} new entries.")
@@ -468,6 +484,7 @@ def query(
             except Exception as follow_error:
                 print_error(f"Follow mode failed: {follow_error}")
                 import traceback
+
                 traceback.print_exc()
                 # Try to clean up stream on error
                 try:
@@ -535,7 +552,20 @@ def query(
     help="Mark entry as test/demo data (excluded from normal queries)",
 )
 @click.pass_context
-def create_note(ctx, description, identifier, our_identifier, confidence, attach, case_id, originator_type, originator_identifier, create_originator, tag, is_test):
+def create_note(
+    ctx,
+    description,
+    identifier,
+    our_identifier,
+    confidence,
+    attach,
+    case_id,
+    originator_type,
+    originator_identifier,
+    create_originator,
+    tag,
+    is_test,
+):
     """Create a note entry."""
     client = ctx.obj.get_client()
 
@@ -617,10 +647,9 @@ def create_note(ctx, description, identifier, our_identifier, confidence, attach
             for tag_str in tag:
                 if ":" in tag_str:
                     tag_parts = tag_str.split(":", 1)
-                    tag_lookups.append({
-                        "tag_name": tag_parts[0].strip(),
-                        "tag_value": tag_parts[1].strip()
-                    })
+                    tag_lookups.append(
+                        {"tag_name": tag_parts[0].strip(), "tag_value": tag_parts[1].strip()}
+                    )
                 else:
                     tag_lookups.append({"tag_name": tag_str.strip()})
             data["tag_lookups"] = tag_lookups
@@ -652,7 +681,9 @@ def create_note(ctx, description, identifier, our_identifier, confidence, attach
     help="Call platform (default: pstn)",
 )
 @click.option("--duration", type=int, help="Duration in seconds (optional, for backwards compat)")
-@click.option("--start-time", help="Call start time (ISO 8601 or relative like '-15m', defaults to now)")
+@click.option(
+    "--start-time", help="Call start time (ISO 8601 or relative like '-15m', defaults to now)"
+)
 @click.option("--end-time", help="Call end time (ISO 8601 or relative like '-5m', defaults to now)")
 @click.option("--in-progress", is_flag=True, help="Mark call as in-progress (no end time)")
 @click.option("--phone", help="Phone number identifier")
@@ -886,10 +917,9 @@ def create_phone_call(
             for tag_str in tag:
                 if ":" in tag_str:
                     tag_parts = tag_str.split(":", 1)
-                    tag_lookups.append({
-                        "tag_name": tag_parts[0].strip(),
-                        "tag_value": tag_parts[1].strip()
-                    })
+                    tag_lookups.append(
+                        {"tag_name": tag_parts[0].strip(), "tag_value": tag_parts[1].strip()}
+                    )
                 else:
                     tag_lookups.append({"tag_name": tag_str.strip()})
             data["tag_lookups"] = tag_lookups
@@ -1085,10 +1115,9 @@ def create_email(
             for tag_str in tag:
                 if ":" in tag_str:
                     tag_parts = tag_str.split(":", 1)
-                    tag_lookups.append({
-                        "tag_name": tag_parts[0].strip(),
-                        "tag_value": tag_parts[1].strip()
-                    })
+                    tag_lookups.append(
+                        {"tag_name": tag_parts[0].strip(), "tag_value": tag_parts[1].strip()}
+                    )
                 else:
                     tag_lookups.append({"tag_name": tag_str.strip()})
             data["tag_lookups"] = tag_lookups
@@ -1153,7 +1182,20 @@ def create_email(
 )
 @click.pass_context
 def create_text_conversation(
-    ctx, description, platform, phone, identifier, confidence, screenshot, attach, case_id, originator_type, originator_identifier, create_originator, tag, is_test
+    ctx,
+    description,
+    platform,
+    phone,
+    identifier,
+    confidence,
+    screenshot,
+    attach,
+    case_id,
+    originator_type,
+    originator_identifier,
+    create_originator,
+    tag,
+    is_test,
 ):
     """Create a text conversation entry.
 
@@ -1251,10 +1293,9 @@ def create_text_conversation(
             for tag_str in tag:
                 if ":" in tag_str:
                     tag_parts = tag_str.split(":", 1)
-                    tag_lookups.append({
-                        "tag_name": tag_parts[0].strip(),
-                        "tag_value": tag_parts[1].strip()
-                    })
+                    tag_lookups.append(
+                        {"tag_name": tag_parts[0].strip(), "tag_value": tag_parts[1].strip()}
+                    )
                 else:
                     tag_lookups.append({"tag_name": tag_str.strip()})
             data["tag_lookups"] = tag_lookups
@@ -1310,7 +1351,18 @@ def create_text_conversation(
 )
 @click.pass_context
 def create_detection(
-    ctx, description, confidence, identifiers, screenshot, attach, case_id, originator_type, originator_identifier, create_originator, tag, is_test
+    ctx,
+    description,
+    confidence,
+    identifiers,
+    screenshot,
+    attach,
+    case_id,
+    originator_type,
+    originator_identifier,
+    create_originator,
+    tag,
+    is_test,
 ):
     """Create a detection entry."""
     client = ctx.obj.get_client()
@@ -1385,10 +1437,9 @@ def create_detection(
             for tag_str in tag:
                 if ":" in tag_str:
                     tag_parts = tag_str.split(":", 1)
-                    tag_lookups.append({
-                        "tag_name": tag_parts[0].strip(),
-                        "tag_value": tag_parts[1].strip()
-                    })
+                    tag_lookups.append(
+                        {"tag_name": tag_parts[0].strip(), "tag_value": tag_parts[1].strip()}
+                    )
                 else:
                     tag_lookups.append({"tag_name": tag_str.strip()})
             data["tag_lookups"] = tag_lookups
@@ -1457,22 +1508,35 @@ def complete(ctx, entry_id, end_time, reason, description, output_json):
         )
 
         if output_json:
-            print_json({
-                "id": completion_entry.id,
-                "type": completion_entry.type,
-                "description": completion_entry.description,
-                "performed_at": completion_entry.performed_at.isoformat() if completion_entry.performed_at else None,
-                "parent_journal_entry_id": completion_entry.parent_journal_entry_id,
-                "details": completion_entry.details,
-            })
+            print_json(
+                {
+                    "id": completion_entry.id,
+                    "type": completion_entry.type,
+                    "description": completion_entry.description,
+                    "performed_at": (
+                        completion_entry.performed_at.isoformat()
+                        if completion_entry.performed_at
+                        else None
+                    ),
+                    "parent_journal_entry_id": completion_entry.parent_journal_entry_id,
+                    "details": completion_entry.details,
+                }
+            )
         else:
             print_success(f"Activity completed: {entry_id}")
-            print_detail({
-                "completion_id": completion_entry.id,
-                "parent_id": entry_id,
-                "completion_reason": reason,
-                "completed_at": completion_entry.performed_at.isoformat() if completion_entry.performed_at else None,
-            }, title="Activity Completed")
+            print_detail(
+                {
+                    "completion_id": completion_entry.id,
+                    "parent_id": entry_id,
+                    "completion_reason": reason,
+                    "completed_at": (
+                        completion_entry.performed_at.isoformat()
+                        if completion_entry.performed_at
+                        else None
+                    ),
+                },
+                title="Activity Completed",
+            )
 
     except Exception as e:
         print_error(f"Failed to complete activity: {e}")
@@ -1549,7 +1613,9 @@ def in_progress(ctx, output_json):
 @click.option(
     "--platform",
     required=True,
-    type=click.Choice(["sms", "whatsapp", "telegram", "signal", "facebook", "imessage", "email", "other"]),
+    type=click.Choice(
+        ["sms", "whatsapp", "telegram", "signal", "facebook", "imessage", "email", "other"]
+    ),
     help="Messaging platform",
 )
 @click.option(
@@ -1590,7 +1656,10 @@ def in_progress(ctx, output_json):
 )
 @click.option("--case-id", help="Case ID to link to")
 @click.option(
-    "--screenshot", multiple=True, type=click.Path(exists=True), help="Screenshot(s) of conversation"
+    "--screenshot",
+    multiple=True,
+    type=click.Path(exists=True),
+    help="Screenshot(s) of conversation",
 )
 @click.option(
     "--attach", multiple=True, type=click.Path(exists=True), help="Additional attachments"
@@ -1815,10 +1884,9 @@ def create_conversation(
             for tag_str in tag:
                 if ":" in tag_str:
                     tag_parts = tag_str.split(":", 1)
-                    tag_lookups.append({
-                        "tag_name": tag_parts[0].strip(),
-                        "tag_value": tag_parts[1].strip()
-                    })
+                    tag_lookups.append(
+                        {"tag_name": tag_parts[0].strip(), "tag_value": tag_parts[1].strip()}
+                    )
                 else:
                     tag_lookups.append({"tag_name": tag_str.strip()})
             data["tag_lookups"] = tag_lookups
@@ -1832,7 +1900,9 @@ def create_conversation(
             print_json(entry)
         else:
             print_success(f"Conversation entry created: {entry['id']}")
-            print_info("Use 'scambus journal add-conversation-messages' to add messages to this conversation")
+            print_info(
+                "Use 'scambus journal add-conversation-messages' to add messages to this conversation"
+            )
             print_detail(entry, title="Created Entry")
 
     except Exception as e:
@@ -1843,7 +1913,9 @@ def create_conversation(
 @journal.command()
 @click.argument("parent_id")
 @click.option("--description", help="Description for this message batch (optional)")
-@click.option("--reason", help="Reason for adding messages (e.g., 'initial import', 'new messages')")
+@click.option(
+    "--reason", help="Reason for adding messages (e.g., 'initial import', 'new messages')"
+)
 @click.option(
     "--messages-file",
     type=click.Path(exists=True),
@@ -1990,12 +2062,14 @@ def add_conversation_messages(
                 ident_value = parts[1]
                 ident_ref = parts[2]
 
-                identifiers.append({
-                    "type": ident_type,
-                    "value": ident_value,
-                    "confidence": confidence,
-                    "ref": ident_ref,
-                })
+                identifiers.append(
+                    {
+                        "type": ident_type,
+                        "value": ident_value,
+                        "confidence": confidence,
+                        "ref": ident_ref,
+                    }
+                )
 
         if identifiers:
             data["identifier_lookups"] = identifiers

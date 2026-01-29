@@ -37,7 +37,7 @@ def list_streams(ctx, output_json):
 
     try:
         result = client.list_streams()
-        streams = result['data']
+        streams = result["data"]
 
         if not streams:
             print_info("No streams found")
@@ -323,11 +323,15 @@ def _format_identifier_message(index: int, msg: Identifier):
             print(f"Tags: {', '.join(tag_names)}")
 
         # Show triggering journal entry if present in data
-        triggering_je = msg.data.get("triggeringJournalEntry") or msg.data.get("triggering_journal_entry")
+        triggering_je = msg.data.get("triggeringJournalEntry") or msg.data.get(
+            "triggering_journal_entry"
+        )
         if triggering_je:
             je_type = triggering_je.get("type", "unknown")
             je_id = triggering_je.get("id", "N/A")
-            performed_at = triggering_je.get("performedAt") or triggering_je.get("performed_at", "N/A")
+            performed_at = triggering_je.get("performedAt") or triggering_je.get(
+                "performed_at", "N/A"
+            )
             print(f"Triggered by: {je_type} ({je_id[:8]}...) at {performed_at}")
 
 
@@ -536,7 +540,11 @@ def recovery_info(ctx, stream_id, output_json):
 @streams.command("listen")
 @click.argument("stream_id")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON (one per line)")
-@click.option("--from-beginning", is_flag=True, help="Start from beginning of stream (default: only new messages)")
+@click.option(
+    "--from-beginning",
+    is_flag=True,
+    help="Start from beginning of stream (default: only new messages)",
+)
 @click.option("--cursor", help="Start from specific message ID (e.g., '1700000000000-0')")
 @click.option("--test", is_flag=True, help="Include test data (is_test=true entries)")
 @click.pass_context
@@ -597,10 +605,7 @@ def listen_stream(ctx, stream_id, output_json, from_beginning, cursor, test):
         sys.exit(1)
 
     # Create WebSocket client
-    ws_client = ScambusWebSocketClient(
-        api_url=api_url,
-        api_token=token
-    )
+    ws_client = ScambusWebSocketClient(api_url=api_url, api_token=token)
 
     cursor_desc = {
         "$": "new messages only",
@@ -637,13 +642,15 @@ def listen_stream(ctx, stream_id, output_json, from_beginning, cursor, test):
 
     # Run WebSocket client
     try:
-        asyncio.run(ws_client.listen_stream(
-            stream_id=stream_id,
-            on_message=handle_message,
-            on_error=handle_error,
-            cursor=stream_cursor,
-            include_test=test,
-        ))
+        asyncio.run(
+            ws_client.listen_stream(
+                stream_id=stream_id,
+                on_message=handle_message,
+                on_error=handle_error,
+                cursor=stream_cursor,
+                include_test=test,
+            )
+        )
     except KeyboardInterrupt:
         print_info(f"\n\nStopped listening. Received {message_count} messages.")
     except Exception as e:

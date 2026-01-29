@@ -78,9 +78,7 @@ def main():
     # Display identifiers
     print("\n  Linked Identifiers:")
     for identifier in entry.identifiers:
-        confidence_str = (
-            f" (confidence: {identifier.confidence})" if identifier.confidence else ""
-        )
+        confidence_str = f" (confidence: {identifier.confidence})" if identifier.confidence else ""
         print(f"    - {identifier.type}: {identifier.display_value}{confidence_str}")
 
     print("\nDetection with bank account created successfully!")

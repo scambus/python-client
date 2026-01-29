@@ -50,6 +50,7 @@ class Context:
                 self.client = ScambusClient(api_url=api_url, api_token=self.token)
             except Exception as e:
                 import traceback
+
                 console.print(f"[red]Failed to create client:[/red] {e}")
                 console.print("[red]Full traceback:[/red]")
                 traceback.print_exc()
@@ -274,7 +275,18 @@ def show_config():
 
 
 # Import command groups - imported here to avoid circular imports
-from .commands import automations, cases, journal, media, profile, reports, search, streams, tags, views  # noqa: E402
+from .commands import (
+    automations,
+    cases,
+    journal,
+    media,
+    profile,
+    reports,
+    search,
+    streams,
+    tags,
+    views,
+)  # noqa: E402
 
 cli.add_command(journal.journal)
 cli.add_command(media.media)

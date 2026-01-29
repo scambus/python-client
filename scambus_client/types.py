@@ -18,6 +18,7 @@ class TagLookup:
         # Valued tag
         TagLookup(tag_name="ScamType", tag_value="Phishing")
     """
+
     tag_name: str
     tag_value: Optional[str] = None
 
@@ -40,6 +41,7 @@ class StreamFilter:
             max_confidence=1.0
         )
     """
+
     identifier_types: Optional[List[str]] = None
     min_confidence: Optional[float] = None
     max_confidence: Optional[float] = None
@@ -73,6 +75,7 @@ class ViewFilter:
             entry_types=["detection", "phone_call"]
         )
     """
+
     identifier_types: Optional[List[str]] = None
     entry_types: Optional[List[str]] = None
     min_confidence: Optional[float] = None
@@ -108,6 +111,7 @@ class ViewSortOrder:
     Examples:
         ViewSortOrder(field="created_at", direction="desc")
     """
+
     field: str
     direction: str = "desc"  # "asc" or "desc"
 
@@ -131,9 +135,9 @@ def to_dict(obj: Any) -> Dict[str, Any]:
     """
     if isinstance(obj, dict):
         return obj
-    elif hasattr(obj, 'to_dict'):
+    elif hasattr(obj, "to_dict"):
         return obj.to_dict()
-    elif hasattr(obj, '__dict__'):
+    elif hasattr(obj, "__dict__"):
         return {k: v for k, v in obj.__dict__.items() if v is not None}
     else:
         return obj

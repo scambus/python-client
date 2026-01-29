@@ -47,7 +47,9 @@ def list_automations(ctx, output_json):
                     "ID": auto.get("id", "")[:8],
                     "Name": auto.get("name", "N/A"),
                     "Active": "Yes" if auto.get("active") else "No",
-                    "Created": auto.get("created_at", "N/A")[:10] if auto.get("created_at") else "N/A",
+                    "Created": (
+                        auto.get("created_at", "N/A")[:10] if auto.get("created_at") else "N/A"
+                    ),
                 }
                 for auto in automation_list
             ]
@@ -96,7 +98,12 @@ def create_automation(ctx, name, description, output_json):
 @automations.command("create-key")
 @click.argument("automation_name_or_id")
 @click.option("--name", help="API key name (default: '<Automation Name> CLI Key')")
-@click.option("--assume", "assume_identity", is_flag=True, help="Switch to this automation identity after creating key")
+@click.option(
+    "--assume",
+    "assume_identity",
+    is_flag=True,
+    help="Switch to this automation identity after creating key",
+)
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 @click.pass_context
 def create_api_key(ctx, automation_name_or_id, name, assume_identity, output_json):
@@ -123,9 +130,9 @@ def create_api_key(ctx, automation_name_or_id, name, assume_identity, output_jso
     try:
         # Check if input looks like a UUID
         import re
+
         uuid_pattern = re.compile(
-            r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-            re.IGNORECASE
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
         )
         is_uuid = bool(uuid_pattern.match(automation_name_or_id))
 
@@ -142,13 +149,16 @@ def create_api_key(ctx, automation_name_or_id, name, assume_identity, output_jso
 
             # Find all automations matching the name
             matching_automations = [
-                auto for auto in automations
-                if auto.get("name") == automation_name
+                auto for auto in automations if auto.get("name") == automation_name
             ]
 
             if len(matching_automations) == 0:
                 print_error(f"Automation not found: {automation_name}")
-                print_info("Create it first with: scambus automations create --name \"{}\"".format(automation_name))
+                print_info(
+                    'Create it first with: scambus automations create --name "{}"'.format(
+                        automation_name
+                    )
+                )
                 sys.exit(1)
             elif len(matching_automations) > 1:
                 print_error(f"Multiple automations found with name: {automation_name}")
@@ -157,12 +167,14 @@ def create_api_key(ctx, automation_name_or_id, name, assume_identity, output_jso
                     {
                         "ID": auto.get("id", ""),
                         "Name": auto.get("name", "N/A"),
-                        "Created": auto.get("created_at", "N/A")[:10] if auto.get("created_at") else "N/A",
+                        "Created": (
+                            auto.get("created_at", "N/A")[:10] if auto.get("created_at") else "N/A"
+                        ),
                     }
                     for auto in matching_automations
                 ]
                 print_table(table_data, title="Matching Automations")
-                print_info("\nExample: scambus automations create-key <UUID> --name \"Key Name\"")
+                print_info('\nExample: scambus automations create-key <UUID> --name "Key Name"')
                 sys.exit(1)
 
             automation_id = matching_automations[0]["id"]
@@ -235,7 +247,9 @@ def list_api_keys(ctx, automation_id, output_json):
                 {
                     "ID": key.get("id", "")[:8],
                     "Name": key.get("name", "N/A"),
-                    "Created": key.get("created_at", "N/A")[:10] if key.get("created_at") else "N/A",
+                    "Created": (
+                        key.get("created_at", "N/A")[:10] if key.get("created_at") else "N/A"
+                    ),
                     "Revoked": "Yes" if key.get("revoked") else "No",
                 }
                 for key in keys

@@ -31,7 +31,7 @@ def create_identifier_stream_basic():
         min_confidence=0.9,
         max_confidence=1.0,
         is_active=True,
-        retention_days=30
+        retention_days=30,
     )
 
     print(f"✓ Created identifier stream: {stream.id}")
@@ -52,7 +52,7 @@ def create_identifier_stream_filtered():
         min_confidence=0.8,
         max_confidence=1.0,
         is_active=True,
-        retention_days=90
+        retention_days=90,
     )
 
     print(f"\n✓ Created filtered identifier stream: {stream.id}")
@@ -74,7 +74,7 @@ def create_identifier_stream_with_backfill():
         is_active=True,
         retention_days=30,
         backfill_historical=True,  # Trigger backfill on creation
-        backfill_from_date="2025-01-01T00:00:00Z"  # Only backfill from this date
+        backfill_from_date="2025-01-01T00:00:00Z",  # Only backfill from this date
     )
 
     print(f"\n✓ Created identifier stream with backfill: {stream.id}")
@@ -94,10 +94,7 @@ def consume_identifier_stream(stream_id: str):
 
     # Consume in pages
     result = client.consume_stream(
-        stream_id=stream_id,
-        cursor=cursor,
-        order="asc",  # Oldest first
-        limit=10
+        stream_id=stream_id, cursor=cursor, order="asc", limit=10  # Oldest first
     )
 
     messages = result.get("messages", [])
@@ -120,43 +117,49 @@ def consume_identifier_stream(stream_id: str):
         details = msg.get("details")
         if details:
             print(f"  Structured Data:")
-            identifier_type = msg.get('type')
+            identifier_type = msg.get("type")
 
-            if identifier_type == 'phone':
+            if identifier_type == "phone":
                 # Phone numbers include: country_code, number, area_code, is_toll_free, region
-                print(f"    Country Code: {details.get('country_code') or details.get('countryCode')}")
+                print(
+                    f"    Country Code: {details.get('country_code') or details.get('countryCode')}"
+                )
                 print(f"    Number: {details.get('number')}")
-                if details.get('area_code') or details.get('areaCode'):
+                if details.get("area_code") or details.get("areaCode"):
                     print(f"    Area Code: {details.get('area_code') or details.get('areaCode')}")
-                print(f"    Toll-Free: {details.get('is_toll_free', details.get('isTollFree', False))}")
-                if details.get('region'):
+                print(
+                    f"    Toll-Free: {details.get('is_toll_free', details.get('isTollFree', False))}"
+                )
+                if details.get("region"):
                     print(f"    Region: {details.get('region')}")
 
-            elif identifier_type == 'email':
+            elif identifier_type == "email":
                 # Email includes: email
                 print(f"    Email: {details.get('email')}")
 
-            elif identifier_type == 'bank_account':
+            elif identifier_type == "bank_account":
                 # Bank accounts include: account_number, routing, institution, etc.
-                print(f"    Account: {details.get('account_number') or details.get('accountNumber')}")
+                print(
+                    f"    Account: {details.get('account_number') or details.get('accountNumber')}"
+                )
                 print(f"    Routing: {details.get('routing')}")
-                if details.get('institution'):
+                if details.get("institution"):
                     print(f"    Institution: {details.get('institution')}")
 
-            elif identifier_type == 'crypto_wallet':
+            elif identifier_type == "crypto_wallet":
                 # Crypto wallets include: address, currency, network
                 print(f"    Address: {details.get('address')}")
-                if details.get('currency'):
+                if details.get("currency"):
                     print(f"    Currency: {details.get('currency')}")
-                if details.get('network'):
+                if details.get("network"):
                     print(f"    Network: {details.get('network')}")
 
-            elif identifier_type == 'social_media':
+            elif identifier_type == "social_media":
                 # Social media includes: platform, handle
                 print(f"    Platform: {details.get('platform')}")
                 print(f"    Handle: {details.get('handle')}")
 
-            elif identifier_type == 'zelle':
+            elif identifier_type == "zelle":
                 # Zelle includes: type, value
                 print(f"    Type: {details.get('type')}")
                 print(f"    Value: {details.get('value')}")
@@ -170,7 +173,9 @@ def consume_identifier_stream(stream_id: str):
         # Show triggering journal entry
         triggering_je = msg.get("triggeringJournalEntry") or msg.get("triggering_journal_entry")
         if triggering_je:
-            print(f"  Triggered by: {triggering_je.get('type')} at {triggering_je.get('performedAt', triggering_je.get('performed_at'))}")
+            print(
+                f"  Triggered by: {triggering_je.get('type')} at {triggering_je.get('performedAt', triggering_je.get('performed_at'))}"
+            )
 
     return next_cursor
 
@@ -189,7 +194,7 @@ def continuous_consumption_example(stream_id: str, duration_seconds: int = 30):
             cursor=cursor,
             order="asc",
             limit=100,
-            timeout=5  # Wait up to 5 seconds for new messages
+            timeout=5,  # Wait up to 5 seconds for new messages
         )
 
         messages = result.get("messages", [])
@@ -220,8 +225,7 @@ def trigger_backfill_example(stream_id: str):
     print(f"\n✓ Triggering backfill for stream: {stream_id}")
 
     result = client.backfill_stream(
-        stream_id=stream_id,
-        from_date="2025-01-15T00:00:00Z"  # Backfill from this date
+        stream_id=stream_id, from_date="2025-01-15T00:00:00Z"  # Backfill from this date
     )
 
     print(f"  Status: {result.get('status', 'unknown')}")
@@ -237,7 +241,7 @@ def recover_stream_example(stream_id: str):
     result = client.recover_stream(
         stream_id=stream_id,
         ignore_checkpoint=False,  # Use checkpoint
-        clear_stream=True  # Clear and rebuild
+        clear_stream=True,  # Clear and rebuild
     )
 
     print(f"  Status: {result.get('status', 'unknown')}")
@@ -296,7 +300,7 @@ def structured_data_example():
         name="Phone Numbers with Structured Data",
         data_type="identifier",
         identifier_types=["phone"],
-        min_confidence=0.8
+        min_confidence=0.8,
     )
 
     print(f"\n✓ Created phone identifier stream: {stream.id}")
@@ -312,10 +316,10 @@ def structured_data_example():
             details = msg.get("details", {})
 
             # Extract structured phone data
-            country_code = details.get('country_code') or details.get('countryCode')
-            area_code = details.get('area_code') or details.get('areaCode')
-            is_toll_free = details.get('is_toll_free', details.get('isTollFree', False))
-            region = details.get('region')
+            country_code = details.get("country_code") or details.get("countryCode")
+            area_code = details.get("area_code") or details.get("areaCode")
+            is_toll_free = details.get("is_toll_free", details.get("isTollFree", False))
+            region = details.get("region")
 
             print(f"\n  Phone: {msg.get('displayValue')}")
             print(f"    Country: {country_code} ({region or 'unknown'})")
@@ -353,7 +357,7 @@ def comparison_example():
         name="Phone Call Journal Entries",
         data_type="journal_entry",
         identifier_types=["phone"],
-        min_confidence=0.8
+        min_confidence=0.8,
     )
     print(f"\n✓ Journal Entry Stream: {je_stream.id}")
     print(f"  - Publishes: Complete journal entries")
@@ -365,7 +369,7 @@ def comparison_example():
         name="Phone Identifier State Changes",
         data_type="identifier",
         identifier_types=["phone"],
-        min_confidence=0.8
+        min_confidence=0.8,
     )
     print(f"\n✓ Identifier Stream: {id_stream.id}")
     print(f"  - Publishes: Identifier state changes")

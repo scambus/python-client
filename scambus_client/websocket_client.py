@@ -140,7 +140,9 @@ class ScambusWebSocketClient:
             await self._ws.close()
             self._ws = None
 
-    def _convert_stream_data(self, data: Dict[str, Any], channel: str) -> Union[JournalEntry, Identifier, Dict[str, Any]]:
+    def _convert_stream_data(
+        self, data: Dict[str, Any], channel: str
+    ) -> Union[JournalEntry, Identifier, Dict[str, Any]]:
         """
         Convert stream message data to typed object.
 
@@ -162,7 +164,9 @@ class ScambusWebSocketClient:
             # Detect data type based on fields present
             # JournalEntry has 'identifiers', 'description', 'performed_at'
             # Identifier has 'display_value', 'confidence' structure
-            if "display_value" in data or ("confidence" in data and isinstance(data.get("confidence"), dict)):
+            if "display_value" in data or (
+                "confidence" in data and isinstance(data.get("confidence"), dict)
+            ):
                 # This is an Identifier
                 return Identifier.from_dict(data)
             elif "identifiers" in data or "description" in data or "performed_at" in data:
@@ -170,7 +174,9 @@ class ScambusWebSocketClient:
                 return JournalEntry.from_dict(data)
             else:
                 # Unknown format, return as-is
-                logger.warning(f"Unable to determine stream data type for channel {channel}, returning raw dict")
+                logger.warning(
+                    f"Unable to determine stream data type for channel {channel}, returning raw dict"
+                )
                 return data
         except Exception as e:
             logger.error(f"Error converting stream data to typed object: {e}", exc_info=True)
@@ -422,7 +428,9 @@ class ScambusWebSocketClient:
         else:
             await self.run()
 
-    async def subscribe_stream(self, stream_id: str, cursor: str = "$", include_test: bool = False) -> None:
+    async def subscribe_stream(
+        self, stream_id: str, cursor: str = "$", include_test: bool = False
+    ) -> None:
         """
         Subscribe to an export stream for real-time messages.
 
@@ -467,7 +475,9 @@ class ScambusWebSocketClient:
         }
 
         await self._ws.send(json.dumps(subscribe_msg))
-        logger.info(f"Sent subscribe request for stream: {stream_id} (cursor: {cursor}, include_test: {include_test})")
+        logger.info(
+            f"Sent subscribe request for stream: {stream_id} (cursor: {cursor}, include_test: {include_test})"
+        )
 
     async def unsubscribe_stream(self, stream_id: str) -> None:
         """
@@ -485,10 +495,7 @@ class ScambusWebSocketClient:
             raise RuntimeError("WebSocket not connected. Call connect() first.")
 
         # Send unsubscribe message to server
-        unsubscribe_msg = {
-            "action": "unsubscribe",
-            "channel": f"stream:{stream_id}"
-        }
+        unsubscribe_msg = {"action": "unsubscribe", "channel": f"stream:{stream_id}"}
 
         await self._ws.send(json.dumps(unsubscribe_msg))
         logger.info(f"Sent unsubscribe request for stream: {stream_id}")

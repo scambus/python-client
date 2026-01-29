@@ -60,7 +60,11 @@ def notifications(ctx, unread_only, output_json):
             table_data = [
                 {
                     "ID": n.id[:8],
-                    "Message": n.notification_text[:50] + "..." if len(n.notification_text) > 50 else n.notification_text,
+                    "Message": (
+                        n.notification_text[:50] + "..."
+                        if len(n.notification_text) > 50
+                        else n.notification_text
+                    ),
                     "Read": "✓" if n.read else "✗",
                     "Created": (
                         n.created_at.strftime("%Y-%m-%d %H:%M")

@@ -58,7 +58,7 @@ class TestScambusClientJournalEntries:
         entry = client.create_detection(
             description="Test detection",
             identifiers=["email:scammer@example.com"],
-            details={"category": "phishing", "confidence": 0.9},
+            details={"data": {"threat_type": "phishing"}},
         )
 
         assert isinstance(entry, JournalEntry)

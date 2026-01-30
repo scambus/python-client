@@ -8,7 +8,6 @@ identifiers that fail validation.
 """
 
 import os
-from datetime import datetime, timezone
 from scambus_client import (
     ScambusClient,
     DetectionDetails,
@@ -32,16 +31,10 @@ def main():
     print("Simple Phishing Detection Example")
     print("=" * 60)
 
-    # Create a detection using typed classes (recommended)
-    print("\n1. Creating detection with typed classes...")
+    # Create a simple detection — details is optional
+    print("\n1. Creating detection without details...")
     entry = client.create_detection(
         description="Phishing email detected targeting Example Corp employees",
-        details=DetectionDetails(
-            category="phishing",
-            detected_at=datetime.now(timezone.utc),
-            confidence=0.95,
-            details={"targetOrganization": "Example Corp"},
-        ),
         identifiers=[
             IdentifierLookup(
                 type="email",
@@ -74,7 +67,27 @@ def main():
             f"    - {identifier.type}: {identifier.display_value} (confidence: {identifier.confidence})"
         )
 
-    print("\nDetection created successfully!")
+    # Create a detection with freeform data attached
+    print("\n2. Creating detection with freeform details data...")
+    entry2 = client.create_detection(
+        description="Automated scan found suspicious domain",
+        details=DetectionDetails(
+            data={
+                "scanEngine": "PhishDetector v2.1",
+                "targetOrganization": "Example Corp",
+                "riskScore": 95,
+            },
+        ),
+        identifiers=[
+            IdentifierLookup(type="url", value="https://fake-bank.example.com", confidence=0.9),
+        ],
+    )
+
+    print(f"Created journal entry: {entry2.id}")
+    print(f"  Type: {entry2.type}")
+    print(f"  Description: {entry2.description}")
+
+    print("\nDetections created successfully!")
 
 
 def example_with_failed_identifiers():
@@ -94,11 +107,6 @@ def example_with_failed_identifiers():
     print("\n1. Creating detection with mixed valid/invalid identifiers...")
     entry = client.create_detection(
         description="Detection with identifier validation examples",
-        details=DetectionDetails(
-            category="test",
-            detected_at=datetime.now(timezone.utc),
-            confidence=0.9,
-        ),
         identifiers=[
             # Valid identifiers
             IdentifierLookup(type="phone", value="+12025551234", confidence=0.95),

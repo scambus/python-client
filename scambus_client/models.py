@@ -621,28 +621,52 @@ class DetectionDetails:
     Details for a detection journal entry.
 
     Attributes:
-        category: Detection category (e.g., "phishing", "scam", "malware")
-        detected_at: When the detection occurred
-        confidence: Confidence score (0.0 to 1.0, optional)
-        details: Additional detection details (optional)
+        data: Freeform detection data (replaces deprecated 'details')
+        category: Deprecated - use tags instead for categorization.
+        details: Deprecated - use 'data' instead.
+        confidence: Deprecated - set confidence on IdentifierLookup instead.
     """
 
-    category: str
-    detected_at: datetime
-    confidence: Optional[float] = None
+    data: Optional[Dict[str, Any]] = None
+    # Deprecated fields
+    category: Optional[str] = None
     details: Optional[Dict[str, Any]] = None
+    confidence: Optional[float] = None
+
+    def __post_init__(self):
+        import warnings
+
+        if self.category is not None:
+            warnings.warn(
+                "DetectionDetails.category is deprecated and will not be emitted. "
+                "Use tags on the journal entry for categorization instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        if self.details is not None:
+            warnings.warn(
+                "DetectionDetails.details is deprecated. "
+                "Use the 'data' field instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        if self.confidence is not None:
+            warnings.warn(
+                "DetectionDetails.confidence is deprecated and has no effect. "
+                "Set confidence on individual IdentifierLookup objects instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API request."""
-        data = {
-            "category": self.category,
-            "detectedAt": self.detected_at.isoformat(),
-        }
-        if self.confidence is not None:
-            data["confidence"] = self.confidence
-        if self.details:
-            data["details"] = self.details
-        return data
+        result = {}
+        # Prefer 'data', fall back to deprecated 'details' for compat
+        if self.data is not None:
+            result["data"] = self.data
+        elif self.details is not None:
+            result["data"] = self.details
+        return result
 
 
 @dataclass
@@ -886,25 +910,25 @@ class ObservationDetails:
     Attributes:
         observation_type: Type of observation (e.g., "behavioral_pattern", "system_anomaly")
         observed_at: When the observation was made
-        details: Detailed description of what was observed
+        data: Detailed description of what was observed
         significance: Significance level (e.g., "low", "medium", "high", optional)
     """
 
     observation_type: str
     observed_at: datetime
-    details: str
+    data: str
     significance: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API request."""
-        data = {
+        result = {
             "observationType": self.observation_type,
             "observedAt": self.observed_at.isoformat(),
-            "details": self.details,
+            "data": self.data,
         }
         if self.significance:
-            data["significance"] = self.significance
-        return data
+            result["significance"] = self.significance
+        return result
 
 
 @dataclass

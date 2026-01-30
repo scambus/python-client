@@ -815,7 +815,7 @@ class ScambusClient:
 
         Args:
             description: Detection description
-            details: Detection details - use DetectionDetails or dict with category, confidence, etc.
+            details: Optional detection details - use DetectionDetails(data={...}) or a plain dict.
             identifiers: List of suspect/scammer identifiers found
             our_identifier_lookups: List of honeypot/bot identifiers (our side)
             evidence: Evidence (screenshots, etc.)
@@ -837,19 +837,13 @@ class ScambusClient:
 
         Example:
             ```python
-            from datetime import datetime, timezone
             from scambus_client import (
                 DetectionDetails, IdentifierLookup, TagLookup
             )
 
-            # Using typed classes (recommended)
+            # Simple detection (no details needed)
             entry = client.create_detection(
                 description="Phishing website detected",
-                details=DetectionDetails(
-                    category="phishing",
-                    detected_at=datetime.now(timezone.utc),
-                    confidence=0.95,
-                ),
                 identifiers=[
                     IdentifierLookup(
                         type="email",
@@ -860,6 +854,21 @@ class ScambusClient:
                 tags=[
                     TagLookup(tag_name="HighPriority"),
                     TagLookup(tag_name="ScamType", tag_value="Phishing"),
+                ],
+            )
+
+            # With freeform detection data
+            entry = client.create_detection(
+                description="Automated scan found phishing site",
+                details=DetectionDetails(
+                    data={
+                        "maliciousUrl": "https://fake-bank.com",
+                        "scanEngine": "PhishDetector v2.1",
+                        "riskScore": 95,
+                    },
+                ),
+                identifiers=[
+                    IdentifierLookup(type="url", value="https://fake-bank.com")
                 ],
             )
 

@@ -47,10 +47,7 @@ def create_detection_with_screenshot(screenshot_path: str, url: str, identifiers
     entry = client.create_detection(
         description=f"Phishing website detected: {url}",
         details=DetectionDetails(
-            category="phishing",
-            confidence=0.95,
-            detected_at=datetime.now(),
-            details={
+            data={
                 "maliciousUrl": url,
                 "scanEngine": "PhishDetector v2.1",
                 "riskScore": 95,

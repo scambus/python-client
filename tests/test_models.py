@@ -61,26 +61,75 @@ class TestDetectionDetails:
 
     def test_detection_details_creation(self):
         """Test creating detection details."""
-        from datetime import datetime
+        details = DetectionDetails(
+            data={"threat_type": "phishing"},
+        )
 
-        detected_at = datetime(2025, 1, 15, 10, 0, 0)
-        details = DetectionDetails(category="phishing", detected_at=detected_at, confidence=0.9)
-
-        assert details.category == "phishing"
-        assert details.confidence == 0.9
-        assert details.detected_at == detected_at
+        assert details.data == {"threat_type": "phishing"}
+        assert details.category is None
+        assert details.confidence is None
 
     def test_detection_details_to_dict(self):
         """Test converting detection details to dict."""
-        from datetime import datetime
-
-        detected_at = datetime(2025, 1, 15, 10, 0, 0)
-        details = DetectionDetails(category="malware", detected_at=detected_at, confidence=0.85)
+        details = DetectionDetails(
+            data={"method": "url_analysis"},
+        )
         data = details.to_dict()
 
-        assert data["category"] == "malware"
-        assert data["confidence"] == 0.85
-        assert "detectedAt" in data
+        assert data["data"] == {"method": "url_analysis"}
+        assert "category" not in data
+        assert "confidence" not in data
+
+    def test_detection_details_to_dict_fallback_from_details(self):
+        """Test that deprecated 'details' field falls back to 'data' key in to_dict."""
+        import warnings
+
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            det = DetectionDetails(
+                details={"legacy_key": "value"},
+            )
+        data = det.to_dict()
+
+        assert data["data"] == {"legacy_key": "value"}
+        assert "details" not in data
+
+    def test_detection_details_confidence_deprecation(self):
+        """Test that setting confidence emits a deprecation warning."""
+        import warnings
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            DetectionDetails(confidence=0.85)
+            assert len(w) == 1
+            assert issubclass(w[0].category, DeprecationWarning)
+            assert "IdentifierLookup" in str(w[0].message)
+
+    def test_detection_details_category_deprecation(self):
+        """Test that setting category emits a deprecation warning."""
+        import warnings
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            DetectionDetails(category="phishing")
+            assert any(
+                issubclass(warning.category, DeprecationWarning)
+                and "category" in str(warning.message)
+                for warning in w
+            )
+
+    def test_detection_details_details_deprecation(self):
+        """Test that setting details emits a deprecation warning."""
+        import warnings
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            DetectionDetails(details={"key": "val"})
+            assert any(
+                issubclass(warning.category, DeprecationWarning)
+                and "details" in str(warning.message).lower()
+                for warning in w
+            )
 
 
 class TestPhoneCallDetails:

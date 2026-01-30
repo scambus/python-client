@@ -7,7 +7,6 @@ using typed classes for identifiers, details, and tags.
 """
 
 import os
-from datetime import datetime, timezone
 from scambus_client import (
     ScambusClient,
     DetectionDetails,
@@ -49,10 +48,7 @@ def main():
     entry = client.create_detection(
         description="Bank transfer scam detected",
         details=DetectionDetails(
-            category="bank_transfer_scam",
-            detected_at=datetime.now(timezone.utc),
-            confidence=0.9,
-            details={
+            data={
                 "reportSource": "Customer Report",
                 "amountLost": 5000.00,
                 "currency": "USD",

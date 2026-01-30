@@ -1314,9 +1314,6 @@ def create_text_conversation(
 
 @journal.command()
 @click.option("--description", required=True, help="Detection description")
-@click.option(
-    "--confidence", type=float, default=0.0, help="Detection confidence (0.0-1.0, default: 0.0)"
-)
 @click.option("--identifiers", help="JSON array of identifiers")
 @click.option(
     "--screenshot", multiple=True, type=click.Path(exists=True), help="Detection screenshot(s)"
@@ -1353,7 +1350,6 @@ def create_text_conversation(
 def create_detection(
     ctx,
     description,
-    confidence,
     identifiers,
     screenshot,
     attach,
@@ -1393,7 +1389,7 @@ def create_detection(
             "type": "detection",
             "description": description,
             "performed_at": now_iso(),
-            "details": {"confidence": confidence},
+            "details": {},
         }
 
         if identifiers:

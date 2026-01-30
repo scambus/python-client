@@ -39,7 +39,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install linters
-        run: pip install black==23.12.1 ruff
+        run: pip install black==25.9.0 ruff
       - name: Check Black formatting
         run: black --check --config pyproject.toml .
       - name: Run Ruff

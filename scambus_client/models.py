@@ -645,8 +645,7 @@ class DetectionDetails:
             )
         if self.details is not None:
             warnings.warn(
-                "DetectionDetails.details is deprecated. "
-                "Use the 'data' field instead.",
+                "DetectionDetails.details is deprecated. " "Use the 'data' field instead.",
                 DeprecationWarning,
                 stacklevel=2,
             )

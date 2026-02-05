@@ -328,10 +328,11 @@ def execute_view(ctx, view_id, limit, cursor, follow, output_json):
     help="View visibility (default: organization)",
 )
 @click.option("--filter-criteria", help="Filter criteria as JSON string")
+@click.option("--query-string", help="Lucene-style query string for filtering")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 @click.pass_context
 def create_view(
-    ctx, name, entity_type, description, alias, visibility, filter_criteria, output_json
+    ctx, name, entity_type, description, alias, visibility, filter_criteria, query_string, output_json
 ):
     """Create a new view (saved query).
 
@@ -358,6 +359,7 @@ def create_view(
             alias=alias,
             visibility=visibility,
             filter_criteria=criteria,
+            query_string=query_string,
         )
 
         if output_json:
@@ -397,9 +399,10 @@ def create_view(
     help="New visibility",
 )
 @click.option("--filter-criteria", help="New filter criteria as JSON string")
+@click.option("--query-string", help="Lucene-style query string for filtering")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 @click.pass_context
-def update_view(ctx, view_id, name, description, visibility, filter_criteria, output_json):
+def update_view(ctx, view_id, name, description, visibility, filter_criteria, query_string, output_json):
     """Update an existing view.
 
     Examples:
@@ -424,6 +427,7 @@ def update_view(ctx, view_id, name, description, visibility, filter_criteria, ou
             description=description,
             visibility=visibility,
             filter_criteria=criteria,
+            query_string=query_string,
         )
 
         if output_json:

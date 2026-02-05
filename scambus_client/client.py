@@ -55,6 +55,7 @@ from .models import (
     View,
 )
 from .types import (
+    FilterCriteriaInput,
     TagLookupInput,
     StreamFilterInput,
     ViewFilterInput,
@@ -69,6 +70,10 @@ def build_identifier_type_filter(
 ) -> str:
     """
     Build a JSONPath filter expression for filtering by identifier type(s).
+
+    .. deprecated::
+        Use :class:`FilterCriteria` with ``types`` field instead. Pass it via
+        the ``filter_criteria`` parameter of ``create_stream()``.
 
     This is a helper function that generates the filter_expression parameter
     for create_stream() to filter identifiers by type.
@@ -111,6 +116,7 @@ def build_identifier_type_filter(
         "crypto_wallet",
         "social_media",
         "payment_token",
+        "zelle",
     }
     for itype in identifier_types:
         if itype not in valid_types:
@@ -151,6 +157,10 @@ def build_combined_filter(
 ) -> Optional[str]:
     """
     Build a complex JSONPath filter expression combining multiple conditions.
+
+    .. deprecated::
+        Use :class:`FilterCriteria` instead. Pass it via the ``filter_criteria``
+        parameter of ``create_stream()``.
 
     This helper function makes it easy to create filter expressions that combine
     identifier type filtering with confidence ranges and custom conditions.
@@ -1783,6 +1793,8 @@ class ScambusClient:
         parent_journal_entry_id: Optional[str] = None,
         include_children: bool = False,
         include_test: bool = False,
+        filter_criteria: Optional[FilterCriteriaInput] = None,
+        include_originator: bool = False,
     ) -> Dict[str, Any]:
         """
         Query journal entries with advanced filtering (page size fixed at 100).
@@ -1799,12 +1811,15 @@ class ScambusClient:
             details: JSONB details filters (e.g., {"direction": "inbound", "platform": "pstn"})
             order_by: Column to sort by (default: "performed_at")
             order_desc: Sort descending (default: True)
-            cursor: Cursor for pagination (UUID from previous response)
+            cursor: Cursor for pagination (base64 from previous response)
             include_identifiers: Include related identifiers in response
             include_evidence: Include related evidence in response
             parent_journal_entry_id: Query children of a specific parent entry
             include_children: Include child entries in results (default: only shows top-level entries)
             include_test: Include test/demo data in results (default: False, test data excluded)
+            filter_criteria: FilterCriteria object or dict with full filter fields.
+                           When provided, individual params are merged on top.
+            include_originator: Include originator data in response (default: False)
 
         Returns:
             Dict with keys:
@@ -1812,6 +1827,7 @@ class ScambusClient:
                 - nextCursor: Cursor for next page (str or None)
                 - hasMore: Whether more results exist (bool)
                 - count: Number of results in this page (int)
+                - estimatedTotal: Estimated total count (int or None, first page only)
 
         Example:
             ```python
@@ -1826,60 +1842,76 @@ class ScambusClient:
             for entry in result['data']:
                 print(f"{entry.description} - {entry.performed_at}")
 
+            # Using FilterCriteria
+            from scambus_client.types import FilterCriteria
+            result = client.query_journal_entries(
+                filter_criteria=FilterCriteria(
+                    types=["phone_call", "detection"],
+                    min_confidence=0.5,
+                    status=["open"],
+                )
+            )
+
             # Fetch next page
             if result['hasMore']:
                 next_result = client.query_journal_entries(
                     entry_type="phone_call",
-                    details={"direction": "inbound"},
                     cursor=result['nextCursor']
                 )
             ```
         """
-        # Build request body
-        body: Dict[str, Any] = {
-            "orderBy": order_by,
-            "orderDesc": order_desc,
-            "includeIdentifiers": include_identifiers,
-            "includeEvidence": include_evidence,
-        }
+        # Start with filter_criteria if provided
+        if filter_criteria is not None:
+            body = to_dict(filter_criteria)
+        else:
+            body = {}
 
-        if search_query:
-            body["searchQuery"] = search_query
-        if entry_type:
-            body["type"] = entry_type
-        if originator_type:
-            body["originatorType"] = originator_type
-        if originator_id:
-            body["originatorId"] = originator_id
-        if min_confidence is not None:
-            body["minConfidence"] = min_confidence
-        if max_confidence is not None:
-            body["maxConfidence"] = max_confidence
+        # Structural params (not part of FilterCriteria)
+        body["order_by"] = order_by
+        body["order_desc"] = order_desc
+        body["include_identifiers"] = include_identifiers
+        body["include_evidence"] = include_evidence
+
         if cursor:
             body["cursor"] = cursor
+        if parent_journal_entry_id:
+            body["parent_journal_entry_id"] = parent_journal_entry_id
+        if include_children:
+            body["include_children"] = include_children
+        if include_originator:
+            body["include_originator"] = include_originator
+
+        # Overlay individual filter params (backward compat)
+        if search_query:
+            body["search_query"] = search_query
+        if entry_type:
+            body["types"] = [entry_type]
+        if originator_type:
+            body["originator_types"] = [originator_type]
+        if originator_id:
+            body["originator_ids"] = [originator_id]
+        if min_confidence is not None:
+            body["min_confidence"] = min_confidence
+        if max_confidence is not None:
+            body["max_confidence"] = max_confidence
+        if include_test:
+            body["is_test"] = True
 
         # Handle datetime objects
         if performed_after:
             if isinstance(performed_after, datetime):
-                body["performedAfter"] = performed_after.isoformat()
+                body["performed_after"] = performed_after.isoformat()
             else:
-                body["performedAfter"] = performed_after
+                body["performed_after"] = performed_after
 
         if performed_before:
             if isinstance(performed_before, datetime):
-                body["performedBefore"] = performed_before.isoformat()
+                body["performed_before"] = performed_before.isoformat()
             else:
-                body["performedBefore"] = performed_before
+                body["performed_before"] = performed_before
 
         if details:
             body["details"] = details
-
-        if parent_journal_entry_id:
-            body["parentJournalEntryId"] = parent_journal_entry_id
-        if include_children:
-            body["includeChildren"] = include_children
-        if include_test:
-            body["includeTest"] = include_test
 
         # Make request
         response = self._request("POST", "/journal/query", json_data=body)
@@ -1890,6 +1922,7 @@ class ScambusClient:
             "nextCursor": response.get("nextCursor"),
             "hasMore": response.get("hasMore", False),
             "count": response.get("count", 0),
+            "estimatedTotal": response.get("estimatedTotal"),
         }
 
     def create_stream_from_query(
@@ -2036,12 +2069,14 @@ class ScambusClient:
         self,
         name: str,
         entity_type: str,
-        filter_criteria: Optional[ViewFilterInput] = None,
+        filter_criteria: Optional[Union[ViewFilterInput, FilterCriteriaInput]] = None,
         sort_order: Optional[ViewSortOrderInput] = None,
         description: Optional[str] = None,
         alias: Optional[str] = None,
         visibility: str = "organization",
         view_type: str = "standard",
+        query_string: Optional[str] = None,
+        display_settings: Optional[Dict[str, Any]] = None,
     ) -> View:
         """
         Create a new view (saved query).
@@ -2049,26 +2084,32 @@ class ScambusClient:
         Args:
             name: View name
             entity_type: Type of entities ("cases", "identifiers", "evidence", "journal")
-            filter_criteria: Filter criteria (ViewFilter object or dict)
+            filter_criteria: Filter criteria (FilterCriteria, ViewFilter, or dict)
             sort_order: Sort configuration (ViewSortOrder object or dict)
             description: View description (optional)
             alias: Short alias for the view (optional)
             visibility: "private", "organization", or "public" (default: "organization")
             view_type: "standard" or "journal_entry" (default: "standard")
+            query_string: Lucene-style query string (optional)
+            display_settings: Display configuration dict (optional)
 
         Returns:
             Created View object
 
         Example:
+            ```python
+            from scambus_client.types import FilterCriteria
             view = client.create_view(
                 name="High Confidence Detections",
                 entity_type="journal",
-                filter_criteria=ViewFilter(
+                filter_criteria=FilterCriteria(
+                    types=["detection"],
                     min_confidence=0.9,
-                    entry_types=["detection"]
                 ),
+                query_string="status:open AND priority:high",
                 sort_order=ViewSortOrder(field="created_at", direction="desc")
             )
+            ```
         """
         body = {
             "name": name,
@@ -2085,6 +2126,10 @@ class ScambusClient:
             body["filter_criteria"] = to_dict(filter_criteria)
         if sort_order:
             body["sort_order"] = to_dict(sort_order)
+        if query_string:
+            body["query_string"] = query_string
+        if display_settings:
+            body["display_settings"] = display_settings
 
         response = self._request("POST", "/views", json_data=body)
         return View.from_dict(response)
@@ -2094,9 +2139,11 @@ class ScambusClient:
         view_id: str,
         name: Optional[str] = None,
         description: Optional[str] = None,
-        filter_criteria: Optional[ViewFilterInput] = None,
+        filter_criteria: Optional[Union[ViewFilterInput, FilterCriteriaInput]] = None,
         sort_order: Optional[ViewSortOrderInput] = None,
         visibility: Optional[str] = None,
+        query_string: Optional[str] = None,
+        display_settings: Optional[Dict[str, Any]] = None,
     ) -> View:
         """
         Update an existing view.
@@ -2105,9 +2152,11 @@ class ScambusClient:
             view_id: View UUID
             name: New name (optional)
             description: New description (optional)
-            filter_criteria: New filter criteria (optional)
+            filter_criteria: New filter criteria (FilterCriteria, ViewFilter, or dict) (optional)
             sort_order: New sort order (optional)
             visibility: New visibility (optional)
+            query_string: Lucene-style query string (optional)
+            display_settings: Display configuration dict (optional)
 
         Returns:
             Updated View object
@@ -2124,6 +2173,10 @@ class ScambusClient:
             body["sort_order"] = to_dict(sort_order)
         if visibility is not None:
             body["visibility"] = visibility
+        if query_string is not None:
+            body["query_string"] = query_string
+        if display_settings is not None:
+            body["display_settings"] = display_settings
 
         response = self._request("PUT", f"/views/{view_id}", json_data=body)
         return View.from_dict(response)
@@ -2784,13 +2837,20 @@ class ScambusClient:
         name: str,
         data_type: str = "journal_entry",
         identifier_types: Optional[Union[str, List[str]]] = None,
-        min_confidence: float = 0.0,
-        max_confidence: float = 1.0,
+        min_confidence: Optional[float] = None,
+        max_confidence: Optional[float] = None,
         is_active: bool = True,
         retention_days: Optional[int] = None,
         backfill_historical: bool = False,
         backfill_from_date: Optional[str] = None,
         filter_expression: Optional[str] = None,
+        filter_criteria: Optional[FilterCriteriaInput] = None,
+        description: Optional[str] = None,
+        include_originator: bool = False,
+        include_journal_entries: bool = False,
+        batch_size: Optional[int] = None,
+        rate_limit_per_minute: Optional[int] = None,
+        shared_org_ids: Optional[List[str]] = None,
     ) -> ExportStream:
         """
         Create a new export stream.
@@ -2798,87 +2858,92 @@ class ScambusClient:
         Args:
             name: Stream name
             data_type: Stream data type ("journal_entry" or "identifier")
-            identifier_types: Identifier type(s) to filter. Can be a single string or list.
-                            Valid types: phone, email, url, bank_account, crypto_wallet,
-                            social_media, payment_token.
-                            Automatically converted to filter_expression. (optional)
-            min_confidence: Minimum confidence score (0.0-1.0, default: 0.0)
-            max_confidence: Maximum confidence score (0.0-1.0, default: 1.0)
+            identifier_types: Identifier type(s) to filter (deprecated, use filter_criteria)
+            min_confidence: Minimum confidence score (deprecated, use filter_criteria)
+            max_confidence: Maximum confidence score (deprecated, use filter_criteria)
             is_active: Whether stream is active (default: True)
             retention_days: Days to retain data (default: 30)
             backfill_historical: Trigger backfill after creating stream (default: False)
             backfill_from_date: Only backfill from this date (RFC3339 format, optional)
-            filter_expression: Custom JSONPath filter expression (optional).
-                             If identifier_types is also provided, the expressions will be
-                             combined with AND logic.
+            filter_expression: Custom JSONPath filter expression (deprecated, use filter_criteria)
+            filter_criteria: FilterCriteria object or dict with full filter fields.
+                           Preferred over identifier_types/min_confidence/max_confidence.
+            description: Stream description (optional)
+            include_originator: Include originator data in messages (default: False)
+            include_journal_entries: Include journal entries for identifier streams (default: False)
+            batch_size: Number of messages per batch (optional)
+            rate_limit_per_minute: Rate limit for consumption (optional)
+            shared_org_ids: Organization IDs to share the stream with (optional)
 
         Returns:
             Created ExportStream object
 
         Examples:
             ```python
-            # Filter by single identifier type
+            # Using filter_criteria (preferred)
+            from scambus_client.types import FilterCriteria
+            stream = client.create_stream(
+                name="high-confidence-phones",
+                data_type="identifier",
+                filter_criteria=FilterCriteria(
+                    types=["phone", "email"],
+                    min_confidence=0.8,
+                    country="US",
+                ),
+                backfill_historical=True,
+            )
+
+            # Legacy convenience params (still supported)
             stream = client.create_stream(
                 name="phone-numbers",
                 data_type="identifier",
                 identifier_types="phone",
                 min_confidence=0.8
             )
-
-            # Filter by multiple identifier types
-            stream = client.create_stream(
-                name="contact-info",
-                data_type="identifier",
-                identifier_types=["phone", "email"],
-                min_confidence=0.9
-            )
-
-            # Use custom filter expression
-            stream = client.create_stream(
-                name="whatsapp-only",
-                data_type="identifier",
-                identifier_types="social_media",
-                filter_expression='$.details.platform == "whatsapp"'
-            )
-
-            # For advanced users: Use filter_expression directly
-            stream = client.create_stream(
-                name="advanced-filter",
-                data_type="identifier",
-                filter_expression='($.type == "phone" || $.type == "email") && $.confidence >= 0.95'
-            )
             ```
-
-        Note:
-            The identifier_types parameter is a convenience helper that automatically
-            generates the appropriate filter_expression. You can also provide
-            filter_expression directly for more complex filtering needs.
         """
-        # Build filter expression from identifier_types if provided
-        combined_filter = filter_expression
-        if identifier_types:
-            type_filter = build_identifier_type_filter(identifier_types, data_type=data_type)
-            if combined_filter:
-                # Combine with existing filter using AND
-                combined_filter = f"({type_filter}) && ({combined_filter})"
-            else:
-                combined_filter = type_filter
-
-        data = {
+        data: Dict[str, Any] = {
             "name": name,
             "data_type": data_type,
-            "min_confidence": min_confidence,
-            "max_confidence": max_confidence,
-            "is_active": is_active,
             "backfill_historical": backfill_historical,
         }
 
+        # Build filter_criteria from params
+        if filter_criteria is not None:
+            data["filter_criteria"] = to_dict(filter_criteria)
+        else:
+            # Build filter_criteria from legacy params
+            fc: Dict[str, Any] = {}
+            if identifier_types:
+                if isinstance(identifier_types, str):
+                    identifier_types = [identifier_types]
+                fc["types"] = identifier_types
+            if min_confidence is not None:
+                fc["min_confidence"] = min_confidence
+            if max_confidence is not None:
+                fc["max_confidence"] = max_confidence
+            if fc:
+                data["filter_criteria"] = fc
+
+        if description:
+            data["description"] = description
         if retention_days is not None:
             data["retention_days"] = retention_days
         if backfill_from_date:
             data["backfill_from_date"] = backfill_from_date
-        if combined_filter:
-            data["filter_expression"] = combined_filter
+        if include_originator:
+            data["include_originator"] = include_originator
+        if include_journal_entries:
+            data["include_journal_entries"] = include_journal_entries
+        if batch_size is not None:
+            data["batch_size"] = batch_size
+        if rate_limit_per_minute is not None:
+            data["rate_limit_per_minute"] = rate_limit_per_minute
+        if shared_org_ids:
+            data["shared_org_ids"] = shared_org_ids
+        # Legacy filter_expression (kept for backward compat)
+        if filter_expression:
+            data["filter_expression"] = filter_expression
 
         response = self._request("POST", "/export-streams", json_data=data)
         return ExportStream.from_dict(response)
@@ -2887,34 +2952,46 @@ class ScambusClient:
         self,
         data_type: str = "identifier",
         identifier_types: Optional[Union[str, List[str]]] = None,
-        min_confidence: float = 0.0,
-        max_confidence: float = 1.0,
+        min_confidence: Optional[float] = None,
+        max_confidence: Optional[float] = None,
         filter_expression: Optional[str] = None,
         name: Optional[str] = None,
         view_id: Optional[str] = None,
+        filter_criteria: Optional[FilterCriteriaInput] = None,
+        include_originator: bool = False,
+        include_journal_entries: bool = False,
+        batch_size: Optional[int] = None,
     ) -> ExportStream:
         """
         Create a temporary export stream that is automatically cleaned up after 1 hour of inactivity.
 
         Args:
             data_type: Stream data type ("journal_entry" or "identifier")
-            identifier_types: Identifier type(s) to filter (optional)
-            min_confidence: Minimum confidence score (0.0-1.0, default: 0.0)
-            max_confidence: Maximum confidence score (0.0-1.0, default: 1.0)
-            filter_expression: Custom JSONPath filter expression (optional)
+            identifier_types: Identifier type(s) to filter (deprecated, use filter_criteria)
+            min_confidence: Minimum confidence score (deprecated, use filter_criteria)
+            max_confidence: Maximum confidence score (deprecated, use filter_criteria)
+            filter_expression: Custom JSONPath filter expression (deprecated, use filter_criteria)
             name: Stream name (auto-generated if not provided)
-            view_id: View ID to use for filtering (stream will match view's filter criteria) (optional)
+            view_id: View ID to use for filtering (optional)
+            filter_criteria: FilterCriteria object or dict with full filter fields.
+                           Preferred over identifier_types/min_confidence/max_confidence.
+            include_originator: Include originator data in messages (default: False)
+            include_journal_entries: Include journal entries for identifier streams (default: False)
+            batch_size: Number of messages per batch (optional)
 
         Returns:
             Created ExportStream object
 
         Example:
             ```python
-            # Create temporary phone stream
+            # Using filter_criteria (preferred)
+            from scambus_client.types import FilterCriteria
             stream = client.create_temporary_stream(
                 data_type="identifier",
-                identifier_types="phone",
-                min_confidence=0.8
+                filter_criteria=FilterCriteria(
+                    types=["phone"],
+                    min_confidence=0.8,
+                ),
             )
 
             # Create temporary stream for a specific view
@@ -2924,27 +3001,39 @@ class ScambusClient:
             )
             ```
         """
-        # Build filter expression from identifier_types if provided
-        combined_filter = filter_expression
-        if identifier_types:
-            type_filter = build_identifier_type_filter(identifier_types, data_type=data_type)
-            if combined_filter:
-                combined_filter = f"({type_filter}) && ({combined_filter})"
-            else:
-                combined_filter = type_filter
-
-        data = {
+        data: Dict[str, Any] = {
             "data_type": data_type,
-            "min_confidence": min_confidence,
-            "max_confidence": max_confidence,
         }
+
+        # Build filter_criteria from params
+        if filter_criteria is not None:
+            data["filter_criteria"] = to_dict(filter_criteria)
+        else:
+            fc: Dict[str, Any] = {}
+            if identifier_types:
+                if isinstance(identifier_types, str):
+                    identifier_types = [identifier_types]
+                fc["types"] = identifier_types
+            if min_confidence is not None:
+                fc["min_confidence"] = min_confidence
+            if max_confidence is not None:
+                fc["max_confidence"] = max_confidence
+            if fc:
+                data["filter_criteria"] = fc
 
         if name:
             data["name"] = name
-        if combined_filter:
-            data["filter_expression"] = combined_filter
         if view_id:
             data["view_id"] = view_id
+        if include_originator:
+            data["include_originator"] = include_originator
+        if include_journal_entries:
+            data["include_journal_entries"] = include_journal_entries
+        if batch_size is not None:
+            data["batch_size"] = batch_size
+        # Legacy filter_expression (kept for backward compat)
+        if filter_expression:
+            data["filter_expression"] = filter_expression
 
         response = self._request("POST", "/export-streams/temporary", json_data=data)
         return ExportStream.from_dict(response)
@@ -3177,6 +3266,152 @@ class ScambusClient:
             "POST", f"/export-streams/{stream_id}/backfill-identifiers", params=params
         )
         return response
+
+    # File Export Methods
+
+    def create_file_export(
+        self,
+        source_type: str,
+        entity_type: str,
+        format: str = "csv",
+        source_id: Optional[str] = None,
+        filter_criteria: Optional[FilterCriteriaInput] = None,
+        name: Optional[str] = None,
+        columns: Optional[List[str]] = None,
+        limit: Optional[int] = None,
+        date_range_start: Optional[str] = None,
+        date_range_end: Optional[str] = None,
+        include_ours: bool = False,
+        format_options: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Create a file export (CSV, JSON, etc.) from a view or search.
+
+        Args:
+            source_type: Source type ("view" or "search")
+            entity_type: Entity type ("cases", "identifiers", "evidence", "journal")
+            format: Export format ("csv", "json", etc.)
+            source_id: View ID when source_type is "view" (optional)
+            filter_criteria: FilterCriteria for filtering exported data (optional)
+            name: Export name (optional, auto-generated if not provided)
+            columns: List of column names to include (optional)
+            limit: Maximum number of rows (optional)
+            date_range_start: Start of date range, ISO-8601 (optional)
+            date_range_end: End of date range, ISO-8601 (optional)
+            include_ours: Include items from your own organization (default: False)
+            format_options: Format-specific options dict (optional)
+
+        Returns:
+            File export dict with id, status, and other metadata
+
+        Example:
+            ```python
+            export = client.create_file_export(
+                source_type="view",
+                source_id="my-view-id",
+                entity_type="journal",
+                format="csv",
+                columns=["description", "performed_at", "type"],
+                limit=10000,
+            )
+            print(f"Export ID: {export['id']}, Status: {export['status']}")
+            ```
+        """
+        body: Dict[str, Any] = {
+            "source_type": source_type,
+            "entity_type": entity_type,
+            "format": format,
+        }
+
+        if source_id:
+            body["source_id"] = source_id
+        if filter_criteria is not None:
+            body["filter_criteria"] = to_dict(filter_criteria)
+        if name:
+            body["name"] = name
+        if columns:
+            body["columns"] = columns
+        if limit is not None:
+            body["limit"] = limit
+        if date_range_start:
+            body["date_range_start"] = date_range_start
+        if date_range_end:
+            body["date_range_end"] = date_range_end
+        if include_ours:
+            body["include_ours"] = include_ours
+        if format_options:
+            body["format_options"] = format_options
+
+        return self._request("POST", "/file-exports", json_data=body)
+
+    def list_file_exports(self) -> List[Dict[str, Any]]:
+        """
+        List file exports.
+
+        Returns:
+            List of file export dicts
+        """
+        response = self._request("GET", "/file-exports")
+        if isinstance(response, list):
+            return response
+        return []
+
+    def get_file_export(self, export_id: str) -> Dict[str, Any]:
+        """
+        Get a file export by ID.
+
+        Args:
+            export_id: File export UUID
+
+        Returns:
+            File export dict
+        """
+        return self._request("GET", f"/file-exports/{export_id}")
+
+    def download_file_export(self, export_id: str, output_path: str) -> None:
+        """
+        Download a completed file export to a local file.
+
+        Args:
+            export_id: File export UUID
+            output_path: Local file path to save the download
+
+        Example:
+            ```python
+            client.download_file_export("export-id", "output.csv")
+            ```
+        """
+        response = self.session.get(
+            f"{self.api_url}/file-exports/{export_id}/download",
+            timeout=self.timeout,
+            stream=True,
+        )
+        response.raise_for_status()
+        with open(output_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+    def rename_file_export(self, export_id: str, name: str) -> Dict[str, Any]:
+        """
+        Rename a file export.
+
+        Args:
+            export_id: File export UUID
+            name: New name
+
+        Returns:
+            Updated file export dict
+        """
+        return self._request("PATCH", f"/file-exports/{export_id}/rename", json_data={"name": name})
+
+    def delete_file_export(self, export_id: str) -> None:
+        """
+        Delete a file export.
+
+        Args:
+            export_id: File export UUID
+        """
+        self._request("DELETE", f"/file-exports/{export_id}")
 
     # User Methods
 
@@ -3635,64 +3870,110 @@ class ScambusClient:
         types: Optional[List[str]] = None,
         min_confidence: Optional[float] = None,
         max_confidence: Optional[float] = None,
-        limit: int = 50,
+        limit: int = 100,
         include_test: bool = False,
-    ) -> List[Identifier]:
+        filter_criteria: Optional[FilterCriteriaInput] = None,
+        cursor: Optional[str] = None,
+        include_journal_entries: bool = False,
+    ) -> Dict[str, Any]:
         """
-        Search identifiers.
+        Search identifiers with filtering and cursor-based pagination.
 
         Args:
             query: Search query
             types: List of identifier types to filter
             min_confidence: Minimum confidence score
             max_confidence: Maximum confidence score
-            limit: Maximum number of results
+            limit: Maximum number of results (1-500, default: 100)
             include_test: Include test/demo data in results (default: False)
+            filter_criteria: FilterCriteria object or dict with full filter fields.
+                           When provided, individual params (query, types, etc.) are
+                           merged on top of filter_criteria fields.
+            cursor: Base64 cursor from previous response for pagination
+            include_journal_entries: Include related journal entries (default: False)
 
         Returns:
-            List of Identifier objects
+            Dict with keys:
+                - data: List of Identifier objects
+                - nextCursor: Cursor for next page (str or None)
+                - hasMore: Whether more results exist (bool)
+                - estimatedTotal: Estimated total count (int or None, first page only)
 
         Example:
             ```python
-            identifiers = client.search_identifiers(
+            # Simple search
+            result = client.search_identifiers(
                 query="example.com",
                 types=["email", "phone"],
                 min_confidence=0.8
             )
+            for identifier in result['data']:
+                print(identifier.value)
 
-            # Include test data
-            all_identifiers = client.search_identifiers(include_test=True)
+            # Using FilterCriteria
+            from scambus_client.types import FilterCriteria
+            result = client.search_identifiers(
+                filter_criteria=FilterCriteria(
+                    search_query="example.com",
+                    types=["email", "phone"],
+                    min_confidence=0.8,
+                    status=["active"],
+                )
+            )
+
+            # Pagination
+            if result['hasMore']:
+                next_page = client.search_identifiers(
+                    query="example.com",
+                    cursor=result['nextCursor']
+                )
             ```
         """
-        data = {"limit": limit}
+        # Start with filter_criteria if provided
+        if filter_criteria is not None:
+            data = to_dict(filter_criteria)
+        else:
+            data = {}
+
+        # Overlay individual params (backward compat)
+        data["limit"] = limit
         if query:
-            data["searchQuery"] = query
+            data["search_query"] = query
         if types:
-            # Backend expects "type" for a single type filter
             if len(types) == 1:
                 data["type"] = types[0]
             else:
-                # For multiple types, we'll just use the first one
-                # Backend doesn't support multiple type filters
-                data["type"] = types[0]
+                data["types"] = types
         if min_confidence is not None:
-            data["minConfidence"] = min_confidence
+            data["min_confidence"] = min_confidence
         if max_confidence is not None:
-            data["maxConfidence"] = max_confidence
+            data["max_confidence"] = max_confidence
         if include_test:
-            data["includeTest"] = include_test
+            data["is_test"] = True
+        if cursor:
+            data["cursor"] = cursor
+        if include_journal_entries:
+            data["include_journal_entries"] = include_journal_entries
 
         response = self._request("POST", "/search/identifiers", json_data=data)
-        # Backend returns {data: [], nextCursor, hasMore}
+        # Backend returns {data: [], nextCursor, hasMore, estimatedTotal}
         if isinstance(response, dict) and "data" in response:
-            data_list = response["data"]
-            if data_list is None:
-                return []
-            return [Identifier.from_dict(i) for i in data_list]
+            data_list = response.get("data") or []
+            return {
+                "data": [Identifier.from_dict(i) for i in data_list],
+                "nextCursor": response.get("nextCursor"),
+                "hasMore": response.get("hasMore", False),
+                "estimatedTotal": response.get("estimatedTotal"),
+            }
         # Fallback for legacy format
         if isinstance(response, list):
-            return [Identifier.from_dict(i) for i in response]
-        return []
+            return {
+                "data": [Identifier.from_dict(i) for i in response],
+                "nextCursor": None,
+                "hasMore": False,
+                "estimatedTotal": None,
+            }
+        return {"data": [], "nextCursor": None, "hasMore": False, "estimatedTotal": None}
 
     def search_cases(
         self,

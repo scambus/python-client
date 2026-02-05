@@ -31,8 +31,142 @@ class TagLookup:
 
 
 @dataclass
+class FilterCriteria:
+    """Unified filter criteria used across search, query, views, and export streams.
+
+    All fields are optional. Only non-None fields are included in the API request.
+    Field names use snake_case matching the backend Go struct.
+
+    Examples:
+        # Simple type + confidence filter
+        FilterCriteria(types=["phone", "email"], min_confidence=0.8)
+
+        # Date range with text search
+        FilterCriteria(
+            search_query="phishing",
+            created_after="2025-01-01T00:00:00Z",
+            created_before="2025-07-01T00:00:00Z",
+        )
+
+        # Exclusion filters
+        FilterCriteria(
+            status=["open"],
+            excluded_types=["note"],
+            exclude_human_reviewed=True,
+        )
+
+        # Identifier enriched details
+        FilterCriteria(
+            type="phone",
+            toll_free=True,
+            country="US",
+        )
+    """
+
+    # Text search
+    search_query: Optional[str] = None
+    negate_search_query: Optional[bool] = None
+
+    # Core arrays
+    status: Optional[List[str]] = None
+    priority: Optional[List[str]] = None
+    tags: Optional[List[str]] = None
+    types: Optional[List[str]] = None
+    originator_ids: Optional[List[str]] = None
+    proxy_originator_ids: Optional[List[str]] = None
+    originator_types: Optional[List[str]] = None
+    org_ids: Optional[List[str]] = None
+
+    # Single type
+    type: Optional[str] = None
+    identifier_type: Optional[str] = None
+
+    # Confidence
+    confidence_range: Optional[str] = None
+    min_confidence: Optional[float] = None
+    max_confidence: Optional[float] = None
+
+    # Dates (ISO-8601 strings)
+    created_after: Optional[str] = None
+    created_before: Optional[str] = None
+    performed_after: Optional[str] = None
+    performed_before: Optional[str] = None
+    discovered_after: Optional[str] = None
+    discovered_before: Optional[str] = None
+    confidence_changed_after: Optional[str] = None
+    confidence_changed_before: Optional[str] = None
+
+    # Originator config
+    originator_filter_type: Optional[str] = None  # "originator", "proxy_originator", or "both"
+
+    # JSONB
+    details: Optional[Dict[str, Any]] = None
+    excluded_details: Optional[Dict[str, Any]] = None
+
+    # Booleans
+    has_media: Optional[bool] = None
+    has_notes: Optional[bool] = None
+    is_ours: Optional[bool] = None
+    human_reviewed: Optional[bool] = None
+    exclude_human_reviewed: Optional[bool] = None
+    user_pinned: Optional[bool] = None
+    is_test: Optional[bool] = None
+    include_identifiers: Optional[bool] = None
+    include_evidence: Optional[bool] = None
+
+    # Identifier enriched details
+    toll_free: Optional[bool] = None
+    institution: Optional[str] = None
+    platform: Optional[str] = None
+    service: Optional[str] = None
+    area_code: Optional[str] = None
+    region: Optional[str] = None
+    country: Optional[str] = None
+    state: Optional[str] = None
+    domain_category: Optional[str] = None
+    is_private_suffix: Optional[bool] = None
+    routing_number_owner: Optional[str] = None
+
+    # Assignment
+    assigned_to: Optional[str] = None
+
+    # Tag names
+    tag_names: Optional[List[str]] = None
+    excluded_tag_names: Optional[List[str]] = None
+
+    # Exclusion arrays
+    excluded_status: Optional[List[str]] = None
+    excluded_priority: Optional[List[str]] = None
+    excluded_tags: Optional[List[str]] = None
+    excluded_types: Optional[List[str]] = None
+    excluded_originator_types: Optional[List[str]] = None
+    excluded_originator_ids: Optional[List[str]] = None
+    excluded_proxy_originator_ids: Optional[List[str]] = None
+    excluded_org_ids: Optional[List[str]] = None
+
+    # Exclusion config
+    excluded_originator_filter_type: Optional[str] = None
+
+    # Negation flags
+    negate_has_media: Optional[bool] = None
+    negate_is_ours: Optional[bool] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for API, only including non-None fields."""
+        result = {}
+        for k, v in self.__dict__.items():
+            if v is not None:
+                result[k] = v
+        return result
+
+
+@dataclass
 class StreamFilter:
     """Filter configuration for export streams.
+
+    .. deprecated::
+        Use :class:`FilterCriteria` instead. StreamFilter is kept for backward
+        compatibility but FilterCriteria provides the full set of filter fields.
 
     Examples:
         StreamFilter(
@@ -67,6 +201,10 @@ class StreamFilter:
 @dataclass
 class ViewFilter:
     """Filter criteria for saved views.
+
+    .. deprecated::
+        Use :class:`FilterCriteria` instead. ViewFilter is kept for backward
+        compatibility but FilterCriteria provides the full set of filter fields.
 
     Examples:
         ViewFilter(
@@ -122,8 +260,9 @@ class ViewSortOrder:
 
 # Type aliases for flexibility
 TagLookupInput = Union[TagLookup, Dict[str, Any]]
+FilterCriteriaInput = Union[FilterCriteria, Dict[str, Any]]
 StreamFilterInput = Union[StreamFilter, Dict[str, Any]]
-ViewFilterInput = Union[ViewFilter, Dict[str, Any]]
+ViewFilterInput = Union[ViewFilter, FilterCriteria, Dict[str, Any]]
 ViewSortOrderInput = Union[ViewSortOrder, Dict[str, Any]]
 
 

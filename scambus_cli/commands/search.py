@@ -18,7 +18,7 @@ def search():
 @click.option(
     "--type",
     "identifier_type",
-    help="Filter by identifier type (optional). Available types: email, phone, bank_account, crypto_wallet, social_media, zelle",
+    help="Filter by identifier type (optional). Available types: email, phone, bank_account, crypto_wallet, social_media, zelle, url, payment_token",
 )
 @click.option(
     "--limit", type=int, default=20, help="Maximum results to return (default: 20, only for search)"
@@ -36,8 +36,21 @@ def search():
     help="Follow mode: create temporary stream and watch for new identifiers in real-time",
 )
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON format")
+@click.option("--cursor", help="Pagination cursor from previous search result")
+@click.option("--status", multiple=True, help="Filter by status (can specify multiple)")
+@click.option("--tag", "tags", multiple=True, help="Filter by tag (can specify multiple)")
+@click.option("--created-after", help="Created after date (ISO format)")
+@click.option("--created-before", help="Created before date (ISO format)")
+@click.option("--is-ours", is_flag=True, default=None, help="Only show identifiers from your org")
+@click.option(
+    "--filter-json",
+    help="Full FilterCriteria as JSON string (advanced)",
+)
 @click.pass_context
-def identifiers(ctx, query, identifier_type, limit, min_confidence, follow, output_json):
+def identifiers(
+    ctx, query, identifier_type, limit, min_confidence, follow, output_json,
+    cursor, status, tags, created_after, created_before, is_ours, filter_json,
+):
     """Search for identifiers or follow new ones in real-time.
 
     \b
@@ -154,15 +167,63 @@ def identifiers(ctx, query, identifier_type, limit, min_confidence, follow, outp
         return
 
     # Search mode: search existing identifiers
-    if not query:
-        print_error("--query is required when not using --follow")
+    if not query and not filter_json and not identifier_type and not status and not tags:
+        print_error("--query, --type, --status, --tag, or --filter-json is required when not using --follow")
         sys.exit(1)
 
     try:
+        import json as json_mod
+
+        # Build filter_criteria from --filter-json if provided
+        fc = None
+        if filter_json:
+            try:
+                fc = json_mod.loads(filter_json)
+            except json_mod.JSONDecodeError:
+                print_error("Invalid JSON in --filter-json")
+                sys.exit(1)
+
         # Convert single type to list if provided
         types = [identifier_type] if identifier_type else None
 
-        results = client.search_identifiers(query=query, types=types, limit=limit)
+        # Build kwargs
+        kwargs = dict(
+            query=query,
+            types=types,
+            limit=limit,
+            cursor=cursor,
+            filter_criteria=fc,
+        )
+        if min_confidence > 0.0:
+            kwargs["min_confidence"] = min_confidence
+        if status:
+            if fc is None:
+                fc = {}
+            fc["status"] = list(status)
+            kwargs["filter_criteria"] = fc
+        if tags:
+            if fc is None:
+                fc = {}
+            fc["tags"] = list(tags)
+            kwargs["filter_criteria"] = fc
+        if created_after:
+            if fc is None:
+                fc = {}
+            fc["created_after"] = created_after
+            kwargs["filter_criteria"] = fc
+        if created_before:
+            if fc is None:
+                fc = {}
+            fc["created_before"] = created_before
+            kwargs["filter_criteria"] = fc
+        if is_ours:
+            if fc is None:
+                fc = {}
+            fc["is_ours"] = True
+            kwargs["filter_criteria"] = fc
+
+        result = client.search_identifiers(**kwargs)
+        results = result.get("data", [])
 
         if not results:
             print_info("No identifiers found")
@@ -170,16 +231,21 @@ def identifiers(ctx, query, identifier_type, limit, min_confidence, follow, outp
 
         if output_json:
             print_json(
-                [
-                    {
-                        "id": r.id,
-                        "type": r.type,
-                        "display_value": r.display_value,
-                        "confidence": r.confidence,
-                        "created_at": r.created_at.isoformat() if r.created_at else None,
-                    }
-                    for r in results
-                ]
+                {
+                    "data": [
+                        {
+                            "id": r.id,
+                            "type": r.type,
+                            "display_value": r.display_value,
+                            "confidence": r.confidence,
+                            "created_at": r.created_at.isoformat() if r.created_at else None,
+                        }
+                        for r in results
+                    ],
+                    "nextCursor": result.get("nextCursor"),
+                    "hasMore": result.get("hasMore", False),
+                    "estimatedTotal": result.get("estimatedTotal"),
+                }
             )
         else:
             table_data = [
@@ -192,7 +258,13 @@ def identifiers(ctx, query, identifier_type, limit, min_confidence, follow, outp
                 for r in results
             ]
 
-            print_table(table_data, title=f"Identifier Search Results ({len(results)})")
+            total_str = ""
+            if result.get("estimatedTotal"):
+                total_str = f" of ~{result['estimatedTotal']}"
+            print_table(table_data, title=f"Identifier Search Results ({len(results)}{total_str})")
+
+            if result.get("hasMore") and result.get("nextCursor"):
+                print_info(f"More results available. Use --cursor {result['nextCursor']}")
 
     except Exception as e:
         print_error(f"Search failed: {e}")

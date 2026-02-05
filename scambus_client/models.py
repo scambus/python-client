@@ -22,7 +22,7 @@ class IdentifierLookup:
     Identifier lookup for automatic validation and creation.
 
     Attributes:
-        type: Type of identifier (phone, email, bank_account, crypto_wallet, social_media, zelle)
+        type: Type of identifier (phone, email, bank_account, crypto_wallet, social_media, zelle, url, payment_token)
         value: Identifier value in standard format
         confidence: Confidence score (0.0 to 1.0)
         label: Contextual label (e.g., "from", "to", "sender")

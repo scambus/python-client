@@ -152,12 +152,29 @@ def get(ctx, stream_id, output_json):
 )
 @click.option(
     "--filter-expression",
-    help="JSONPath filter expression for advanced filtering",
+    help="JSONPath filter expression (deprecated, use --filter-json)",
 )
 @click.option(
     "--retention-days",
     type=int,
     help="Days to retain data (default: 30)",
+)
+@click.option(
+    "--filter-json",
+    help="Full FilterCriteria as JSON string (preferred over --identifier-type/--min-confidence)",
+)
+@click.option("--description", "stream_description", help="Stream description")
+@click.option("--include-originator", is_flag=True, help="Include originator data in messages")
+@click.option(
+    "--include-journal-entries", is_flag=True, help="Include journal entries for identifier streams"
+)
+@click.option("--batch-size", type=int, help="Number of messages per batch")
+@click.option("--rate-limit", type=int, help="Rate limit per minute")
+@click.option(
+    "--shared-org-id",
+    "shared_org_ids",
+    multiple=True,
+    help="Organization ID to share with (can specify multiple)",
 )
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 @click.pass_context
@@ -172,6 +189,13 @@ def create(
     backfill_from_date,
     filter_expression,
     retention_days,
+    filter_json,
+    stream_description,
+    include_originator,
+    include_journal_entries,
+    batch_size,
+    rate_limit,
+    shared_org_ids,
     output_json,
 ):
     """Create a new export stream.
@@ -207,16 +231,32 @@ def create(
             print_error("min-confidence cannot be greater than max-confidence")
             sys.exit(1)
 
+        # Parse filter_json if provided
+        fc = None
+        if filter_json:
+            try:
+                fc = json.loads(filter_json)
+            except json.JSONDecodeError:
+                print_error("Invalid JSON in --filter-json")
+                sys.exit(1)
+
         stream = client.create_stream(
             name=name,
             data_type=data_type,
             identifier_types=list(identifier_types) if identifier_types else None,
-            min_confidence=min_confidence,
-            max_confidence=max_confidence,
+            min_confidence=min_confidence if min_confidence > 0.0 else None,
+            max_confidence=max_confidence if max_confidence < 1.0 else None,
             backfill_historical=backfill,
             backfill_from_date=backfill_from_date,
             filter_expression=filter_expression,
             retention_days=retention_days,
+            filter_criteria=fc,
+            description=stream_description,
+            include_originator=include_originator,
+            include_journal_entries=include_journal_entries,
+            batch_size=batch_size,
+            rate_limit_per_minute=rate_limit,
+            shared_org_ids=list(shared_org_ids) if shared_org_ids else None,
         )
 
         if output_json:

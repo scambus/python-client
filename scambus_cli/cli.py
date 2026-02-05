@@ -278,6 +278,7 @@ def show_config():
 from .commands import (
     automations,
     cases,
+    exports,
     journal,
     media,
     profile,
@@ -298,6 +299,7 @@ cli.add_command(profile.profile)
 cli.add_command(views.views)
 cli.add_command(automations.automations)
 cli.add_command(reports.reports)
+cli.add_command(exports.exports)
 
 
 def main():

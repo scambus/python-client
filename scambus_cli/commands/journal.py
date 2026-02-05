@@ -248,6 +248,13 @@ def delete(ctx, entry_id, force):
     is_flag=True,
     help="Include child entries in results (default: only top-level)",
 )
+@click.option("--originator-type", help="Filter by originator type")
+@click.option("--originator-id", help="Filter by specific originator ID")
+@click.option("--tag", "tags", multiple=True, help="Filter by tag name (can specify multiple)")
+@click.option(
+    "--filter-json",
+    help="Full FilterCriteria as JSON string (advanced)",
+)
 @click.pass_context
 def query(
     ctx,
@@ -269,6 +276,10 @@ def query(
     with_evidence,
     parent_id,
     include_children,
+    originator_type,
+    originator_id,
+    tags,
+    filter_json,
 ):
     """
     Query journal entries with advanced filtering.
@@ -305,6 +316,23 @@ def query(
     client = ctx.obj.get_client()
 
     try:
+        import json as json_mod
+
+        # Parse --filter-json if provided
+        fc = None
+        if filter_json:
+            try:
+                fc = json_mod.loads(filter_json)
+            except json_mod.JSONDecodeError:
+                print_error("Invalid JSON in --filter-json")
+                sys.exit(1)
+
+        # Merge tag names into filter_criteria
+        if tags:
+            if fc is None:
+                fc = {}
+            fc["tag_names"] = list(tags)
+
         # Build details dict from --detail options and shortcuts
         details = {}
         if direction:
@@ -326,6 +354,8 @@ def query(
             result = client.query_journal_entries(
                 search_query=search,
                 entry_type=entry_type,
+                originator_type=originator_type,
+                originator_id=originator_id,
                 min_confidence=min_confidence,
                 max_confidence=max_confidence,
                 performed_after=after,
@@ -338,6 +368,7 @@ def query(
                 include_evidence=with_evidence,
                 parent_journal_entry_id=parent_id,
                 include_children=include_children,
+                filter_criteria=fc,
             )
 
             all_entries.extend(result["data"])

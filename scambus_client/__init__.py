@@ -23,6 +23,7 @@ from .exceptions import (
 )
 from .websocket_client import ScambusWebSocketClient
 from .types import (
+    FilterCriteria,
     TagLookup,
     StreamFilter,
     ViewFilter,
@@ -86,6 +87,7 @@ __all__ = [
     "ScambusAuthenticationError",
     "ScambusValidationError",
     "ScambusNotFoundError",
+    "FilterCriteria",
     "TagLookup",
     "StreamFilter",
     "ViewFilter",

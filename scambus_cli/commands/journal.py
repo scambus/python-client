@@ -912,7 +912,7 @@ def create_phone_call(
                 our_identifiers.append(
                     {"type": ident_type, "value": ident_value, "confidence": confidence}
                 )
-            data["ourIdentifierLookups"] = our_identifiers
+            data["our_identifier_lookups"] = our_identifiers
 
         # Add evidence if media uploaded
         if media_ids:
@@ -1425,7 +1425,7 @@ def create_detection(
 
         if identifiers:
             try:
-                data["identifierLookups"] = json.loads(identifiers)
+                data["identifier_lookups"] = json.loads(identifiers)
             except json.JSONDecodeError:
                 print_error("Invalid JSON for identifiers")
                 sys.exit(1)

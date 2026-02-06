@@ -2353,7 +2353,7 @@ class ScambusClient:
 
         bank_data = {
             "accountNumber": account,
-            "routingNumber": routing,
+            "routing": routing,
             "institution": institution,
         }
 

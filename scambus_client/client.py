@@ -816,6 +816,7 @@ class ScambusClient:
         originator_identifier: Optional[str] = None,
         create_originator: bool = False,
         is_test: bool = False,
+        performed_at: Optional[datetime] = None,
     ) -> JournalEntry:
         """
         Convenience method to create a 'detection' type journal entry.
@@ -841,6 +842,7 @@ class ScambusClient:
             originator_identifier: Identifier for the originator (email, discord username, etc.)
             create_originator: Create originator record if it doesn't exist
             is_test: If True, marks entry as test/demo data (excluded from normal queries)
+            performed_at: When the detection occurred (defaults to now)
 
         Returns:
             Created JournalEntry object
@@ -861,6 +863,7 @@ class ScambusClient:
                         confidence=0.95,
                     )
                 ],
+                performed_at=datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc),
                 tags=[
                     TagLookup(tag_name="HighPriority"),
                     TagLookup(tag_name="ScamType", tag_value="Phishing"),
@@ -931,7 +934,7 @@ class ScambusClient:
             entry_type="detection",
             description=description,
             details=details_dict,
-            performed_at=datetime.now(timezone.utc),
+            performed_at=performed_at or datetime.now(timezone.utc),
             case_id=case_id,
             identifier_lookups=identifiers,
             our_identifier_lookups=our_identifier_lookups,

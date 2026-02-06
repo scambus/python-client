@@ -2346,17 +2346,19 @@ class ScambusClient:
             # automatically populated from the routing number
             ```
         """
+        import json
+
         bank_data = {
-            "account": account,
-            "routing": routing,
+            "accountNumber": account,
+            "routingNumber": routing,
             "institution": institution,
         }
 
-        if owner:
+        if owner is not None:
             bank_data["owner"] = owner
-        if owner_address:
+        if owner_address is not None:
             bank_data["ownerAddress"] = owner_address
-        if country:
+        if country is not None:
             bank_data["country"] = country
 
         result = {

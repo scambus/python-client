@@ -2,9 +2,23 @@
 Main Scambus API client.
 """
 
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
+
+
+def _to_rfc3339(dt: datetime) -> str:
+    """Convert a datetime to RFC3339 string. Assumes UTC if no timezone is set."""
+    if dt.tzinfo is None:
+        warnings.warn(
+            f"Naive datetime {dt!r} has no timezone info; assuming UTC. "
+            "Pass a timezone-aware datetime to silence this warning "
+            "(e.g., datetime(..., tzinfo=timezone.utc)).",
+            stacklevel=3,
+        )
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -712,7 +726,7 @@ class ScambusClient:
             data["details"] = details
 
         if performed_at:
-            data["performed_at"] = performed_at.isoformat()
+            data["performed_at"] = _to_rfc3339(performed_at)
 
         if case_id:
             data["case_id"] = case_id
@@ -761,20 +775,20 @@ class ScambusClient:
 
         # Handle start_time and end_time
         if start_time:
-            data["start_time"] = start_time.isoformat()
+            data["start_time"] = _to_rfc3339(start_time)
 
             if in_progress:
                 # In-progress: omit end_time
                 pass
             elif end_time is None:
                 # Default end_time to start_time (instant completion)
-                data["end_time"] = start_time.isoformat()
+                data["end_time"] = _to_rfc3339(start_time)
             else:
                 # Use provided end_time
-                data["end_time"] = end_time.isoformat()
+                data["end_time"] = _to_rfc3339(end_time)
         elif end_time:
             # end_time provided without start_time
-            data["end_time"] = end_time.isoformat()
+            data["end_time"] = _to_rfc3339(end_time)
 
         response = self._request("POST", "/journal-entries", json_data=data)
 
@@ -913,7 +927,7 @@ class ScambusClient:
                     "title": "Detection Evidence",
                     "description": f"Evidence for detection: {description}",
                     "source": "Automated Detection",
-                    "collected_at": datetime.now(timezone.utc).isoformat(),
+                    "collected_at": _to_rfc3339(datetime.now(timezone.utc)),
                     "media_ids": media_ids,
                 }
             else:
@@ -1066,7 +1080,7 @@ class ScambusClient:
                     "title": "Phone Call Evidence",
                     "description": f"Evidence for phone call: {description}",
                     "source": "Phone Call Recording",
-                    "collected_at": start_time.isoformat(),
+                    "collected_at": _to_rfc3339(start_time),
                     "media_ids": media_ids,
                 }
             else:
@@ -1215,7 +1229,7 @@ class ScambusClient:
                     "title": "Email Evidence",
                     "description": f"Evidence for email: {subject}",
                     "source": "Email Communication",
-                    "collectedAt": sent_at.isoformat(),
+                    "collectedAt": _to_rfc3339(sent_at),
                     "media_ids": media_ids,
                 }
             else:
@@ -1353,7 +1367,7 @@ class ScambusClient:
                     "title": f"{platform} Conversation Evidence",
                     "description": f"Evidence for {platform} conversation: {description}",
                     "source": f"{platform} Communication",
-                    "collectedAt": start_time.isoformat(),
+                    "collectedAt": _to_rfc3339(start_time),
                     "media_ids": media_ids,
                 }
             else:
@@ -1481,7 +1495,7 @@ class ScambusClient:
                     "title": "Note Evidence",
                     "description": f"Evidence for note: {description}",
                     "source": "Note Attachment",
-                    "collected_at": (performed_at or datetime.now(timezone.utc)).isoformat(),
+                    "collected_at": _to_rfc3339(performed_at or datetime.now(timezone.utc)),
                     "media_ids": media_ids,
                 }
             else:
@@ -1903,13 +1917,13 @@ class ScambusClient:
         # Handle datetime objects
         if performed_after:
             if isinstance(performed_after, datetime):
-                body["performed_after"] = performed_after.isoformat()
+                body["performed_after"] = _to_rfc3339(performed_after)
             else:
                 body["performed_after"] = performed_after
 
         if performed_before:
             if isinstance(performed_before, datetime):
-                body["performed_before"] = performed_before.isoformat()
+                body["performed_before"] = _to_rfc3339(performed_before)
             else:
                 body["performed_before"] = performed_before
 
@@ -1965,12 +1979,12 @@ class ScambusClient:
             min_confidence=min_confidence,
             max_confidence=max_confidence,
             performed_after=(
-                performed_after.isoformat()
+                _to_rfc3339(performed_after)
                 if isinstance(performed_after, datetime)
                 else performed_after
             ),
             performed_before=(
-                performed_before.isoformat()
+                _to_rfc3339(performed_before)
                 if isinstance(performed_before, datetime)
                 else performed_before
             ),
@@ -2352,9 +2366,9 @@ class ScambusClient:
         import json
 
         bank_data = {
-            "accountNumber": account,
-            "routing": routing,
-            "institution": institution,
+            "accountNumber": str(account),
+            "routing": str(routing),
+            "institution": str(institution),
         }
 
         if owner is not None:
@@ -4486,9 +4500,9 @@ class ScambusClient:
         if date_range_start or date_range_end:
             body["date_range"] = {}
             if date_range_start:
-                body["date_range"]["start"] = date_range_start.isoformat()
+                body["date_range"]["start"] = _to_rfc3339(date_range_start)
             if date_range_end:
-                body["date_range"]["end"] = date_range_end.isoformat()
+                body["date_range"]["end"] = _to_rfc3339(date_range_end)
 
         response = self._request("POST", "/reports/identifiers", json_data=body)
         return Report.from_dict(response)
@@ -4554,9 +4568,9 @@ class ScambusClient:
         if date_range_start or date_range_end:
             body["date_range"] = {}
             if date_range_start:
-                body["date_range"]["start"] = date_range_start.isoformat()
+                body["date_range"]["start"] = _to_rfc3339(date_range_start)
             if date_range_end:
-                body["date_range"]["end"] = date_range_end.isoformat()
+                body["date_range"]["end"] = _to_rfc3339(date_range_end)
 
         response = self._request("POST", "/reports/journal-entries", json_data=body)
         return Report.from_dict(response)

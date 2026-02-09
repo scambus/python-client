@@ -582,6 +582,10 @@ def query(
     is_flag=True,
     help="Mark entry as test/demo data (excluded from normal queries)",
 )
+@click.option(
+    "--enrichments-json",
+    help='JSON map of enrichments to apply to all identifiers (e.g., \'{"hosting_provider": {"value": "Hostinger", "source": "whois"}}\')',
+)
 @click.pass_context
 def create_note(
     ctx,
@@ -596,6 +600,7 @@ def create_note(
     create_originator,
     tag,
     is_test,
+    enrichments_json,
 ):
     """Create a note entry."""
     client = ctx.obj.get_client()
@@ -627,6 +632,14 @@ def create_note(
                 identifiers.append(
                     {"type": ident_type, "value": ident_value, "confidence": confidence}
                 )
+            if enrichments_json:
+                try:
+                    enrichments = json.loads(enrichments_json)
+                except json.JSONDecodeError:
+                    print_error("Invalid JSON for --enrichments-json")
+                    sys.exit(1)
+                for ident in identifiers:
+                    ident["enrichments"] = enrichments
             data["identifier_lookups"] = identifiers
 
         # Add our identifier lookups if provided
@@ -1377,6 +1390,10 @@ def create_text_conversation(
     is_flag=True,
     help="Mark entry as test/demo data (excluded from normal queries)",
 )
+@click.option(
+    "--enrichments-json",
+    help='JSON map of enrichments to apply to all identifiers (e.g., \'{"hosting_provider": {"value": "Hostinger", "source": "whois"}}\')',
+)
 @click.pass_context
 def create_detection(
     ctx,
@@ -1390,6 +1407,7 @@ def create_detection(
     create_originator,
     tag,
     is_test,
+    enrichments_json,
 ):
     """Create a detection entry."""
     client = ctx.obj.get_client()
@@ -1425,10 +1443,19 @@ def create_detection(
 
         if identifiers:
             try:
-                data["identifier_lookups"] = json.loads(identifiers)
+                ident_list = json.loads(identifiers)
             except json.JSONDecodeError:
                 print_error("Invalid JSON for identifiers")
                 sys.exit(1)
+            if enrichments_json:
+                try:
+                    enrichments = json.loads(enrichments_json)
+                except json.JSONDecodeError:
+                    print_error("Invalid JSON for --enrichments-json")
+                    sys.exit(1)
+                for ident in ident_list:
+                    ident["enrichments"] = enrichments
+            data["identifier_lookups"] = ident_list
 
         # Add evidence if media uploaded
         if media_ids:

@@ -2,10 +2,27 @@
 Main Scambus API client.
 """
 
+import logging
+import random
+import time
 import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Retry constants (inspired by AWS SDK standard retry mode)
+# See: https://docs.aws.amazon.com/sdkref/latest/guide/feature-retry-behavior.html
+# See: https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
+# ---------------------------------------------------------------------------
+_RETRY_BASE_DELAY = 1.0       # Base delay in seconds (AWS default)
+_RETRY_MAX_BACKOFF = 20.0     # Cap per-retry delay (AWS standard mode default)
+_RETRY_THROTTLE_BASE = 2.0    # Higher base delay for 429 throttling responses
+
+# HTTP status codes that are safe to retry (transient / server-side errors).
+_RETRYABLE_STATUS_CODES = frozenset({408, 429, 500, 502, 503, 504})
 
 
 def _to_rfc3339(dt: datetime) -> str:
@@ -21,8 +38,7 @@ def _to_rfc3339(dt: datetime) -> str:
     return dt.isoformat()
 
 import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+from requests.adapters import HTTPAdapter  # noqa: used for max_retries=0 mount
 
 from .config import get_api_url, get_api_token, get_api_key_id, get_api_key_secret
 
@@ -290,7 +306,8 @@ class ScambusClient:
         api_key_secret: Optional[str] = None,
         api_token: Optional[str] = None,
         timeout: int = 30,
-        max_retries: int = 3,
+        max_retries: int = 10,
+        retry_max_time: int = 300,
     ):
         """
         Initialize the Scambus client.
@@ -313,7 +330,14 @@ class ScambusClient:
             api_key_secret: API key secret for authentication
             api_token: API JWT token (legacy, prefer api_key_id/api_key_secret)
             timeout: Request timeout in seconds (default: 30)
-            max_retries: Maximum number of retries for failed requests (default: 3)
+            max_retries: Maximum number of retry attempts per request (default: 10).
+                Applies to both connection errors and retryable HTTP errors
+                (429, 500, 502, 503, 504).
+            retry_max_time: Maximum wall-clock time in seconds to keep retrying
+                (default: 300, i.e. 5 minutes). Whichever limit is hit first
+                (max_retries or retry_max_time) stops the retry loop. Uses
+                truncated exponential backoff with full jitter (AWS standard mode
+                algorithm).
         """
         # Load configuration with priority: explicit param > env var > config file > default
         api_url = get_api_url(api_url)
@@ -330,16 +354,15 @@ class ScambusClient:
 
         self.api_url = api_url.rstrip("/") if api_url else "https://scambus.net/api"
         self.timeout = timeout
+        self.max_retries = max_retries
+        self.retry_max_time = retry_max_time
 
-        # Create session with retry logic
+        # Create session — all retry logic is handled by _request() using
+        # truncated exponential backoff with full jitter, following the AWS SDK
+        # standard retry mode pattern. This gives us unified control over both
+        # connection-level and HTTP-level retries.
         self.session = requests.Session()
-        retry_strategy = Retry(
-            total=max_retries,
-            backoff_factor=1,
-            status_forcelist=[429, 500, 502, 503, 504],
-            allowed_methods=["GET", "POST", "PUT", "DELETE"],
-        )
-        adapter = HTTPAdapter(max_retries=retry_strategy)
+        adapter = HTTPAdapter(max_retries=0)
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
 
@@ -369,6 +392,45 @@ class ScambusClient:
                 "4. Set SCAMBUS_API_TOKEN environment variable"
             )
 
+    @staticmethod
+    def _compute_backoff(attempt: int, base: float, max_backoff: float) -> float:
+        """Compute retry delay using truncated exponential backoff with full jitter.
+
+        Implements the "Full Jitter" algorithm recommended by AWS:
+            sleep = random(0, min(max_backoff, base * 2^attempt))
+
+        This spreads retry attempts uniformly across the backoff window,
+        preventing the thundering-herd problem when many clients retry
+        simultaneously.
+
+        See: https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
+        """
+        ceiling = min(max_backoff, base * (2 ** attempt))
+        return random.uniform(0, ceiling)
+
+    @staticmethod
+    def _parse_retry_after(response: requests.Response) -> Optional[float]:
+        """Extract delay from the Retry-After header, if present.
+
+        Supports both integer (seconds) and HTTP-date formats.
+        Returns None when the header is missing or unparseable.
+        """
+        header = response.headers.get("Retry-After")
+        if header is None:
+            return None
+        try:
+            return float(header)
+        except ValueError:
+            pass
+        # HTTP-date format (RFC 7231)
+        from email.utils import parsedate_to_datetime
+        try:
+            retry_dt = parsedate_to_datetime(header)
+            delta = (retry_dt - datetime.now(timezone.utc)).total_seconds()
+            return max(0.0, delta)
+        except (TypeError, ValueError):
+            return None
+
     def _request(
         self,
         method: str,
@@ -378,8 +440,25 @@ class ScambusClient:
         files: Optional[Dict[str, Any]] = None,
         params: Optional[Dict[str, Any]] = None,
     ) -> Union[Dict[str, Any], List[Any]]:
-        """
-        Make an API request.
+        """Make an API request with automatic retry on transient failures.
+
+        Retry strategy (modelled on the AWS SDK *standard* retry mode):
+
+        - **Retryable errors**: connection failures, timeouts, and HTTP
+          status codes 408, 429, 500, 502, 503, 504.
+        - **Backoff**: truncated exponential backoff with full jitter —
+          ``random(0, min(max_backoff, base * 2^attempt))``.
+          Base delay is 1 s for transient errors and 2 s for 429 throttling.
+          Max backoff is capped at 20 s (per the AWS standard-mode default).
+        - **Retry-After**: when the server returns a ``Retry-After`` header
+          (common on 429 / 503), the indicated delay takes precedence over
+          the computed backoff.
+        - **Limits**: retry stops when *either* ``max_retries`` attempts have
+          been exhausted or ``retry_max_time`` wall-clock seconds have
+          elapsed, whichever comes first.
+
+        Non-retryable HTTP errors (4xx other than 408/429) are raised
+        immediately without retrying.
 
         Args:
             method: HTTP method (GET, POST, PUT, DELETE)
@@ -390,53 +469,105 @@ class ScambusClient:
             params: Query parameters
 
         Returns:
-            Response data as dictionary
+            Response data as dictionary or list
 
         Raises:
-            ScambusAuthenticationError: If authentication fails
-            ScambusValidationError: If request validation fails
-            ScambusNotFoundError: If resource not found
-            ScambusServerError: If server error occurs
-            ScambusAPIError: For other API errors
+            ScambusAuthenticationError: If authentication fails (401)
+            ScambusValidationError: If request validation fails (400)
+            ScambusNotFoundError: If resource not found (404)
+            ScambusServerError: If server error occurs (5xx, after retries)
+            ScambusAPIError: For other API errors or exhausted retries
         """
         url = f"{self.api_url}/{endpoint.lstrip('/')}"
+        start_time = time.monotonic()
+        attempt = 0
 
-        try:
-            response = self.session.request(
-                method=method,
-                url=url,
-                json=json_data,
-                data=data,
-                files=files,
-                params=params,
-                timeout=self.timeout,
-            )
-
-            # Handle error responses
-            if response.status_code >= 400:
-                self._handle_error_response(response)
-
-            # Return JSON response
-            if response.status_code == 204:  # No content
-                return {}
-
+        while True:
             try:
-                return response.json()
-            except ValueError as json_err:
-                # JSON decode failed - provide diagnostic information
-                response_preview = response.text[:200] if response.text else "(empty)"
-                raise ScambusAPIError(
-                    f"Invalid JSON response from {url} "
-                    f"(status {response.status_code}): {json_err}. "
-                    f"Response body: {response_preview}"
+                response = self.session.request(
+                    method=method,
+                    url=url,
+                    json=json_data,
+                    data=data,
+                    files=files,
+                    params=params,
+                    timeout=self.timeout,
                 )
 
-        except requests.exceptions.Timeout as e:
-            raise ScambusAPIError(f"Request timeout: {e}")
-        except requests.exceptions.ConnectionError as e:
-            raise ScambusAPIError(f"Connection error: {e}")
-        except requests.exceptions.RequestException as e:
-            raise ScambusAPIError(f"Request failed: {e}")
+                # --- Success path -------------------------------------------------
+                if response.status_code < 400:
+                    if response.status_code == 204:
+                        return {}
+                    try:
+                        return response.json()
+                    except ValueError as json_err:
+                        preview = response.text[:200] if response.text else "(empty)"
+                        raise ScambusAPIError(
+                            f"Invalid JSON response from {url} "
+                            f"(status {response.status_code}): {json_err}. "
+                            f"Response body: {preview}"
+                        )
+
+                # --- Retryable HTTP errors ----------------------------------------
+                if response.status_code in _RETRYABLE_STATUS_CODES:
+                    elapsed = time.monotonic() - start_time
+                    if attempt < self.max_retries and elapsed < self.retry_max_time:
+                        attempt += 1
+
+                        # Use Retry-After header when present (e.g. 429, 503)
+                        retry_after = self._parse_retry_after(response)
+                        if retry_after is not None:
+                            delay = min(retry_after, _RETRY_MAX_BACKOFF)
+                        else:
+                            # Throttling (429) gets a higher base delay
+                            base = (
+                                _RETRY_THROTTLE_BASE
+                                if response.status_code == 429
+                                else _RETRY_BASE_DELAY
+                            )
+                            delay = self._compute_backoff(attempt, base, _RETRY_MAX_BACKOFF)
+
+                        # Never exceed the remaining time budget
+                        remaining = self.retry_max_time - elapsed
+                        delay = min(delay, remaining)
+
+                        logger.warning(
+                            "Retryable HTTP %d on %s %s (attempt %d/%d, "
+                            "backoff %.1fs, %.0fs remaining)",
+                            response.status_code, method, endpoint,
+                            attempt, self.max_retries, delay, remaining,
+                        )
+                        time.sleep(delay)
+                        continue
+
+                # --- Non-retryable or retries exhausted ---------------------------
+                self._handle_error_response(response)
+
+            except (requests.exceptions.ConnectionError,
+                    requests.exceptions.Timeout) as exc:
+                elapsed = time.monotonic() - start_time
+
+                if attempt >= self.max_retries or elapsed >= self.retry_max_time:
+                    raise ScambusAPIError(
+                        f"Request to {method} {endpoint} failed after "
+                        f"{attempt} retries over {elapsed:.0f}s: {exc}"
+                    ) from exc
+
+                attempt += 1
+                delay = self._compute_backoff(attempt, _RETRY_BASE_DELAY, _RETRY_MAX_BACKOFF)
+                remaining = self.retry_max_time - elapsed
+                delay = min(delay, remaining)
+
+                logger.warning(
+                    "Connection error on %s %s (attempt %d/%d, "
+                    "backoff %.1fs, %.0fs remaining): %s",
+                    method, endpoint, attempt, self.max_retries,
+                    delay, remaining, exc,
+                )
+                time.sleep(delay)
+
+            except requests.exceptions.RequestException as exc:
+                raise ScambusAPIError(f"Request failed: {exc}") from exc
 
     def _handle_error_response(self, response: requests.Response):
         """Handle error responses from the API."""
@@ -2366,7 +2497,7 @@ class ScambusClient:
         import json
 
         bank_data = {
-            "accountNumber": str(account),
+            "account_number": str(account),
             "routing": str(routing),
             "institution": str(institution),
         }
@@ -2374,7 +2505,7 @@ class ScambusClient:
         if owner is not None:
             bank_data["owner"] = owner
         if owner_address is not None:
-            bank_data["ownerAddress"] = owner_address
+            bank_data["owner_address"] = owner_address
         if country is not None:
             bank_data["country"] = country
 

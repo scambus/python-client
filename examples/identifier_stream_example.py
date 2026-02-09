@@ -140,7 +140,7 @@ def consume_identifier_stream(stream_id: str):
             elif identifier_type == "bank_account":
                 # Bank accounts include: account_number, routing, institution, etc.
                 print(
-                    f"    Account: {details.get('account_number') or details.get('accountNumber')}"
+                    f"    Account: {details.get('account_number')}"
                 )
                 print(f"    Routing: {details.get('routing')}")
                 if details.get("institution"):

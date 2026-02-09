@@ -17,6 +17,18 @@ def _get_value(data: Dict[str, Any], snake_key: str, camel_key: str, default: An
 
 
 @dataclass
+class EnrichedDetailField:
+    """Enrichment value with source attribution."""
+
+    value: Any
+    source: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for API request."""
+        return {"value": self.value, "source": self.source}
+
+
+@dataclass
 class IdentifierLookup:
     """
     Identifier lookup for automatic validation and creation.
@@ -27,6 +39,7 @@ class IdentifierLookup:
         confidence: Confidence score (0.0 to 1.0)
         label: Contextual label (e.g., "from", "to", "sender")
         ref: Local reference ID for message-level identifier tracking in conversations
+        enrichments: Enrichment data to contribute to the identifier's enriched_details
     """
 
     type: str
@@ -34,6 +47,7 @@ class IdentifierLookup:
     confidence: Optional[float] = None
     label: Optional[str] = None
     ref: Optional[str] = None
+    enrichments: Optional[Dict[str, "EnrichedDetailField"]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API request."""
@@ -44,6 +58,8 @@ class IdentifierLookup:
             data["label"] = self.label
         if self.ref is not None:
             data["ref"] = self.ref
+        if self.enrichments is not None:
+            data["enrichments"] = {k: v.to_dict() for k, v in self.enrichments.items()}
         return data
 
 

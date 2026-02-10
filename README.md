@@ -15,7 +15,8 @@ Official Python client for SCAMBUS - submit scam reports and subscribe to data s
 - **Views (Saved Queries)**: Create, execute, and manage saved query views
 - **In-Progress Activities**: Track and complete ongoing scam interactions
 - **Data Streams**: Subscribe to real-time scam data with export streams (journal entries and identifier state changes)
-- **Real-time Notifications**: WebSocket support for instant notifications and updates
+- **Stream Consumption**: Poll for batches or connect via SSE for real-time delivery
+- **Real-time Updates**: WebSocket support for notifications and live updates
 - **Case Management**: Create and manage investigation cases
 - **Evidence**: Upload and attach media evidence
 - **Automation Management**: Create automation identities with API key rotation support
@@ -171,15 +172,23 @@ results = client.search_identifiers(
 )
 
 # Create and consume export streams
+from scambus_client import FilterCriteria, IdentifierType, JournalEntryType, StreamDataType
 stream = client.create_stream(
     name="Phone Scams Monitor",
-    data_type="journal_entry",
-    identifier_types=["phone"]
+    data_type=StreamDataType.JOURNAL_ENTRY,
+    filter_criteria=FilterCriteria(
+        types=[JournalEntryType.DETECTION],
+        identifier_type=IdentifierType.PHONE,
+    ),
 )
 
-result = client.consume_stream(stream.id, cursor="0", limit=10)
+result = client.consume_stream(stream.consumer_key, cursor="0", limit=10)
 for msg in result['messages']:
     print(f"New phone scam: {msg['type']}")
+
+# Get stream info
+info = client.get_stream_info(stream.consumer_key)
+print(f"Messages in stream: {info.get('messages_in_stream')}")
 ```
 
 ### 4. Automation Setup
@@ -219,24 +228,52 @@ export SCAMBUS_URL="http://localhost:8080"
 scambus journal query --search "test"
 ```
 
-### Real-time Notifications (WebSocket)
+### Consuming Streams (External Consumers)
+
+If you've been given a **consumer key** and **API key credentials**, you can consume a stream:
+
+```python
+from scambus_client import ScambusClient
+
+client = ScambusClient(
+    api_key_id="your-key-id",
+    api_key_secret="your-secret-key",
+)
+
+consumer_key = "your-consumer-key"
+
+# Check stream info
+info = client.get_stream_info(consumer_key)
+print(f"Stream: {info.get('name')}")
+print(f"Messages: {info.get('messages_in_stream')}")
+
+# Poll for messages (oldest first)
+cursor = "0"
+result = client.consume_stream(consumer_key, cursor=cursor, limit=100)
+for msg in result["messages"]:
+    print(msg)
+
+# Advance cursor for next batch
+cursor = result["next_cursor"]
+```
+
+For real-time consumption via SSE, see `examples/consumer_sse_example.py`. For complete consumer documentation, see `docs/consumer-guide.md`.
+
+### Real-time Updates (WebSocket)
+
+For authenticated users, the WebSocket client provides real-time notifications and live updates:
 
 ```python
 import asyncio
 from scambus_client import ScambusClient
 
-# Initialize client - uses cached authentication
 client = ScambusClient()
-
-# Create WebSocket client
 ws_client = client.create_websocket_client()
 
-# Define notification handler
 async def handle_notification(notification):
     print(f"New notification: {notification['title']}")
     print(f"Message: {notification['message']}")
 
-# Start listening for notifications
 asyncio.run(ws_client.listen_notifications(handle_notification))
 ```
 
@@ -289,8 +326,14 @@ scambus streams create \
     --backfill \
     --backfill-from-date 2025-01-01T00:00:00Z
 
-# Consume from a stream
-scambus streams consume <stream-id> --limit 100
+# Consume from a stream (use consumer key)
+scambus streams consume <consumer-key> --limit 100
+
+# Listen in real-time via SSE
+scambus streams listen <consumer-key> --json
+
+# Get stream info
+scambus streams info <consumer-key>
 
 # Manage views (saved queries)
 scambus views list
@@ -313,6 +356,7 @@ scambus profile twofa --enable
 ## Documentation
 
 - [Complete Documentation](DOCUMENTATION_SUMMARY.md) - Full reference guide
+- [Consumer Guide](docs/consumer-guide.md) - Guide for external stream consumers
 - [Examples](examples/) - Working code examples
 - [Changelog](CHANGELOG.md) - Version history
 - [Security](SECURITY.md) - Security policy
@@ -421,7 +465,7 @@ scambus views execute VIEW_ID --limit 20
 scambus views create \
     --name "High Confidence Phone Scams" \
     --entity-type journal \
-    --filter-criteria '{"identifier_types": ["phone"], "min_confidence": 0.9}'
+    --filter-criteria '{"identifier_type": "phone", "min_confidence": 0.9}'
 ```
 
 ```python
@@ -451,17 +495,21 @@ Subscribe to real-time scam data with two types of streams:
 Receive complete journal entries as they're created:
 
 ```python
-# Create a journal entry stream
+from scambus_client import FilterCriteria, IdentifierType, StreamDataType
+
+# Create a journal entry stream using FilterCriteria
 stream = client.create_stream(
     name="High-Confidence Phone Scams",
-    data_type="journal_entry",  # Default
-    identifier_types=["phone"],
-    min_confidence=0.8,
-    max_confidence=1.0
+    data_type=StreamDataType.JOURNAL_ENTRY,
+    filter_criteria=FilterCriteria(
+        identifier_type=IdentifierType.PHONE,
+        min_confidence=0.8,
+        max_confidence=1.0,
+    ),
 )
 
-# Consume journal entries
-result = client.consume_stream(stream.id, cursor="0", limit=10)
+# Consume journal entries (use consumer key for external consumers)
+result = client.consume_stream(stream.consumer_key, cursor="0", limit=10)
 for msg in result['messages']:
     print(f"Journal Entry: {msg['type']}")
     print(f"Identifiers: {len(msg['identifiers'])}")
@@ -472,22 +520,26 @@ for msg in result['messages']:
 Track identifier state changes (confidence, tags, type):
 
 ```python
+from scambus_client import FilterCriteria, IdentifierType, StreamDataType
+
 # Create an identifier stream
 stream = client.create_stream(
     name="Phone Number State Changes",
-    data_type="identifier",  # Track identifier changes
-    identifier_types=["phone"],
-    min_confidence=0.9,
+    data_type=StreamDataType.IDENTIFIER,
+    filter_criteria=FilterCriteria(
+        identifier_type=IdentifierType.PHONE,
+        min_confidence=0.9,
+    ),
     backfill_historical=True,  # Backfill existing identifiers
-    backfill_from_date="2025-01-01T00:00:00Z"
+    backfill_from_date="2025-01-01T00:00:00Z",
 )
 
 # Consume identifier state changes
-result = client.consume_stream(stream.id, cursor="0", limit=10)
+result = client.consume_stream(stream.consumer_key, cursor="0", limit=10)
 for msg in result['messages']:
-    print(f"Identifier: {msg['type']} - {msg['displayValue']}")
+    print(f"Identifier: {msg['type']} - {msg['display_value']}")
     print(f"Confidence: {msg['confidence']}")
-    print(f"Triggered by: {msg['triggeringJournalEntry']['type']}")
+    print(f"Triggered by: {msg['triggering_journal_entry']['type']}")
 ```
 
 #### Stream Management
@@ -903,10 +955,14 @@ See the [examples/](examples/) directory for complete examples:
 - [phone_call_example.py](examples/phone_call_example.py) - Report a scam call
 - [email_example.py](examples/email_example.py) - Report a phishing email
 - [text_conversation_example.py](examples/text_conversation_example.py) - Report SMS/text scams
-- [stream_management.py](examples/stream_management.py) - Manage export streams
-- [identifier_stream_example.py](examples/identifier_stream_example.py) - **Identifier stream usage and backfill**
+- [consumer_polling_example.py](examples/consumer_polling_example.py) - **Consumer polling with error handling**
+- [consumer_sse_example.py](examples/consumer_sse_example.py) - **Real-time SSE consumption with reconnection**
+- [stream_management.py](examples/stream_management.py) - Create and manage export streams
+- [identifier_stream_example.py](examples/identifier_stream_example.py) - Identifier stream usage and backfill
 - [case_management.py](examples/case_management.py) - Manage investigation cases
 - [simple_media_upload.py](examples/simple_media_upload.py) - Upload evidence files
+- [websocket_notifications.py](examples/websocket_notifications.py) - Real-time notifications via WebSocket
+- [websocket_custom_handlers.py](examples/websocket_custom_handlers.py) - Custom WebSocket message handlers
 
 ## Development
 

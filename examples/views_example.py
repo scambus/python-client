@@ -7,7 +7,13 @@ Views allow you to save common search criteria and execute them repeatedly.
 """
 
 import os
-from scambus_client import ScambusClient, ViewFilter, ViewSortOrder
+from scambus_client import (
+    ScambusClient,
+    FilterCriteria,
+    IdentifierType,
+    JournalEntryType,
+    ViewSortOrder,
+)
 
 # Configuration
 API_URL = os.getenv("SCAMBUS_API_URL", "http://localhost:8080/api")
@@ -58,14 +64,14 @@ def main():
     # =========================================================================
     print("\n3. Creating custom view with typed filters...")
 
-    # Using ViewFilter and ViewSortOrder classes (recommended)
+    # Using FilterCriteria and ViewSortOrder classes (recommended)
     view = client.create_view(
         name="High Confidence Phone Scams",
         entity_type="journal",
-        filter_criteria=ViewFilter(
+        filter_criteria=FilterCriteria(
             min_confidence=0.9,
-            entry_types=["detection", "phone_call"],
-            identifier_types=["phone"],
+            types=[JournalEntryType.DETECTION, JournalEntryType.PHONE_CALL],
+            identifier_type=IdentifierType.PHONE,
         ),
         sort_order=ViewSortOrder(field="created_at", direction="desc"),
         visibility="private",  # or "organization"
@@ -80,16 +86,16 @@ def main():
     # =========================================================================
     print("\n4. Creating view with dictionary filters...")
 
-    # Dictionary format also works (backward compatible)
+    # FilterCriteria also works (all 60+ filter fields available)
     view2 = client.create_view(
         name="Recent Email Phishing",
         entity_type="journal",
-        filter_criteria={
-            "min_confidence": 0.8,
-            "entry_types": ["email"],
-            "identifier_types": ["email"],
-        },
-        sort_order={"field": "performed_at", "direction": "desc"},
+        filter_criteria=FilterCriteria(
+            min_confidence=0.8,
+            types=[JournalEntryType.EMAIL],
+            identifier_type=IdentifierType.EMAIL,
+        ),
+        sort_order=ViewSortOrder(field="performed_at", direction="desc"),
         visibility="private",
     )
 
@@ -140,35 +146,35 @@ def view_filter_examples():
     print("=" * 60)
 
     # Filter by confidence range
-    filter1 = ViewFilter(
+    filter1 = FilterCriteria(
         min_confidence=0.8,
         max_confidence=1.0,
     )
     print("\n1. Confidence range filter:")
-    print(f"   {filter1}")
+    print(f"   {filter1.to_dict()}")
 
     # Filter by entry types
-    filter2 = ViewFilter(
-        entry_types=["detection", "phone_call", "email"],
+    filter2 = FilterCriteria(
+        types=[JournalEntryType.DETECTION, JournalEntryType.PHONE_CALL, JournalEntryType.EMAIL],
     )
     print("\n2. Entry types filter:")
-    print(f"   {filter2}")
+    print(f"   {filter2.to_dict()}")
 
-    # Filter by identifier types
-    filter3 = ViewFilter(
-        identifier_types=["phone", "email"],
+    # Filter by identifier type
+    filter3 = FilterCriteria(
+        identifier_type=IdentifierType.PHONE,
     )
-    print("\n3. Identifier types filter:")
-    print(f"   {filter3}")
+    print("\n3. Identifier type filter:")
+    print(f"   {filter3.to_dict()}")
 
     # Combined filter
-    filter4 = ViewFilter(
+    filter4 = FilterCriteria(
         min_confidence=0.9,
-        entry_types=["detection"],
-        identifier_types=["phone"],
+        types=[JournalEntryType.DETECTION],
+        identifier_type=IdentifierType.PHONE,
     )
     print("\n4. Combined filter:")
-    print(f"   {filter4}")
+    print(f"   {filter4.to_dict()}")
 
 
 if __name__ == "__main__":

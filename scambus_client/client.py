@@ -3030,13 +3030,13 @@ class ScambusClient:
 
         Examples:
             ```python
-            # Using filter_criteria (preferred)
-            from scambus_client.types import FilterCriteria
+            # Using FilterCriteria with typed constants (preferred)
+            from scambus_client import FilterCriteria, IdentifierType, StreamDataType
             stream = client.create_stream(
                 name="high-confidence-phones",
-                data_type="identifier",
+                data_type=StreamDataType.IDENTIFIER,
                 filter_criteria=FilterCriteria(
-                    types=["phone", "email"],
+                    identifier_type=IdentifierType.PHONE,
                     min_confidence=0.8,
                     country="US",
                 ),
@@ -3046,9 +3046,9 @@ class ScambusClient:
             # Legacy convenience params (still supported)
             stream = client.create_stream(
                 name="phone-numbers",
-                data_type="identifier",
-                identifier_types="phone",
-                min_confidence=0.8
+                data_type=StreamDataType.IDENTIFIER,
+                identifier_types=IdentifierType.PHONE,
+                min_confidence=0.8,
             )
             ```
         """
@@ -3067,7 +3067,10 @@ class ScambusClient:
             if identifier_types:
                 if isinstance(identifier_types, str):
                     identifier_types = [identifier_types]
-                fc["types"] = identifier_types
+                # identifier_type is a singular *string in FilterCriteria,
+                # used by ApplyIdentifierFilters for identifier-type streams.
+                # (types[] is journal entry types — a completely different field)
+                fc["identifier_type"] = identifier_types[0]
             if min_confidence is not None:
                 fc["min_confidence"] = min_confidence
             if max_confidence is not None:
@@ -3134,12 +3137,12 @@ class ScambusClient:
 
         Example:
             ```python
-            # Using filter_criteria (preferred)
-            from scambus_client.types import FilterCriteria
+            # Using FilterCriteria with typed constants (preferred)
+            from scambus_client import FilterCriteria, IdentifierType, StreamDataType
             stream = client.create_temporary_stream(
-                data_type="identifier",
+                data_type=StreamDataType.IDENTIFIER,
                 filter_criteria=FilterCriteria(
-                    types=["phone"],
+                    identifier_type=IdentifierType.PHONE,
                     min_confidence=0.8,
                 ),
             )
@@ -3147,7 +3150,7 @@ class ScambusClient:
             # Create temporary stream for a specific view
             stream = client.create_temporary_stream(
                 view_id="my-view-id",
-                data_type="journal_entry"
+                data_type=StreamDataType.JOURNAL_ENTRY,
             )
             ```
         """
@@ -3163,7 +3166,10 @@ class ScambusClient:
             if identifier_types:
                 if isinstance(identifier_types, str):
                     identifier_types = [identifier_types]
-                fc["types"] = identifier_types
+                # identifier_type is a singular *string in FilterCriteria,
+                # used by ApplyIdentifierFilters for identifier-type streams.
+                # (types[] is journal entry types — a completely different field)
+                fc["identifier_type"] = identifier_types[0]
             if min_confidence is not None:
                 fc["min_confidence"] = min_confidence
             if max_confidence is not None:
@@ -3206,46 +3212,74 @@ class ScambusClient:
         self,
         stream_id: str,
         cursor: Optional[str] = None,
-        order: str = "desc",
+        order: str = "asc",
         limit: Optional[int] = None,
+        include_test: Optional[bool] = None,
         timeout: Optional[float] = 10.0,
     ) -> Dict[str, Any]:
         """
-        Consume messages from an export stream.
+        Consume messages from an export stream via HTTP polling.
+
+        This is the primary method for batch consumption of stream data.
+        The ``stream_id`` parameter accepts either a stream UUID (if you are the
+        stream owner) or a **consumer key** (if you are an external consumer).
 
         Args:
             stream_id: Stream UUID or consumer key
-            cursor: Starting cursor position (optional)
-            order: Message order ("asc" or "desc", default: "desc")
-            limit: Maximum number of messages to return (optional)
-            timeout: Request timeout in seconds (default: 2.0)
+            cursor: Starting cursor position. Common values:
+
+                - ``"0"`` — read from the beginning of the stream
+                - ``"$"`` — read only new messages arriving after this point
+                - ``"1735689600000-0"`` — resume from a specific message ID
+
+                If omitted, defaults to ``"0"`` (beginning).
+            order: Message order — ``"asc"`` (oldest first, default) or ``"desc"``
+                (newest first). Use ``"asc"`` for chronological consumption.
+            limit: Maximum number of messages to return (max 1000).
+            include_test: If True, include test data (is_test=true messages).
+                Defaults to False on the server.
+            timeout: Request timeout in seconds (default: 10.0).
 
         Returns:
             Dict with keys:
-                - messages: List of messages
-                - nextCursor: Cursor for next batch
+
+            - ``messages``: List of stream message dicts
+            - ``next_cursor``: Cursor string for the next poll request
+            - ``has_more``: Boolean indicating whether more messages are available
+
+        Raises:
+            ScambusAuthenticationError: Invalid API key or inactive stream (401)
+            ScambusAPIError: With status_code attribute for stream-specific errors:
+
+                - 410: Cursor is outside the retention window — reset to ``"0"`` or ``"$"``
+                - 416: Cursor is before stream start (data was trimmed)
+                - 429: Rate limited — back off and retry
+                - 503: Stream is being rebuilt — retry after ~10 seconds
 
         Example:
             ```python
-            # Consume from current position
-            result = client.consume_stream("abc-123")
-            for msg in result['messages']:
-                print(f"Identifier: {msg['displayValue']}")
+            # Poll from the beginning (oldest first)
+            result = client.consume_stream("your-consumer-key", cursor="0", limit=100)
+            for msg in result["messages"]:
+                print(msg)
 
-            # Consume from beginning
-            result = client.consume_stream(
-                stream_id="abc-123",
-                cursor="0",
-                order="asc",
-                limit=100
-            )
-
-            # Continue with next cursor
+            # Continue from where you left off
             next_result = client.consume_stream(
-                stream_id="abc-123",
-                cursor=result['nextCursor'],
-                order="asc"
+                "your-consumer-key",
+                cursor=result["next_cursor"],
+                limit=100,
             )
+
+            # Continuous polling loop
+            cursor = "0"
+            while True:
+                result = client.consume_stream(consumer_key, cursor=cursor, limit=100)
+                for msg in result["messages"]:
+                    process(msg)
+                if result["next_cursor"]:
+                    cursor = result["next_cursor"]
+                if not result["has_more"]:
+                    time.sleep(5)
             ```
         """
         url = f"{self.api_url}/consume/{stream_id}/poll"
@@ -3256,8 +3290,9 @@ class ScambusClient:
             params["order"] = order
         if limit:
             params["limit"] = limit
+        if include_test is not None:
+            params["include_test"] = str(include_test).lower()
 
-        # Use custom timeout for stream consumption to avoid blocking tests
         try:
             response = self.session.request(
                 method="GET",
@@ -3270,9 +3305,75 @@ class ScambusClient:
                 self._handle_error_response(response)
 
             if response.status_code == 204:
-                return {}
+                return {"messages": [], "next_cursor": None, "has_more": False}
+
+            data = response.json()
+
+            # Normalize response keys to snake_case for consistency.
+            # The consumer poll endpoint returns snake_case, but we handle
+            # both casings defensively in case the server format varies.
+            return {
+                "messages": data.get("messages", []),
+                "next_cursor": data.get("next_cursor") if "next_cursor" in data else data.get("nextCursor"),
+                "has_more": data.get("has_more", data.get("hasMore", False)),
+            }
+        except ScambusAPIError:
+            raise
+        except Exception as e:
+            raise ScambusAPIError(f"Request failed: {e}")
+
+    def get_stream_info(
+        self,
+        consumer_key: str,
+        timeout: Optional[float] = 10.0,
+    ) -> Dict[str, Any]:
+        """
+        Get information about a stream using its consumer key.
+
+        Returns stream metadata including cursor positions, message counts,
+        and configuration. Useful for choosing a starting cursor before
+        beginning consumption.
+
+        Args:
+            consumer_key: Consumer key UUID for the export stream
+            timeout: Request timeout in seconds (default: 10.0)
+
+        Returns:
+            Dict with stream metadata including:
+
+            - ``stream_id``: Stream UUID
+            - ``name``: Stream name
+            - ``data_type``: ``"identifier"`` or ``"journal_entry"``
+            - ``messages_in_stream``: Current message count
+            - ``first_entry``: ID of the oldest message
+            - ``last_entry``: ID of the newest message
+            - ``cursors``: Dict with ``beginning``, ``end``, ``default``, ``recommended``
+            - ``rate_limit_per_minute``: Configured rate limit
+            - ``batch_size``: Max messages per request
+
+        Example:
+            ```python
+            info = client.get_stream_info("your-consumer-key")
+            print(f"Stream: {info['name']}")
+            print(f"Messages available: {info['messages_in_stream']}")
+            print(f"Recommended cursor: {info['cursors']['recommended']}")
+            ```
+        """
+        url = f"{self.api_url}/consume/{consumer_key}/info"
+
+        try:
+            response = self.session.request(
+                method="GET",
+                url=url,
+                timeout=timeout,
+            )
+
+            if response.status_code >= 400:
+                self._handle_error_response(response)
 
             return response.json()
+        except ScambusAPIError:
+            raise
         except Exception as e:
             raise ScambusAPIError(f"Request failed: {e}")
 

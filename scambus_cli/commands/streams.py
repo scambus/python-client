@@ -2,11 +2,9 @@
 
 import json
 import sys
-from typing import Union
 
 import click
 
-from scambus_client.models import Identifier, JournalEntry
 from scambus_cli.utils import (
     print_detail,
     print_error,
@@ -293,23 +291,23 @@ def create(
 
 
 @streams.command()
-@click.argument("stream_id")
+@click.argument("consumer_key")
 @click.option("--limit", type=int, default=10, help="Number of events to consume")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 @click.pass_context
-def consume(ctx, stream_id, limit, output_json):
-    """Consume events from a stream.
+def consume(ctx, consumer_key, limit, output_json):
+    """Consume events from a stream using its consumer key.
 
     Automatically detects and formats both journal entry and identifier messages.
 
     Examples:
-        scambus streams consume <stream-id>
-        scambus streams consume <stream-id> --limit 100
+        scambus streams consume <consumer-key>
+        scambus streams consume <consumer-key> --limit 100
     """
     client = ctx.obj.get_client()
 
     try:
-        result = client.consume_stream(stream_id, limit=limit)
+        result = client.consume_stream(consumer_key, cursor="0", order="asc", limit=limit)
         messages = result.get("messages", [])
 
         if not messages:
@@ -320,87 +318,19 @@ def consume(ctx, stream_id, limit, output_json):
             print_json(messages)
         else:
             print_success(f"Consumed {len(messages)} messages")
-            next_cursor = result.get("nextCursor")
+            next_cursor = result.get("next_cursor")
+            has_more = result.get("has_more", False)
             if next_cursor:
                 print_info(f"Next cursor: {next_cursor}")
+            if has_more:
+                print_info("More messages available — poll again with the next cursor")
 
             for i, msg in enumerate(messages, 1):
-                # Detect message type by checking for identifier-specific fields
-                is_identifier = "identifierId" in msg or "identifier_id" in msg
-
-                if is_identifier:
-                    _format_identifier_message(i, msg)
-                else:
-                    _format_journal_entry_message(i, msg)
+                _format_stream_message_dict(i, msg)
 
     except Exception as e:
         print_error(f"Failed to consume stream: {e}")
         sys.exit(1)
-
-
-def _format_identifier_message(index: int, msg: Identifier):
-    """Format an identifier stream message for display."""
-    print(f"\n--- Message {index} (Identifier) ---")
-
-    # Access typed object properties
-    identifier_id = msg.id or "N/A"
-    identifier_type = msg.type or "unknown"
-    display_value = msg.display_value or "N/A"
-    confidence = msg.confidence or 0.0
-    created_at = msg.created_at.isoformat() if msg.created_at else "N/A"
-
-    print(f"Identifier ID: {identifier_id}")
-    print(f"Type: {identifier_type}")
-    print(f"Value: {display_value}")
-    print(f"Confidence: {confidence:.3f}")
-    print(f"Created: {created_at}")
-
-    # Show data if present (tags, etc. are in the raw data dict)
-    if msg.data:
-        tags = msg.data.get("tags", [])
-        if tags:
-            tag_names = [t.get("name", t.get("id", "unknown")) for t in tags]
-            print(f"Tags: {', '.join(tag_names)}")
-
-        # Show triggering journal entry if present in data
-        triggering_je = msg.data.get("triggeringJournalEntry") or msg.data.get(
-            "triggering_journal_entry"
-        )
-        if triggering_je:
-            je_type = triggering_je.get("type", "unknown")
-            je_id = triggering_je.get("id", "N/A")
-            performed_at = triggering_je.get("performedAt") or triggering_je.get(
-                "performed_at", "N/A"
-            )
-            print(f"Triggered by: {je_type} ({je_id[:8]}...) at {performed_at}")
-
-
-def _format_journal_entry_message(index: int, msg: JournalEntry):
-    """Format a journal entry stream message for display."""
-    print(f"\n--- Message {index} (Journal Entry) ---")
-
-    je_id = msg.id or "N/A"
-    je_type = msg.type or "unknown"
-    description = msg.description or ""
-    performed_at = msg.performed_at.isoformat() if msg.performed_at else "N/A"
-
-    print(f"Journal Entry ID: {je_id}")
-    print(f"Type: {je_type}")
-    if description:
-        print(f"Description: {description}")
-    print(f"Performed: {performed_at}")
-
-    # Show identifiers if present (these are typed Identifier objects)
-    identifiers = msg.identifiers or []
-    if identifiers:
-        print(f"Identifiers ({len(identifiers)}):")
-        for ident in identifiers[:5]:  # Show first 5
-            ident_type = ident.type or "unknown"
-            ident_value = ident.display_value or "N/A"
-            ident_conf = ident.confidence or 0.0
-            print(f"  - {ident_type}: {ident_value} (confidence: {ident_conf:.3f})")
-        if len(identifiers) > 5:
-            print(f"  ... and {len(identifiers) - 5} more")
 
 
 @streams.command()
@@ -577,8 +507,51 @@ def recovery_info(ctx, stream_id, output_json):
         sys.exit(1)
 
 
+@streams.command("info")
+@click.argument("consumer_key")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+@click.pass_context
+def stream_info(ctx, consumer_key, output_json):
+    """Get stream information using a consumer key.
+
+    Returns stream metadata including cursor positions, message counts,
+    and configuration. Useful for choosing a starting cursor.
+
+    Examples:
+        scambus streams info <consumer-key>
+        scambus streams info <consumer-key> --json
+    """
+    client = ctx.obj.get_client()
+
+    try:
+        info = client.get_stream_info(consumer_key)
+
+        if output_json:
+            print_json(info)
+        else:
+            cursors = info.get("cursors", {})
+            details = {
+                "Stream": info.get("name", "N/A"),
+                "Data Type": info.get("data_type", "N/A"),
+                "Messages": info.get("messages_in_stream", "N/A"),
+                "First Entry": info.get("first_entry", "N/A"),
+                "Last Entry": info.get("last_entry", "N/A"),
+                "Rate Limit": f"{info.get('rate_limit_per_minute', 'N/A')}/min",
+            }
+            if cursors:
+                details["Cursor (beginning)"] = cursors.get("beginning", "N/A")
+                details["Cursor (end)"] = cursors.get("end", "N/A")
+                details["Cursor (recommended)"] = cursors.get("recommended", "N/A")
+
+            print_detail(details, title="Stream Info")
+
+    except Exception as e:
+        print_error(f"Failed to get stream info: {e}")
+        sys.exit(1)
+
+
 @streams.command("listen")
-@click.argument("stream_id")
+@click.argument("consumer_key")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON (one per line)")
 @click.option(
     "--from-beginning",
@@ -588,10 +561,10 @@ def recovery_info(ctx, stream_id, output_json):
 @click.option("--cursor", help="Start from specific message ID (e.g., '1700000000000-0')")
 @click.option("--test", is_flag=True, help="Include test data (is_test=true entries)")
 @click.pass_context
-def listen_stream(ctx, stream_id, output_json, from_beginning, cursor, test):
-    """Listen to a stream in real-time via WebSocket.
+def listen_stream(ctx, consumer_key, output_json, from_beginning, cursor, test):
+    """Listen to a stream in real-time via SSE (Server-Sent Events).
 
-    This command establishes a WebSocket connection and streams messages
+    This command connects to the SSE endpoint and streams messages
     in real-time as they are published to the export stream. Messages are
     displayed immediately without polling.
 
@@ -605,25 +578,31 @@ def listen_stream(ctx, stream_id, output_json, from_beginning, cursor, test):
 
     Examples:
         # Listen for new messages only (default)
-        scambus streams listen <stream-id>
+        scambus streams listen <consumer-key>
 
         # Replay all messages from the beginning
-        scambus streams listen <stream-id> --from-beginning
+        scambus streams listen <consumer-key> --from-beginning
 
         # Start from a specific message ID
-        scambus streams listen <stream-id> --cursor 1700000000000-0
+        scambus streams listen <consumer-key> --cursor 1700000000000-0
 
         # Listen with test data
-        scambus streams listen <stream-id> --test
+        scambus streams listen <consumer-key> --test
 
         # Listen and output JSON (one per line)
-        scambus streams listen <stream-id> --json
-
-        # Listen and pipe to jq for processing
-        scambus streams listen <stream-id> --json | jq '.identifiers[0].displayValue'
+        scambus streams listen <consumer-key> --json
     """
-    import asyncio
-    from scambus_client.websocket_client import ScambusWebSocketClient
+    try:
+        import sseclient
+    except ImportError:
+        print_error(
+            "SSE support requires the sseclient-py package.\n"
+            "Install it with: pip install sseclient-py"
+        )
+        sys.exit(1)
+
+    import requests as sse_requests
+
     from scambus_cli.config import get_api_url
     from scambus_cli.auth_device import DeviceAuthManager
 
@@ -631,7 +610,7 @@ def listen_stream(ctx, stream_id, output_json, from_beginning, cursor, test):
     if cursor:
         stream_cursor = cursor
     elif from_beginning:
-        stream_cursor = "0-0"
+        stream_cursor = "0"
     else:
         stream_cursor = "$"  # default: from end
 
@@ -644,15 +623,23 @@ def listen_stream(ctx, stream_id, output_json, from_beginning, cursor, test):
         print_error("Not authenticated. Run 'scambus auth login' first.")
         sys.exit(1)
 
-    # Create WebSocket client
-    ws_client = ScambusWebSocketClient(api_url=api_url, api_token=token)
+    # Build SSE URL
+    sse_url = f"{api_url}/consume/{consumer_key}/stream"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "text/event-stream",
+    }
+    params = {
+        "cursor": stream_cursor,
+        "include_test": "true" if test else "false",
+    }
 
     cursor_desc = {
         "$": "new messages only",
-        "0-0": "from beginning",
+        "0": "from beginning",
     }.get(stream_cursor, f"from cursor {stream_cursor}")
 
-    print_info(f"Connecting to stream {stream_id}...")
+    print_info(f"Connecting to stream {consumer_key} via SSE...")
     print_info(f"Starting position: {cursor_desc}")
     if test:
         print_info("Test data: enabled")
@@ -660,55 +647,94 @@ def listen_stream(ctx, stream_id, output_json, from_beginning, cursor, test):
 
     message_count = 0
 
-    # Define message handler
-    def handle_message(message):
-        nonlocal message_count
-        message_count += 1
-
-        if output_json:
-            # Convert typed object to dictionary for JSON output
-            if isinstance(message, (JournalEntry, Identifier)):
-                message_dict = message.to_dict()
-            else:
-                message_dict = message
-            print_json(message_dict)
-        else:
-            # Pretty print message
-            _format_stream_message(message_count, message)
-
-    # Define error handler
-    def handle_error(error):
-        print_error(f"WebSocket error: {error}")
-
-    # Run WebSocket client
     try:
-        asyncio.run(
-            ws_client.listen_stream(
-                stream_id=stream_id,
-                on_message=handle_message,
-                on_error=handle_error,
-                cursor=stream_cursor,
-                include_test=test,
-            )
-        )
+        response = sse_requests.get(sse_url, headers=headers, params=params, stream=True)
+        response.raise_for_status()
+
+        client = sseclient.SSEClient(response)
+
+        for event in client.events():
+            try:
+                if event.event == "connected":
+                    info = json.loads(event.data)
+                    print_info(f"Connected to stream: {info.get('stream', consumer_key)}")
+                    continue
+
+                elif event.event == "batch":
+                    # Historical replay — array of messages
+                    messages = json.loads(event.data)
+                    for msg in messages:
+                        message_count += 1
+                        if output_json:
+                            print_json(msg)
+                        else:
+                            _format_stream_message_dict(message_count, msg)
+
+                elif event.event == "message":
+                    # Real-time individual message
+                    msg = json.loads(event.data)
+                    message_count += 1
+                    if output_json:
+                        print_json(msg)
+                    else:
+                        _format_stream_message_dict(message_count, msg)
+
+                elif event.event == "error":
+                    error = json.loads(event.data)
+                    print_error(f"Stream error: {error.get('error', event.data)}")
+            except json.JSONDecodeError as e:
+                print_error(f"Failed to parse SSE event ({event.event}): {e}")
+
     except KeyboardInterrupt:
         print_info(f"\n\nStopped listening. Received {message_count} messages.")
+    except sse_requests.exceptions.HTTPError as e:
+        print_error(f"HTTP error connecting to stream: {e}")
+        sys.exit(1)
     except Exception as e:
         print_error(f"Failed to listen to stream: {e}")
         sys.exit(1)
 
 
-def _format_stream_message(index: int, msg: Union[JournalEntry, Identifier]):
-    """Format a stream message for display."""
-    # Use isinstance to detect the typed object
-    if isinstance(msg, Identifier):
-        _format_identifier_message(index, msg)
-    elif isinstance(msg, JournalEntry):
-        _format_journal_entry_message(index, msg)
+def _format_stream_message_dict(index: int, msg: dict):
+    """Format a raw stream message dict for display."""
+    # Detect message type by checking for identifier-specific fields
+    is_identifier = "identifier_id" in msg or "identifierId" in msg
+
+    if is_identifier:
+        print(f"\n--- Message {index} (Identifier) ---")
+        identifier_id = msg.get("identifier_id") or msg.get("identifierId", "N/A")
+        identifier_type = msg.get("type", "unknown")
+        display_value = msg.get("display_value") or msg.get("displayValue", "N/A")
+        confidence = msg.get("confidence", 0.0)
+        print(f"Identifier ID: {identifier_id}")
+        print(f"Type: {identifier_type}")
+        print(f"Value: {display_value}")
+        print(f"Confidence: {confidence}")
+        tags = msg.get("tags", [])
+        if tags:
+            tag_names = [
+                f"{t.get('tag_title', t.get('tagTitle', 'unknown'))}: {t.get('value', '')}"
+                for t in tags
+            ]
+            print(f"Tags: {', '.join(tag_names)}")
     else:
-        # Fallback for unexpected type
-        print(f"\n--- Message {index} (Unknown Type) ---")
-        print(msg)
+        print(f"\n--- Message {index} (Journal Entry) ---")
+        je_type = msg.get("type", "unknown")
+        description = msg.get("description", "")
+        performed_at = msg.get("performed_at") or msg.get("performedAt", "N/A")
+        print(f"Type: {je_type}")
+        if description:
+            print(f"Description: {description}")
+        print(f"Performed: {performed_at}")
+        identifiers = msg.get("identifiers", [])
+        if identifiers:
+            print(f"Identifiers ({len(identifiers)}):")
+            for ident in identifiers[:5]:
+                ident_type = ident.get("type", "unknown")
+                ident_value = ident.get("display_value") or ident.get("displayValue", "N/A")
+                print(f"  - {ident_type}: {ident_value}")
+            if len(identifiers) > 5:
+                print(f"  ... and {len(identifiers) - 5} more")
 
 
 @streams.command()

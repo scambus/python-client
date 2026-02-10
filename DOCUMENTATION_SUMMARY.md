@@ -22,7 +22,8 @@ Official Python client for SCAMBUS - submit scam reports and subscribe to data s
    - [5.7 Tags](#57-tags)
    - [5.8 Media & Evidence](#58-media--evidence)
    - [5.9 Automation Management](#59-automation-management)
-   - [5.10 Real-time Notifications](#510-real-time-notifications-websocket)
+   - [5.10 Stream Consumption](#510-stream-consumption)
+   - [5.11 Real-time Updates (WebSocket)](#511-real-time-updates-websocket)
 6. [CLI Reference](#6-cli-reference)
 7. [API Reference](#7-api-reference)
 8. [Error Handling](#8-error-handling)
@@ -44,7 +45,7 @@ Scambus is a collaborative scam reporting and fraud intelligence platform. The P
 - **Views (Saved Queries)**: Create, execute, and manage saved query views
 - **In-Progress Activities**: Track and complete ongoing scam interactions
 - **Data Streams**: Subscribe to real-time scam data with export streams
-- **Real-time Notifications**: WebSocket support for instant notifications
+- **Stream Consumption**: Poll for batches or connect via SSE for real-time delivery
 - **Case Management**: Create and manage investigation cases
 - **Evidence**: Upload and attach media evidence
 - **Automation Management**: Create automation identities with API key rotation
@@ -261,15 +262,18 @@ results = client.search_identifiers(
 
 ```python
 # Create stream for phone scams
+from scambus_client import FilterCriteria, IdentifierType, StreamDataType
 stream = client.create_stream(
     name="Phone Scams Monitor",
-    data_type="journal_entry",
-    identifier_types=["phone"],
-    min_confidence=0.8
+    data_type=StreamDataType.JOURNAL_ENTRY,
+    filter_criteria=FilterCriteria(
+        identifier_type=IdentifierType.PHONE,
+        min_confidence=0.8,
+    ),
 )
 
 # Consume messages
-result = client.consume_stream(stream.id, cursor="0", limit=10)
+result = client.consume_stream(stream.consumer_key, cursor="0", limit=10)
 for msg in result['messages']:
     print(f"New phone scam: {msg['type']}")
 ```
@@ -538,12 +542,16 @@ Subscribe to real-time scam data with two types of streams.
 
 **Journal Entry Stream:**
 ```python
+from scambus_client import FilterCriteria, IdentifierType, StreamDataType
+
 stream = client.create_stream(
     name="High-Confidence Phone Scams",
-    data_type="journal_entry",
-    identifier_types=["phone"],
-    min_confidence=0.8,
-    max_confidence=1.0
+    data_type=StreamDataType.JOURNAL_ENTRY,
+    filter_criteria=FilterCriteria(
+        identifier_type=IdentifierType.PHONE,
+        min_confidence=0.8,
+        max_confidence=1.0,
+    ),
 )
 ```
 
@@ -551,11 +559,13 @@ stream = client.create_stream(
 ```python
 stream = client.create_stream(
     name="Phone Number State Changes",
-    data_type="identifier",
-    identifier_types=["phone"],
-    min_confidence=0.9,
+    data_type=StreamDataType.IDENTIFIER,
+    filter_criteria=FilterCriteria(
+        identifier_type=IdentifierType.PHONE,
+        min_confidence=0.9,
+    ),
     backfill_historical=True,
-    backfill_from_date="2025-01-01T00:00:00Z"
+    backfill_from_date="2025-01-01T00:00:00Z",
 )
 ```
 
@@ -599,39 +609,44 @@ filter_expr = build_combined_filter(
 #### Using Filters with create_stream()
 
 ```python
-# Simple: use identifier_types parameter
+from scambus_client import FilterCriteria, IdentifierType, StreamDataType
+
+# Using FilterCriteria (preferred)
+stream = client.create_stream(
+    name="Phone Numbers Only",
+    data_type=StreamDataType.IDENTIFIER,
+    filter_criteria=FilterCriteria(
+        identifier_type=IdentifierType.PHONE,
+        min_confidence=0.8,
+    ),
+)
+
+# Legacy convenience params (still supported)
 stream = client.create_stream(
     name="Phone Numbers Only",
     data_type="identifier",
     identifier_types="phone",
-    min_confidence=0.8
-)
-
-# Advanced: combine with custom expression
-stream = client.create_stream(
-    name="WhatsApp Only",
-    data_type="identifier",
-    identifier_types="social_media",
-    filter_expression='$.details.platform == "whatsapp"',
-    min_confidence=0.85
+    min_confidence=0.8,
 )
 ```
 
 #### Consuming Streams
 
 ```python
-result = client.consume_stream(stream.id, cursor="0", limit=100)
+# Use consumer_key for external consumers, or stream.id for stream owners
+result = client.consume_stream(stream.consumer_key, cursor="0", limit=100)
 
 for msg in result['messages']:
     if stream.data_type == "journal_entry":
         print(f"Journal Entry: {msg['type']} - {msg['description']}")
     else:
-        print(f"Identifier: {msg['type']} - {msg['displayValue']}")
+        print(f"Identifier: {msg['type']} - {msg['display_value']}")
         print(f"Confidence: {msg['confidence']}")
-        print(f"Triggered by: {msg['triggeringJournalEntry']['type']}")
+        print(f"Triggered by: {msg['triggering_journal_entry']['type']}")
 
 # Save cursor for next poll
-next_cursor = result['cursor']
+next_cursor = result['next_cursor']
+has_more = result['has_more']
 ```
 
 #### Stream Management
@@ -666,8 +681,14 @@ scambus streams create \
     --backfill \
     --backfill-from-date 2025-01-01T00:00:00Z
 
-# Consume from stream
-scambus streams consume <stream-id> --limit 100
+# Consume from stream (use consumer key)
+scambus streams consume <consumer-key> --limit 100
+
+# Listen in real-time via SSE
+scambus streams listen <consumer-key> --json
+
+# Get stream info
+scambus streams info <consumer-key>
 ```
 
 ---
@@ -707,12 +728,12 @@ When consuming identifier streams, each message includes a `details` field with 
 **Example:**
 ```python
 details = msg.get("details", {})
-country_code = details.get('country_code') or details.get('countryCode')
-area_code = details.get('area_code') or details.get('areaCode')
-is_toll_free = details.get('is_toll_free', details.get('isTollFree', False))
+country_code = details.get('country_code')
+area_code = details.get('area_code')
+is_toll_free = details.get('is_toll_free', False)
 
 if is_toll_free and confidence > 0.9:
-    add_to_toll_free_scam_list(msg['displayValue'])
+    add_to_toll_free_scam_list(msg['display_value'])
 ```
 
 #### Email Addresses
@@ -778,12 +799,12 @@ if is_toll_free and confidence > 0.9:
 
 #### Field Name Formats
 
-The API may return field names in either snake_case or camelCase. Handle both:
+The consumer API uses **snake_case** consistently for all fields:
 
 ```python
-country_code = details.get('country_code') or details.get('countryCode')
-area_code = details.get('area_code') or details.get('areaCode')
-is_toll_free = details.get('is_toll_free', details.get('isTollFree', False))
+country_code = details.get('country_code')
+area_code = details.get('area_code')
+is_toll_free = details.get('is_toll_free', False)
 ```
 
 ---
@@ -857,7 +878,7 @@ scambus views execute VIEW_ID --limit 20
 scambus views create \
     --name "High Confidence Phone Scams" \
     --entity-type journal \
-    --filter-criteria '{"identifier_types": ["phone"], "min_confidence": 0.9}'
+    --filter-criteria '{"identifier_type": "phone", "min_confidence": 0.9}'
 ```
 
 ---
@@ -989,7 +1010,92 @@ client.delete_automation_api_key(automation["id"], key_id)
 
 ---
 
-### 5.10 Real-time Notifications (WebSocket)
+### 5.10 Stream Consumption
+
+External consumers who have been given a **consumer key** and **API key credentials** can consume streams via polling or SSE.
+
+#### HTTP Polling
+
+```python
+from scambus_client import ScambusClient
+
+client = ScambusClient(
+    api_key_id="your-key-id",
+    api_key_secret="your-secret-key",
+)
+
+consumer_key = "your-consumer-key"
+
+# Get stream metadata
+info = client.get_stream_info(consumer_key)
+print(f"Stream: {info.get('name')}, Messages: {info.get('messages_in_stream')}")
+
+# Poll for messages (oldest first)
+result = client.consume_stream(consumer_key, cursor="0", order="asc", limit=100)
+for msg in result["messages"]:
+    print(msg)
+
+# Advance cursor for next batch
+next_cursor = result["next_cursor"]
+has_more = result["has_more"]
+```
+
+#### Cursor Values
+
+| Cursor | Meaning |
+|--------|---------|
+| `"0"` | Read from the beginning of the stream |
+| `"$"` | Read only new messages arriving after this point |
+| `"1735689600000-0"` | Resume from a specific message ID |
+
+#### SSE (Server-Sent Events)
+
+For real-time consumption with lower latency, connect to the SSE endpoint:
+
+```python
+import json
+import requests
+import sseclient
+
+consumer_key = "your-consumer-key"
+url = f"https://scambus.net/api/consume/{consumer_key}/stream"
+headers = {
+    "X-API-Key": "your-key-id:your-secret-key",
+    "Accept": "text/event-stream",
+}
+params = {"cursor": "$", "include_test": "false"}
+
+response = requests.get(url, headers=headers, params=params, stream=True)
+client = sseclient.SSEClient(response)
+
+for event in client.events():
+    if event.event == "connected":
+        print(f"Connected: {json.loads(event.data)}")
+    elif event.event == "batch":
+        for msg in json.loads(event.data):
+            print(msg)
+    elif event.event == "message":
+        print(json.loads(event.data))
+    elif event.event == "error":
+        print(f"Error: {json.loads(event.data)}")
+```
+
+#### Stream-Specific Error Codes
+
+| HTTP Status | Meaning | Action |
+|-------------|---------|--------|
+| 410 | Cursor outside retention window | Reset cursor to `"0"` or `"$"` |
+| 416 | Cursor before stream start | Use `stream_first_id` from error, or `"0"` |
+| 429 | Rate limited | Back off and retry |
+| 503 | Stream being rebuilt | Retry after ~10 seconds |
+
+See `examples/consumer_polling_example.py`, `examples/consumer_sse_example.py`, and `docs/consumer-guide.md` for complete examples.
+
+---
+
+### 5.11 Real-time Updates (WebSocket)
+
+The WebSocket client provides real-time notifications and live updates for internal/authenticated users. This is separate from stream consumption (which uses HTTP polling or SSE).
 
 ```python
 import asyncio
@@ -1037,7 +1143,9 @@ scambus journal in-progress
 ```bash
 scambus streams create --name "Name" --data-type journal_entry|identifier [--identifier-type phone] [--min-confidence 0.8]
 scambus streams list
-scambus streams consume STREAM_ID [--limit 100]
+scambus streams consume CONSUMER_KEY [--limit 100]
+scambus streams listen CONSUMER_KEY [--json]           # Real-time SSE
+scambus streams info CONSUMER_KEY                       # Stream metadata
 scambus streams recover STREAM_ID
 scambus streams backfill STREAM_ID --from-date 2025-01-01T00:00:00Z
 ```
@@ -1115,14 +1223,14 @@ TagLookup(tag_name="TagName")                        # Boolean tag
 TagLookup(tag_name="TagName", tag_value="Value")     # Valued tag
 ```
 
-**ViewFilter**
+**FilterCriteria** (preferred for all filter use cases)
 ```python
-from scambus_client import ViewFilter
+from scambus_client import FilterCriteria, IdentifierType, JournalEntryType
 
-ViewFilter(
+FilterCriteria(
     min_confidence=0.9,
-    entry_types=["detection", "phone_call"],
-    identifier_types=["phone", "email"],
+    types=[JournalEntryType.DETECTION, JournalEntryType.PHONE_CALL],
+    identifier_type=IdentifierType.PHONE,
 )
 ```
 
@@ -1133,7 +1241,7 @@ from scambus_client import ViewSortOrder
 ViewSortOrder(field="created_at", direction="desc")
 ```
 
-**StreamFilter**
+**StreamFilter** (deprecated — use FilterCriteria instead)
 ```python
 from scambus_client import StreamFilter
 
@@ -1150,7 +1258,7 @@ StreamFilter(
 |----------|---------|
 | **Journal Entries** | `create_detection()`, `create_phone_call()`, `create_email()`, `create_text_conversation()`, `create_note()`, `create_import()`, `create_export()`, `get_journal_entry()`, `delete_journal_entry()`, `list_journal_entries()`, `query_journal_entries()` |
 | **In-Progress** | `get_in_progress_activities()`, `complete_activity()` |
-| **Streams** | `create_stream()`, `list_streams()`, `get_stream()`, `delete_stream()`, `consume_stream()`, `recover_stream()`, `backfill_stream()`, `get_recovery_status()`, `get_stream_recovery_info()` |
+| **Streams** | `create_stream()`, `list_streams()`, `get_stream()`, `delete_stream()`, `consume_stream()`, `get_stream_info()`, `recover_stream()`, `backfill_stream()`, `get_recovery_status()`, `get_stream_recovery_info()` |
 | **Search** | `search_identifiers()`, `search_cases()`, `list_identifiers()` |
 | **Views** | `create_view()`, `list_views()`, `get_view()`, `delete_view()`, `execute_view()`, `execute_my_journal_entries()`, `execute_my_pinboard()` |
 | **Cases** | `create_case()`, `list_cases()`, `get_case()`, `update_case()`, `delete_case()`, `create_case_comment()` |
@@ -1159,8 +1267,9 @@ StreamFilter(
 | **Profile** | `list_notifications()`, `mark_notification_as_read()`, `list_sessions()`, `list_passkeys()`, `get_2fa_status()`, `toggle_2fa()` |
 | **Automations** | `create_automation()`, `list_automations()`, `create_automation_api_key()`, `list_automation_api_keys()`, `revoke_automation_api_key()`, `delete_automation_api_key()` |
 | **Reports** | `generate_identifier_report()`, `generate_journal_entry_report()`, `generate_view_report()`, `get_report_status()`, `download_report()`, `wait_for_report()` |
+| **Consumer** | `get_stream_info()`, `consume_stream()` (with consumer key) |
 | **WebSocket** | `create_websocket_client()` |
-| **Helpers** | `build_identifier_type_filter()`, `build_combined_filter()`, `build_stream_filter()` |
+| **Helpers** | `build_identifier_type_filter()`, `build_combined_filter()` |
 
 ---
 
@@ -1339,7 +1448,14 @@ Complete working examples are in the [`examples/`](examples/) directory:
 |---------|-------------|--------------|
 | [`reports_example.py`](examples/reports_example.py) | Generate and download reports | `generate_identifier_report()`, `generate_view_report()`, `wait_for_report()`, PDF/CSV formats |
 
-### Real-time Notifications
+### Stream Consumption (Consumer-Oriented)
+
+| Example | Description | Key Concepts |
+|---------|-------------|--------------|
+| [`consumer_polling_example.py`](examples/consumer_polling_example.py) | Poll for batches with error handling | `consume_stream()`, `get_stream_info()`, cursor pagination, error recovery |
+| [`consumer_sse_example.py`](examples/consumer_sse_example.py) | Real-time SSE consumption | `sseclient-py`, reconnection with backoff, event types |
+
+### Real-time Updates (WebSocket)
 
 | Example | Description | Key Concepts |
 |---------|-------------|--------------|
@@ -1419,4 +1535,4 @@ $.details.is_toll_free == true
 
 ---
 
-*Last updated: 2025-11-11 | Version: 0.1.0*
+*Last updated: 2026-02-10 | Version: 0.1.0*

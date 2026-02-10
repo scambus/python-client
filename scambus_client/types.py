@@ -7,6 +7,53 @@ from dataclasses import dataclass, field, asdict
 from typing import Any, Dict, List, Optional, Union
 
 
+class IdentifierType:
+    """Identifier type constants."""
+
+    PHONE = "phone"
+    EMAIL = "email"
+    URL = "url"
+    BANK_ACCOUNT = "bank_account"
+    CRYPTO_WALLET = "crypto_wallet"
+    SOCIAL_MEDIA = "social_media"
+    ZELLE = "zelle"
+    PAYMENT_TOKEN = "payment_token"
+
+
+class JournalEntryType:
+    """Journal entry type constants."""
+
+    PHONE_CALL = "phone_call"
+    EMAIL = "email"
+    TEXT_CONVERSATION = "text_conversation"
+    CONVERSATION_CONTINUATION = "conversation_continuation"
+    WEB_INTERACTION = "web_interaction"
+    DETECTION = "detection"
+    IMPORT = "import"
+    EXPORT = "export"
+    VALIDATION = "validation"
+    NOTE = "note"
+    TAG_OPERATION = "tag_operation"
+    CONFIDENCE_OPERATION = "confidence_operation"
+    REDACTION = "redaction"
+    CASE_UPDATE = "case_update"
+    CASE_IDENTIFIER_LINK = "case_identifier_link"
+    CASE_IDENTIFIER_UNLINK = "case_identifier_unlink"
+    KARMA_ADJUSTMENT = "karma_adjustment"
+    ACTIVITY_COMPLETE = "activity_complete"
+    DATA = "data"
+    TASK_UPDATE = "task_update"
+    TASK_ASSIGNMENT = "task_assignment"
+    CASE_HANDOFF = "case_handoff"
+
+
+class StreamDataType:
+    """Export stream data type constants."""
+
+    JOURNAL_ENTRY = "journal_entry"
+    IDENTIFIER = "identifier"
+
+
 @dataclass
 class TagLookup:
     """Tag lookup for applying tags to journal entries.
@@ -185,8 +232,10 @@ class StreamFilter:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API."""
         result = {}
-        if self.identifier_types is not None:
-            result["identifier_types"] = self.identifier_types
+        if self.identifier_types:
+            # Go FilterCriteria has identifier_type as a singular *string,
+            # not a list. Use the first value.
+            result["identifier_type"] = self.identifier_types[0]
         if self.min_confidence is not None:
             result["min_confidence"] = self.min_confidence
         if self.max_confidence is not None:
@@ -225,10 +274,11 @@ class ViewFilter:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API."""
         result = {}
-        if self.identifier_types is not None:
-            result["identifier_types"] = self.identifier_types
+        if self.identifier_types:
+            # Go FilterCriteria has identifier_type as a singular *string
+            result["identifier_type"] = self.identifier_types[0]
         if self.entry_types is not None:
-            result["entry_types"] = self.entry_types
+            result["types"] = self.entry_types
         if self.min_confidence is not None:
             result["min_confidence"] = self.min_confidence
         if self.max_confidence is not None:

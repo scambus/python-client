@@ -6,7 +6,8 @@ Official Python client for Scambus - submit scam reports and subscribe to data s
 This library enables you to:
 - Submit scam reports via journal entries (phone calls, emails, text messages, detections)
 - Search for identifiers, cases, and journal entries
-- Create and consume export streams for real-time data
+- Create and consume export streams (HTTP polling and SSE)
+- Receive real-time notifications and updates via WebSocket
 - Manage your own cases, tags, and profile
 """
 
@@ -19,11 +20,15 @@ from .exceptions import (
     ScambusAPIError,
     ScambusAuthenticationError,
     ScambusNotFoundError,
+    ScambusServerError,
     ScambusValidationError,
 )
 from .websocket_client import ScambusWebSocketClient
 from .types import (
     FilterCriteria,
+    IdentifierType,
+    JournalEntryType,
+    StreamDataType,
     TagLookup,
     StreamFilter,
     ViewFilter,
@@ -87,7 +92,11 @@ __all__ = [
     "ScambusAuthenticationError",
     "ScambusValidationError",
     "ScambusNotFoundError",
+    "ScambusServerError",
     "FilterCriteria",
+    "IdentifierType",
+    "JournalEntryType",
+    "StreamDataType",
     "TagLookup",
     "StreamFilter",
     "ViewFilter",

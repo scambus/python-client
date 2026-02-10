@@ -3305,17 +3305,29 @@ class ScambusClient:
                 self._handle_error_response(response)
 
             if response.status_code == 204:
-                return {"messages": [], "next_cursor": None, "has_more": False}
+                return {
+                    "messages": [],
+                    "next_cursor": None,
+                    "has_more": False,
+                    # Backward compat with pre-0.2.0 camelCase keys
+                    "nextCursor": None,
+                    "hasMore": False,
+                }
 
             data = response.json()
 
             # Normalize response keys to snake_case for consistency.
             # The consumer poll endpoint returns snake_case, but we handle
             # both casings defensively in case the server format varies.
+            next_cursor = data.get("next_cursor") if "next_cursor" in data else data.get("nextCursor")
+            has_more = data.get("has_more", data.get("hasMore", False))
             return {
                 "messages": data.get("messages", []),
-                "next_cursor": data.get("next_cursor") if "next_cursor" in data else data.get("nextCursor"),
-                "has_more": data.get("has_more", data.get("hasMore", False)),
+                "next_cursor": next_cursor,
+                "has_more": has_more,
+                # Backward compat with pre-0.2.0 camelCase keys
+                "nextCursor": next_cursor,
+                "hasMore": has_more,
             }
         except ScambusAPIError:
             raise

@@ -293,21 +293,32 @@ def create(
 @streams.command()
 @click.argument("consumer_key")
 @click.option("--limit", type=int, default=10, help="Number of events to consume")
+@click.option("--from-beginning", is_flag=True, help="Start from beginning instead of resuming")
+@click.option("--cursor", help="Start from specific cursor position (e.g., '1700000000000-0')")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 @click.pass_context
-def consume(ctx, consumer_key, limit, output_json):
+def consume(ctx, consumer_key, limit, from_beginning, cursor, output_json):
     """Consume events from a stream using its consumer key.
 
-    Automatically detects and formats both journal entry and identifier messages.
+    By default, resumes from the last consumed position. Use --from-beginning
+    to read from the start, or --cursor to start from a specific position.
 
     Examples:
         scambus streams consume <consumer-key>
+        scambus streams consume <consumer-key> --from-beginning
         scambus streams consume <consumer-key> --limit 100
     """
     client = ctx.obj.get_client()
 
+    if cursor:
+        stream_cursor = cursor
+    elif from_beginning:
+        stream_cursor = "0"
+    else:
+        stream_cursor = None  # server auto-resumes from last checkpoint
+
     try:
-        result = client.consume_stream(consumer_key, cursor="0", order="asc", limit=limit)
+        result = client.consume_stream(consumer_key, cursor=stream_cursor, order="asc", limit=limit)
         messages = result.get("messages", [])
 
         if not messages:
@@ -556,7 +567,7 @@ def stream_info(ctx, consumer_key, output_json):
 @click.option(
     "--from-beginning",
     is_flag=True,
-    help="Start from beginning of stream (default: only new messages)",
+    help="Start from beginning of stream instead of resuming",
 )
 @click.option("--cursor", help="Start from specific message ID (e.g., '1700000000000-0')")
 @click.option("--test", is_flag=True, help="Include test data (is_test=true entries)")
@@ -568,9 +579,10 @@ def listen_stream(ctx, consumer_key, output_json, from_beginning, cursor, test):
     in real-time as they are published to the export stream. Messages are
     displayed immediately without polling.
 
-    By default, only new messages are shown. Use --from-beginning to
-    replay all historical messages first, or --cursor to start from
-    a specific position.
+    By default, resumes from the last consumed position. If the stream
+    has no consumption history, only new messages are shown. Use
+    --from-beginning to replay all historical messages, or --cursor
+    to start from a specific position.
 
     Use --test to also receive test data (entries created with is_test=true).
 
@@ -612,7 +624,7 @@ def listen_stream(ctx, consumer_key, output_json, from_beginning, cursor, test):
     elif from_beginning:
         stream_cursor = "0"
     else:
-        stream_cursor = "$"  # default: from end
+        stream_cursor = None  # server auto-resumes from last checkpoint
 
     # Get API URL and authentication
     api_url = get_api_url()
@@ -630,13 +642,15 @@ def listen_stream(ctx, consumer_key, output_json, from_beginning, cursor, test):
         "Accept": "text/event-stream",
     }
     params = {
-        "cursor": stream_cursor,
         "include_test": "true" if test else "false",
     }
+    if stream_cursor is not None:
+        params["cursor"] = stream_cursor
 
     cursor_desc = {
         "$": "new messages only",
         "0": "from beginning",
+        None: "resuming from last position",
     }.get(stream_cursor, f"from cursor {stream_cursor}")
 
     print_info(f"Connecting to stream {consumer_key} via SSE...")

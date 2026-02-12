@@ -757,6 +757,7 @@ class ScambusClient:
         in_progress: bool = False,
         metadata: Optional[Dict[str, Any]] = None,
         is_test: bool = False,
+        ai_extract: bool = False,
     ) -> JournalEntry:
         """
         Create a journal entry with automatic identifier resolution.
@@ -799,6 +800,9 @@ class ScambusClient:
                 Use entry.complete() later to mark as complete.
             metadata: Optional metadata dictionary for additional tracking (e.g., test_batch, environment)
             is_test: If True, marks entry as test/demo data (excluded from normal queries)
+            ai_extract: If True, uses AI to extract identifiers from attached media
+                and/or conversation message text. For conversation_continuation entries,
+                inline identifier positions are computed automatically.
 
         Returns:
             Created JournalEntry object
@@ -903,6 +907,10 @@ class ScambusClient:
         # Add is_test flag if set
         if is_test:
             data["is_test"] = is_test
+
+        # Add ai_extract flag if set
+        if ai_extract:
+            data["ai_extract"] = True
 
         # Handle start_time and end_time
         if start_time:
@@ -3228,11 +3236,14 @@ class ScambusClient:
             stream_id: Stream UUID or consumer key
             cursor: Starting cursor position. Common values:
 
+                - ``None`` (default) — automatically resume from the last consumed position
                 - ``"0"`` — read from the beginning of the stream
                 - ``"$"`` — read only new messages arriving after this point
                 - ``"1735689600000-0"`` — resume from a specific message ID
 
-                If omitted, defaults to ``"0"`` (beginning).
+                If omitted, the server resumes from where this stream last left off.
+                For a brand-new stream with no consumption history, this is equivalent
+                to ``"0"`` (beginning).
             order: Message order — ``"asc"`` (oldest first, default) or ``"desc"``
                 (newest first). Use ``"asc"`` for chronological consumption.
             limit: Maximum number of messages to return (max 1000).
@@ -3270,8 +3281,8 @@ class ScambusClient:
                 limit=100,
             )
 
-            # Continuous polling loop
-            cursor = "0"
+            # Continuous polling loop (automatically resumes from last position)
+            cursor = None
             while True:
                 result = client.consume_stream(consumer_key, cursor=cursor, limit=100)
                 for msg in result["messages"]:

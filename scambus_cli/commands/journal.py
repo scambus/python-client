@@ -1998,6 +1998,12 @@ def create_conversation(
     is_flag=True,
     help="Mark as non-contiguous (shows visual separator for time gap)",
 )
+@click.option(
+    "--ai-extract",
+    is_flag=True,
+    default=False,
+    help="Use AI to extract identifiers from message text (computes inline positions automatically)",
+)
 @click.option("--json", "output_json", is_flag=True, help="Output JSON")
 @click.pass_context
 def add_conversation_messages(
@@ -2012,6 +2018,7 @@ def add_conversation_messages(
     originator_identifier,
     create_originator,
     non_contiguous,
+    ai_extract,
     output_json,
 ):
     """Add messages to an existing conversation (creates conversation_continuation entry).
@@ -2127,6 +2134,9 @@ def add_conversation_messages(
 
         if identifiers:
             data["identifier_lookups"] = identifiers
+
+        if ai_extract:
+            data["ai_extract"] = True
 
         # Add originator lookup if provided
         if originator_type or originator_identifier:

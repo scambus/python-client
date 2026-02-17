@@ -198,6 +198,74 @@ Each message represents an identifier state change:
 
 All fields in the consumer API use **snake_case** consistently — both top-level and nested objects.
 
+## Using Typed Stream Message Classes
+
+The Python client provides typed dataclasses for stream messages, so you can work with proper objects instead of raw dicts.
+
+### Typed Stream Messages
+
+```python
+from scambus_client import ScambusClient, IdentifierStreamMessage, JournalEntryStreamMessage
+
+client = ScambusClient(api_key_id="your-key-id", api_key_secret="your-secret-key")
+result = client.consume_stream("your-consumer-key", cursor="0", limit=100)
+
+# For identifier streams:
+for raw_msg in result.get("messages", []):
+    msg = IdentifierStreamMessage.from_dict(raw_msg)
+    print(f"Identifier: {msg.display_value} (confidence: {msg.confidence})")
+    print(f"Type: {msg.type}, Modified: {msg.modified_at}")
+    for tag in msg.tags:
+        print(f"  Tag: {tag.tag_title} = {tag.value}")
+
+# For journal entry streams:
+for raw_msg in result.get("messages", []):
+    msg = JournalEntryStreamMessage.from_dict(raw_msg)
+    print(f"Entry: {msg.description} ({msg.type})")
+    for ident in msg.identifiers:
+        print(f"  Identifier: {ident.display_value}")
+```
+
+### Typed Identifier Details
+
+Each identifier type has a corresponding details class. Use `parse_identifier_details()` to automatically select the right class:
+
+```python
+from scambus_client import (
+    IdentifierStreamMessage,
+    parse_identifier_details,
+    PhoneDetails,
+    BankAccountDetails,
+)
+
+for raw_msg in result.get("messages", []):
+    msg = IdentifierStreamMessage.from_dict(raw_msg)
+    details = parse_identifier_details(msg.type, msg.details)
+
+    if isinstance(details, PhoneDetails):
+        print(f"Phone: {details.country_code} {details.number}")
+        if details.is_toll_free:
+            print("  (toll-free)")
+
+    elif isinstance(details, BankAccountDetails):
+        print(f"Bank: {details.institution} - {details.account_number}")
+```
+
+Available detail classes:
+
+| Type | Class | Key Fields |
+|------|-------|------------|
+| `phone` | `PhoneDetails` | `country_code`, `number`, `area_code`, `is_toll_free`, `region` |
+| `email` | `IdentifierEmailDetails` | `email` |
+| `url` | `URLDetails` | `url` |
+| `bank_account` | `BankAccountDetails` | `account_number`, `routing`, `institution`, `owner`, `owner_address`, `country`, `address`, `swift`, `iban`, `account_type` |
+| `crypto_wallet` | `CryptoWalletDetails` | `address`, `currency`, `network` |
+| `social_media` | `SocialMediaDetails` | `platform`, `handle` |
+| `zelle` | `ZelleDetails` | `type`, `value` |
+| `payment_token` | `PaymentTokenDetails` | `service`, `identifier`, `type` |
+
+All detail classes support both snake_case and camelCase input via `from_dict()`, and output snake_case via `to_dict()`.
+
 ## Consuming via SSE (Server-Sent Events)
 
 For real-time consumption with lower latency, you can connect to the SSE endpoint directly. This keeps a persistent HTTP connection open and pushes messages to you as they arrive.

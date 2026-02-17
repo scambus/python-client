@@ -695,20 +695,77 @@ scambus streams info <consumer-key>
 
 ### 5.3 Identifier Structured Data
 
-When consuming identifier streams, each message includes a `details` field with type-specific structured data.
+When consuming identifier streams, each message includes a `details` field with type-specific structured data. The Python client provides **typed dataclasses** for each identifier type, with a factory function for automatic dispatch.
 
 #### Message Structure
 
 ```json
 {
   "identifier_id": "uuid",
-  "type": "phone|email|bank_account|crypto_wallet|social_media|zelle",
+  "type": "phone|email|bank_account|crypto_wallet|social_media|zelle|url|payment_token",
   "display_value": "normalized display value",
   "confidence": 0.0-1.0,
   "details": { ... },
   "tags": [...],
   "triggering_journal_entry": {...}
 }
+```
+
+#### Typed Detail Classes
+
+| Identifier Type | Class | Key Fields |
+|----------------|-------|------------|
+| `phone` | `PhoneDetails` | `country_code`, `number`, `area_code`, `is_toll_free`, `region` |
+| `email` | `IdentifierEmailDetails` | `email` |
+| `url` | `URLDetails` | `url` |
+| `bank_account` | `BankAccountDetails` | `account_number`, `routing`, `institution`, `owner`, `owner_address`, `country`, `address`, `swift`, `iban`, `account_type` |
+| `crypto_wallet` | `CryptoWalletDetails` | `address`, `currency`, `network` |
+| `social_media` | `SocialMediaDetails` | `platform`, `handle` |
+| `zelle` | `ZelleDetails` | `type`, `value` |
+| `payment_token` | `PaymentTokenDetails` | `service`, `identifier`, `type` |
+
+> **Note:** `IdentifierEmailDetails` is named to avoid collision with the journal entry `EmailDetails` class (which describes email report metadata).
+
+#### Using the Factory Function
+
+The `parse_identifier_details()` function automatically selects the correct class:
+
+```python
+from scambus_client import parse_identifier_details, PhoneDetails
+
+# Automatic dispatch based on identifier type
+details = parse_identifier_details(msg["type"], msg.get("details"))
+if isinstance(details, PhoneDetails):
+    print(f"Phone: {details.country_code} {details.number}")
+    if details.is_toll_free:
+        flag_toll_free(msg["display_value"])
+```
+
+#### Using Classes Directly
+
+```python
+from scambus_client import PhoneDetails, BankAccountDetails
+
+# from_dict() handles both snake_case and camelCase input
+phone = PhoneDetails.from_dict({"countryCode": "+1", "number": "2345678901", "areaCode": "234"})
+print(phone.country_code)  # "+1"
+print(phone.area_code)     # "234"
+
+# to_dict() outputs snake_case
+phone.to_dict()  # {"country_code": "+1", "number": "2345678901", "area_code": "234"}
+```
+
+#### With Stream Messages
+
+```python
+from scambus_client import IdentifierStreamMessage, parse_identifier_details, PhoneDetails
+
+for raw_msg in result.get("messages", []):
+    msg = IdentifierStreamMessage.from_dict(raw_msg)
+    details = parse_identifier_details(msg.type, msg.details)
+
+    if isinstance(details, PhoneDetails) and details.is_toll_free:
+        print(f"Toll-free scam number: {msg.display_value}")
 ```
 
 #### Phone Numbers
@@ -723,17 +780,6 @@ When consuming identifier streams, each message includes a `details` field with 
   "is_toll_free": false,
   "region": "US"
 }
-```
-
-**Example:**
-```python
-details = msg.get("details", {})
-country_code = details.get('country_code')
-area_code = details.get('area_code')
-is_toll_free = details.get('is_toll_free', False)
-
-if is_toll_free and confidence > 0.9:
-    add_to_toll_free_scam_list(msg['display_value'])
 ```
 
 #### Email Addresses
@@ -758,7 +804,9 @@ if is_toll_free and confidence > 0.9:
   "owner": "John Doe",
   "owner_address": "123 Main St",
   "country": "US",
-  "routing_bank": "Federal Reserve",
+  "address": "456 Bank Ave",
+  "swift": "ABCDEF12",
+  "iban": "US12345678901234",
   "account_type": "checking"
 }
 ```
@@ -797,14 +845,26 @@ if is_toll_free and confidence > 0.9:
 }
 ```
 
+#### Payment Tokens
+
+**Type:** `payment_token`
+
+```json
+{
+  "service": "PayPal",
+  "identifier": "user@example.com",
+  "type": "email"
+}
+```
+
 #### Field Name Formats
 
-The consumer API uses **snake_case** consistently for all fields:
+The consumer API uses **snake_case** consistently. All detail classes accept both snake_case and camelCase via `from_dict()`:
 
 ```python
-country_code = details.get('country_code')
-area_code = details.get('area_code')
-is_toll_free = details.get('is_toll_free', False)
+# Both work:
+PhoneDetails.from_dict({"country_code": "+1", "number": "123"})
+PhoneDetails.from_dict({"countryCode": "+1", "number": "123"})
 ```
 
 ---

@@ -1775,6 +1775,668 @@ class ExportStream:
         )
 
 
+# ---------------------------------------------------------------------------
+# Stream message types — returned by SSE and polling consumer endpoints
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class StreamTagInfo:
+    """
+    Tag information in a stream message.
+
+    Attributes:
+        tag_id: UUID of the tag definition
+        tag_title: Display name of the tag
+        value: For valued tags the string value, for boolean tags ``True``
+        value_id: UUID of the tag value (only for valued tags)
+    """
+
+    tag_id: str
+    tag_title: str
+    value: Any = None
+    value_id: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "StreamTagInfo":
+        """Create from stream message dictionary."""
+        return cls(
+            tag_id=data.get("tag_id", ""),
+            tag_title=data.get("tag_title", ""),
+            value=data.get("value"),
+            value_id=data.get("value_id"),
+        )
+
+
+@dataclass
+class StreamEvidenceInfo:
+    """
+    Evidence summary in a stream message.
+
+    Attributes:
+        id: Evidence UUID
+        type: Evidence type
+        description: Evidence description
+        source: Evidence source
+        collected_at: When evidence was collected
+        media_ids: Associated media UUIDs
+        originator_id: Who created this evidence
+        originator_type: Originator entity type
+    """
+
+    id: str
+    type: str
+    description: Optional[str] = None
+    source: Optional[str] = None
+    collected_at: Optional[datetime] = None
+    media_ids: List[str] = field(default_factory=list)
+    originator_id: Optional[str] = None
+    originator_type: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "StreamEvidenceInfo":
+        """Create from stream message dictionary."""
+        return cls(
+            id=data.get("id", ""),
+            type=data.get("type", ""),
+            description=data.get("description"),
+            source=data.get("source"),
+            collected_at=Identifier._parse_datetime(data.get("collected_at")),
+            media_ids=data.get("media_ids", []),
+            originator_id=data.get("originator_id"),
+            originator_type=data.get("originator_type"),
+        )
+
+
+@dataclass
+class StreamJournalEntryInfo:
+    """
+    Journal entry summary embedded in an identifier stream message.
+
+    Attributes:
+        id: Journal entry UUID
+        type: Entry type (e.g. "text_conversation", "detection")
+        description: Human-readable description
+        performed_at: When the action/event occurred
+        originator_id: Who created this entry
+        originator_type: Originator entity type (e.g. "automation", "user")
+        evidence: Evidence items attached to this entry
+    """
+
+    id: str
+    type: str
+    description: str = ""
+    performed_at: Optional[datetime] = None
+    originator_id: Optional[str] = None
+    originator_type: Optional[str] = None
+    evidence: List[StreamEvidenceInfo] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "StreamJournalEntryInfo":
+        """Create from stream message dictionary."""
+        evidence = []
+        if data.get("evidence"):
+            evidence = [StreamEvidenceInfo.from_dict(e) for e in data["evidence"]]
+        return cls(
+            id=data.get("id", ""),
+            type=data.get("type", ""),
+            description=data.get("description", ""),
+            performed_at=Identifier._parse_datetime(data.get("performed_at")),
+            originator_id=data.get("originator_id"),
+            originator_type=data.get("originator_type"),
+            evidence=evidence,
+        )
+
+
+@dataclass
+class StreamOriginatorInfo:
+    """
+    Originator details in a journal entry stream message.
+
+    Attributes:
+        id: Originator UUID
+        type: Entity type (e.g. "user", "automation")
+        name: Display name
+    """
+
+    id: str
+    type: str
+    name: str = ""
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "StreamOriginatorInfo":
+        """Create from stream message dictionary."""
+        return cls(
+            id=data.get("id", ""),
+            type=data.get("type", ""),
+            name=data.get("name", ""),
+        )
+
+
+@dataclass
+class StreamIdentifierInfo:
+    """
+    Identifier summary embedded in a journal entry stream message.
+
+    Attributes:
+        id: Identifier UUID
+        type: Identifier type (e.g. "phone", "email")
+        display_value: Human-readable display value
+        confidence: Confidence score (0.0-1.0)
+        is_ours: Whether this identifier belongs to us
+        label: Contextual label (e.g. "from", "to")
+        data: Type-specific data
+        created_at: Creation timestamp (ISO string)
+        updated_at: Last update timestamp (ISO string)
+    """
+
+    id: str
+    type: str
+    display_value: str = ""
+    confidence: float = 0.0
+    is_ours: bool = False
+    label: Optional[str] = None
+    data: Optional[Dict[str, Any]] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "StreamIdentifierInfo":
+        """Create from stream message dictionary."""
+        return cls(
+            id=data.get("id", ""),
+            type=data.get("type", ""),
+            display_value=data.get("display_value", ""),
+            confidence=data.get("confidence", 0.0),
+            is_ours=data.get("is_ours", False),
+            label=data.get("label"),
+            data=data.get("data"),
+            created_at=data.get("created_at"),
+            updated_at=data.get("updated_at"),
+        )
+
+
+@dataclass
+class IdentifierStreamMessage:
+    """
+    Message from an identifier-type export stream (SSE or polling).
+
+    Each message represents an identifier with its event-sourced state at the
+    time the triggering journal entry was processed. Includes confidence score,
+    tags, and optionally the journal entries that reference this identifier.
+
+    Attributes:
+        cursor: Redis stream message ID — pass back on reconnect to resume
+        identifier_id: Identifier UUID
+        type: Identifier type (phone, email, bank_account, crypto_wallet, etc.)
+        display_value: Human-readable value
+        details: Type-specific structured data (e.g. number/region for phone)
+        confidence: Event-sourced confidence score (0.0-1.0)
+        modified_at: When identifier was last modified
+        originator_id: Who created/modified this identifier
+        tags: Current tags from materialized view
+        triggering_journal_entry: The journal entry that caused this stream event
+        journal_entries: All related journal entries (if stream has IncludeJournalEntries)
+        is_test: Whether this is test/demo data
+    """
+
+    identifier_id: str
+    type: str
+    display_value: str = ""
+    details: Optional[Dict[str, Any]] = None
+    confidence: float = 0.0
+    modified_at: Optional[datetime] = None
+    cursor: Optional[str] = None
+    originator_id: Optional[str] = None
+    tags: List[StreamTagInfo] = field(default_factory=list)
+    triggering_journal_entry: Optional[StreamJournalEntryInfo] = None
+    journal_entries: List[StreamJournalEntryInfo] = field(default_factory=list)
+    is_test: bool = False
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "IdentifierStreamMessage":
+        """Create from stream message dictionary."""
+        tags = []
+        if data.get("tags"):
+            tags = [StreamTagInfo.from_dict(t) for t in data["tags"]]
+
+        triggering = None
+        if data.get("triggering_journal_entry"):
+            triggering = StreamJournalEntryInfo.from_dict(data["triggering_journal_entry"])
+
+        journal_entries = []
+        if data.get("journal_entries"):
+            journal_entries = [
+                StreamJournalEntryInfo.from_dict(je) for je in data["journal_entries"]
+            ]
+
+        return cls(
+            identifier_id=data.get("identifier_id", ""),
+            type=data.get("type", ""),
+            display_value=data.get("display_value", ""),
+            details=data.get("details"),
+            confidence=data.get("confidence", 0.0),
+            modified_at=Identifier._parse_datetime(data.get("modified_at")),
+            cursor=data.get("cursor"),
+            originator_id=data.get("originator_id"),
+            tags=tags,
+            triggering_journal_entry=triggering,
+            journal_entries=journal_entries,
+            is_test=data.get("is_test", False),
+        )
+
+
+@dataclass
+class JournalEntryStreamMessage:
+    """
+    Message from a journal-entry-type export stream (SSE or polling).
+
+    Each message represents a complete journal entry with full context
+    including referenced identifiers, evidence, and originator information.
+
+    Attributes:
+        cursor: Redis stream message ID — pass back on reconnect to resume
+        id: Journal entry UUID
+        type: Entry type (e.g. "detection", "phone_call", "text_conversation")
+        description: Human-readable description
+        details: Type-specific structured data
+        performed_at: When the action/event occurred
+        confidence: Minimum confidence from linked identifiers
+        start_time: Activity start time (optional)
+        end_time: Activity end time (optional)
+        parent_journal_entry_id: Parent entry for threaded conversations
+        originator: Who created this entry
+        identifiers: Identifiers referenced by this entry
+        evidence: Evidence attached to this entry
+        is_test: Whether this is test/demo data
+        locked_by: User ID who holds the lock (optional)
+        locked_by_name: Display name of lock holder (optional)
+        locked_at: When the lock was acquired (optional)
+    """
+
+    id: str
+    type: str
+    description: str = ""
+    details: Optional[Dict[str, Any]] = None
+    performed_at: Optional[datetime] = None
+    confidence: float = 0.0
+    cursor: Optional[str] = None
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    parent_journal_entry_id: Optional[str] = None
+    originator: Optional[StreamOriginatorInfo] = None
+    identifiers: List[StreamIdentifierInfo] = field(default_factory=list)
+    evidence: List[StreamEvidenceInfo] = field(default_factory=list)
+    is_test: bool = False
+    locked_by: Optional[str] = None
+    locked_by_name: Optional[str] = None
+    locked_at: Optional[datetime] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "JournalEntryStreamMessage":
+        """Create from stream message dictionary."""
+        originator = None
+        if data.get("originator"):
+            originator = StreamOriginatorInfo.from_dict(data["originator"])
+
+        identifiers = []
+        if data.get("identifiers"):
+            identifiers = [StreamIdentifierInfo.from_dict(i) for i in data["identifiers"]]
+
+        evidence = []
+        if data.get("evidence"):
+            evidence = [StreamEvidenceInfo.from_dict(e) for e in data["evidence"]]
+
+        return cls(
+            id=data.get("id", ""),
+            type=data.get("type", ""),
+            description=data.get("description", ""),
+            details=data.get("details"),
+            performed_at=Identifier._parse_datetime(data.get("performed_at")),
+            confidence=data.get("confidence", 0.0),
+            cursor=data.get("cursor"),
+            start_time=Identifier._parse_datetime(data.get("start_time")),
+            end_time=Identifier._parse_datetime(data.get("end_time")),
+            parent_journal_entry_id=data.get("parent_journal_entry_id"),
+            originator=originator,
+            identifiers=identifiers,
+            evidence=evidence,
+            is_test=data.get("is_test", False),
+            locked_by=data.get("locked_by"),
+            locked_by_name=data.get("locked_by_name"),
+            locked_at=Identifier._parse_datetime(data.get("locked_at")),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Identifier Details (typed wrappers for the `details` dict on identifiers)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class PhoneDetails:
+    """
+    Structured details for a phone identifier.
+
+    Fields support both snake_case and camelCase input via from_dict().
+
+    Attributes:
+        country_code: Country calling code (e.g. "+1")
+        number: National number without country code
+        area_code: Area/region code (enriched)
+        is_toll_free: Whether the number is toll-free (enriched)
+        region: Country/region code like "US" (enriched)
+    """
+
+    country_code: Optional[str] = None
+    number: Optional[str] = None
+    area_code: Optional[str] = None
+    is_toll_free: Optional[bool] = None
+    region: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "PhoneDetails":
+        return cls(
+            country_code=_get_value(data, "country_code", "countryCode"),
+            number=data.get("number"),
+            area_code=_get_value(data, "area_code", "areaCode"),
+            is_toll_free=_get_value(data, "is_toll_free", "isTollFree"),
+            region=data.get("region"),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {}
+        if self.country_code is not None:
+            d["country_code"] = self.country_code
+        if self.number is not None:
+            d["number"] = self.number
+        if self.area_code is not None:
+            d["area_code"] = self.area_code
+        if self.is_toll_free is not None:
+            d["is_toll_free"] = self.is_toll_free
+        if self.region is not None:
+            d["region"] = self.region
+        return d
+
+
+@dataclass
+class IdentifierEmailDetails:
+    """
+    Structured details for an email identifier.
+
+    Named IdentifierEmailDetails to avoid collision with the journal entry
+    EmailDetails class (which describes email report metadata like direction,
+    subject, sent_at).
+
+    Attributes:
+        email: The email address
+    """
+
+    email: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "IdentifierEmailDetails":
+        return cls(email=data.get("email"))
+
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {}
+        if self.email is not None:
+            d["email"] = self.email
+        return d
+
+
+@dataclass
+class URLDetails:
+    """
+    Structured details for a URL identifier.
+
+    Attributes:
+        url: The URL
+    """
+
+    url: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "URLDetails":
+        return cls(url=data.get("url"))
+
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {}
+        if self.url is not None:
+            d["url"] = self.url
+        return d
+
+
+@dataclass
+class BankAccountDetails:
+    """
+    Structured details for a bank account identifier.
+
+    Attributes:
+        account_number: Account number
+        routing: Routing number
+        institution: Bank/institution name
+        owner: Account owner name
+        owner_address: Owner address
+        country: Country code
+        address: Bank address
+        swift: SWIFT/BIC code
+        iban: IBAN
+        account_type: Account type (e.g. "checking", "savings")
+    """
+
+    account_number: Optional[str] = None
+    routing: Optional[str] = None
+    institution: Optional[str] = None
+    owner: Optional[str] = None
+    owner_address: Optional[str] = None
+    country: Optional[str] = None
+    address: Optional[str] = None
+    swift: Optional[str] = None
+    iban: Optional[str] = None
+    account_type: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "BankAccountDetails":
+        return cls(
+            account_number=_get_value(data, "account_number", "accountNumber"),
+            routing=data.get("routing"),
+            institution=data.get("institution"),
+            owner=data.get("owner"),
+            owner_address=_get_value(data, "owner_address", "ownerAddress"),
+            country=data.get("country"),
+            address=data.get("address"),
+            swift=data.get("swift"),
+            iban=data.get("iban"),
+            account_type=_get_value(data, "account_type", "accountType"),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {}
+        if self.account_number is not None:
+            d["account_number"] = self.account_number
+        if self.routing is not None:
+            d["routing"] = self.routing
+        if self.institution is not None:
+            d["institution"] = self.institution
+        if self.owner is not None:
+            d["owner"] = self.owner
+        if self.owner_address is not None:
+            d["owner_address"] = self.owner_address
+        if self.country is not None:
+            d["country"] = self.country
+        if self.address is not None:
+            d["address"] = self.address
+        if self.swift is not None:
+            d["swift"] = self.swift
+        if self.iban is not None:
+            d["iban"] = self.iban
+        if self.account_type is not None:
+            d["account_type"] = self.account_type
+        return d
+
+
+@dataclass
+class CryptoWalletDetails:
+    """
+    Structured details for a crypto wallet identifier.
+
+    Attributes:
+        address: Wallet address
+        currency: Currency code (e.g. "BTC", "ETH")
+        network: Network name (e.g. "mainnet", "testnet")
+    """
+
+    address: Optional[str] = None
+    currency: Optional[str] = None
+    network: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "CryptoWalletDetails":
+        return cls(
+            address=data.get("address"),
+            currency=data.get("currency"),
+            network=data.get("network"),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {}
+        if self.address is not None:
+            d["address"] = self.address
+        if self.currency is not None:
+            d["currency"] = self.currency
+        if self.network is not None:
+            d["network"] = self.network
+        return d
+
+
+@dataclass
+class SocialMediaDetails:
+    """
+    Structured details for a social media identifier.
+
+    Attributes:
+        platform: Platform name (e.g. "twitter", "facebook")
+        handle: Username/handle
+    """
+
+    platform: Optional[str] = None
+    handle: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "SocialMediaDetails":
+        return cls(
+            platform=data.get("platform"),
+            handle=data.get("handle"),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {}
+        if self.platform is not None:
+            d["platform"] = self.platform
+        if self.handle is not None:
+            d["handle"] = self.handle
+        return d
+
+
+@dataclass
+class ZelleDetails:
+    """
+    Structured details for a Zelle identifier.
+
+    Attributes:
+        type: Zelle identifier type ("email" or "phone")
+        value: The email or phone value
+    """
+
+    type: Optional[str] = None
+    value: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ZelleDetails":
+        return cls(
+            type=data.get("type"),
+            value=data.get("value"),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {}
+        if self.type is not None:
+            d["type"] = self.type
+        if self.value is not None:
+            d["value"] = self.value
+        return d
+
+
+@dataclass
+class PaymentTokenDetails:
+    """
+    Structured details for a payment token identifier.
+
+    Attributes:
+        service: Payment service name (e.g. "PayPal", "Venmo")
+        identifier: Token or account identifier
+        type: Token type
+    """
+
+    service: Optional[str] = None
+    identifier: Optional[str] = None
+    type: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "PaymentTokenDetails":
+        return cls(
+            service=data.get("service"),
+            identifier=data.get("identifier"),
+            type=data.get("type"),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {}
+        if self.service is not None:
+            d["service"] = self.service
+        if self.identifier is not None:
+            d["identifier"] = self.identifier
+        if self.type is not None:
+            d["type"] = self.type
+        return d
+
+
+def parse_identifier_details(
+    identifier_type: str, details: Optional[Dict[str, Any]]
+) -> Optional[Any]:
+    """Parse a details dict into the appropriate typed class based on identifier type.
+
+    Args:
+        identifier_type: The identifier type string (e.g. "phone", "email", "bank_account")
+        details: The raw details dict from the API
+
+    Returns:
+        A typed details instance, or None if details is empty or type is unknown.
+
+    Example:
+        >>> d = parse_identifier_details("phone", {"countryCode": "+1", "number": "123"})
+        >>> isinstance(d, PhoneDetails)
+        True
+        >>> d.country_code
+        '+1'
+    """
+    if not details:
+        return None
+    mapping = {
+        "phone": PhoneDetails,
+        "email": IdentifierEmailDetails,
+        "url": URLDetails,
+        "bank_account": BankAccountDetails,
+        "crypto_wallet": CryptoWalletDetails,
+        "social_media": SocialMediaDetails,
+        "zelle": ZelleDetails,
+        "payment_token": PaymentTokenDetails,
+    }
+    cls = mapping.get(identifier_type)
+    return cls.from_dict(details) if cls else None
+
+
 @dataclass
 class CaseComment:
     """

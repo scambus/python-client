@@ -25,8 +25,13 @@ class TestScambusClientInit:
         assert client.session is not None
         assert "Authorization" in client.session.headers
 
-    def test_init_without_api_key(self, mock_api_url):
+    def test_init_without_api_key(self, mock_api_url, monkeypatch):
         """Test client initialization without API key raises ValueError."""
+        monkeypatch.setattr("scambus_client.client.get_api_token", lambda api_token=None: None)
+        monkeypatch.setattr("scambus_client.client.get_api_key_id", lambda api_key_id=None: None)
+        monkeypatch.setattr(
+            "scambus_client.client.get_api_key_secret", lambda api_key_secret=None: None
+        )
         with pytest.raises(ValueError, match="No authentication provided"):
             ScambusClient(api_url=mock_api_url)
 
@@ -172,13 +177,13 @@ class TestScambusClientSearch:
 
         # Verify correct parameters were sent
         json_data = call_args.kwargs["json"]
-        assert json_data["searchQuery"] == "scammer@example.com"  # Backend expects searchQuery
+        assert json_data["search_query"] == "scammer@example.com"  # Backend expects search_query
         assert json_data["type"] == "email"  # Backend expects type (singular)
         assert "types" not in json_data  # Backend doesn't accept types (plural)
 
-        assert len(results) == 1
-        assert isinstance(results[0], Identifier)
-        assert results[0].display_value == "scammer@example.com"
+        assert len(results["data"]) == 1
+        assert isinstance(results["data"][0], Identifier)
+        assert results["data"][0].display_value == "scammer@example.com"
 
     def test_search_identifiers_empty_results(self, client):
         """Test searching for identifiers with no results."""
@@ -189,10 +194,10 @@ class TestScambusClientSearch:
         mock_response.json.return_value = {"data": [], "nextCursor": None, "hasMore": False}
         client.session.request.return_value = mock_response
 
-        results = client.search_identifiers(query="nonexistent")
+        result = client.search_identifiers(query="nonexistent")
 
-        assert len(results) == 0
-        assert isinstance(results, list)
+        assert len(result["data"]) == 0
+        assert isinstance(result["data"], list)
 
     def test_search_cases(self, client, mock_case_data):
         """Test searching for cases."""
@@ -258,19 +263,19 @@ class TestScambusClientStreams:
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            "events": [mock_journal_entry_data],
-            "cursor": "new-cursor",
+            "messages": [mock_journal_entry_data],
+            "next_cursor": "new-cursor",
+            "has_more": False,
         }
         client.session.request.return_value = mock_response
 
-        # consume_stream returns the whole dict with events and cursor
         result = client.consume_stream("stream-555", limit=10)
 
         assert isinstance(result, dict)
-        assert "events" in result
-        assert "cursor" in result
-        assert len(result["events"]) == 1
-        assert result["cursor"] == "new-cursor"
+        assert "messages" in result
+        assert "next_cursor" in result
+        assert len(result["messages"]) == 1
+        assert result["next_cursor"] == "new-cursor"
 
 
 class TestScambusClientErrorHandling:
@@ -321,8 +326,10 @@ class TestScambusClientErrorHandling:
 
         mock_response = Mock()
         mock_response.status_code = 500
+        mock_response.headers = {"Content-Type": "application/json"}
         mock_response.json.return_value = {"error": "Internal server error"}
         client.session.request.return_value = mock_response
+        client.max_retries = 0
 
         with pytest.raises(ScambusAPIError):
             client.create_detection(description="Test", identifiers=["email:test@example.com"])
@@ -373,7 +380,7 @@ class TestIsTestFiltering:
         # Verify the request was made with includeTest=True
         call_args = client.session.request.call_args
         json_data = call_args.kwargs.get("json")
-        assert json_data.get("includeTest") is True
+        assert json_data.get("is_test") is True
 
     def test_list_cases_excludes_test_by_default(self, client, mock_case_data):
         """Test that list_cases excludes test data by default."""
@@ -442,10 +449,10 @@ class TestIsTestFiltering:
 
         client.search_identifiers(query="test", include_test=True)
 
-        # Verify the request was made with includeTest=True
+        # Verify the request was made with is_test=True
         call_args = client.session.request.call_args
         json_data = call_args.kwargs.get("json")
-        assert json_data.get("includeTest") is True
+        assert json_data.get("is_test") is True
 
     def test_create_journal_entry_with_is_test(self, client, mock_journal_entry_data):
         """Test that create_journal_entry passes is_test flag correctly."""

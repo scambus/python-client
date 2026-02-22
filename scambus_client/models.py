@@ -64,6 +64,80 @@ class IdentifierLookup:
 
 
 @dataclass
+class ExtractedIdentifierOccurrence:
+    """
+    A single occurrence of an extracted identifier within a conversation message.
+
+    Attributes:
+        message_index: Zero-based index of the message in the conversation
+        field: Which text field contains the occurrence ("body" or "subject")
+        position: Byte offset (UTF-8) of the identifier text within the field
+        length: Byte length (UTF-8) of the identifier text
+    """
+
+    message_index: int
+    field: str
+    position: int
+    length: int
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ExtractedIdentifierOccurrence":
+        """Create from API response dictionary."""
+        return cls(
+            message_index=data.get("message_index", 0),
+            field=data.get("field", ""),
+            position=data.get("position", 0),
+            length=data.get("length", 0),
+        )
+
+
+@dataclass
+class ExtractedIdentifier:
+    """
+    An AI-extracted identifier with its resolved UUID and per-message occurrence positions.
+
+    Returned when ai_extract is used and identifiers are successfully resolved.
+
+    Attributes:
+        ref: Local ref ID linking this identifier to message identifier_refs entries
+        identifier_id: Resolved identifier UUID in the database
+        type: Identifier type (phone, email, url, etc.)
+        value: Normalized identifier value
+        label: Contextual label assigned during extraction
+        confidence: Confidence score (0.0 to 1.0, capped at 0.5 for AI extraction)
+        occurrences: Positions where this identifier appears in conversation messages
+    """
+
+    ref: str
+    identifier_id: str
+    type: str
+    value: str
+    label: Optional[str] = None
+    confidence: Optional[float] = None
+    occurrences: Optional[List[ExtractedIdentifierOccurrence]] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ExtractedIdentifier":
+        """Create from API response dictionary."""
+        occurrences = None
+        raw_occurrences = data.get("occurrences")
+        if raw_occurrences:
+            occurrences = [
+                ExtractedIdentifierOccurrence.from_dict(o) for o in raw_occurrences
+            ]
+
+        return cls(
+            ref=data.get("ref", ""),
+            identifier_id=data.get("identifier_id", ""),
+            type=data.get("type", ""),
+            value=data.get("value", ""),
+            label=data.get("label"),
+            confidence=data.get("confidence"),
+            occurrences=occurrences,
+        )
+
+
+@dataclass
 class FailedIdentifier:
     """
     Represents an identifier that failed validation during journal entry creation.
@@ -85,6 +159,79 @@ class FailedIdentifier:
             type=data.get("type", ""),
             value=data.get("value", ""),
             reason=data.get("reason", ""),
+        )
+
+
+@dataclass
+class BatchEntryResult:
+    """
+    Result of a single entry in a batch create operation.
+
+    Attributes:
+        index: Zero-based index of the entry in the request array
+        status: "created" or "failed"
+        id: UUID of the created journal entry (present when status is "created")
+        error: Error message (present when status is "failed")
+        failed_identifiers: Identifiers that failed validation but did not prevent creation
+        extracted_identifiers: AI-extracted identifiers with resolved UUIDs and occurrence positions
+    """
+
+    index: int
+    status: str
+    id: Optional[str] = None
+    error: Optional[str] = None
+    failed_identifiers: Optional[List[FailedIdentifier]] = None
+    extracted_identifiers: Optional[List[ExtractedIdentifier]] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "BatchEntryResult":
+        """Create from API response dictionary."""
+        failed_idents = None
+        raw_failed = data.get("failed_identifiers")
+        if raw_failed:
+            failed_idents = [FailedIdentifier.from_dict(fi) for fi in raw_failed]
+
+        extracted_idents = None
+        raw_extracted = data.get("extracted_identifiers")
+        if raw_extracted:
+            extracted_idents = [ExtractedIdentifier.from_dict(ei) for ei in raw_extracted]
+
+        return cls(
+            index=data.get("index", 0),
+            status=data.get("status", "failed"),
+            id=data.get("id"),
+            error=data.get("error"),
+            failed_identifiers=failed_idents,
+            extracted_identifiers=extracted_idents,
+        )
+
+
+@dataclass
+class BatchCreateResult:
+    """
+    Result of a batch journal entry creation operation.
+
+    Attributes:
+        results: Per-entry results
+        total: Total number of entries in the batch
+        succeeded: Number of entries successfully created
+        failed: Number of entries that failed
+    """
+
+    results: List[BatchEntryResult]
+    total: int
+    succeeded: int
+    failed: int
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "BatchCreateResult":
+        """Create from API response dictionary."""
+        summary = data.get("summary", {})
+        return cls(
+            results=[BatchEntryResult.from_dict(r) for r in data.get("results", [])],
+            total=summary.get("total", 0),
+            succeeded=summary.get("succeeded", 0),
+            failed=summary.get("failed", 0),
         )
 
 
@@ -363,6 +510,16 @@ class MessageIdentifierRef:
             data["length"] = self.length
         return data
 
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "MessageIdentifierRef":
+        """Create from API response dictionary."""
+        return cls(
+            ref=data.get("ref", ""),
+            field=data.get("field", "body"),
+            position=data.get("position"),
+            length=data.get("length"),
+        )
+
 
 @dataclass
 class MessageAttachment:
@@ -396,6 +553,17 @@ class MessageAttachment:
         if self.media_id:
             data["media_id"] = self.media_id
         return data
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "MessageAttachment":
+        """Create from API response dictionary."""
+        return cls(
+            filename=data.get("filename", ""),
+            content_type=data.get("content_type", ""),
+            size_bytes=data.get("size_bytes"),
+            url=data.get("url"),
+            media_id=data.get("media_id"),
+        )
 
 
 @dataclass
@@ -487,6 +655,56 @@ class ConversationMessage:
         if self.platform_metadata:
             data["platform_metadata"] = self.platform_metadata
         return data
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ConversationMessage":
+        """Create from API response dictionary."""
+        identifier_refs = None
+        raw_refs = data.get("identifier_refs")
+        if raw_refs:
+            identifier_refs = [MessageIdentifierRef.from_dict(r) for r in raw_refs]
+
+        attachments = None
+        raw_attachments = data.get("attachments")
+        if raw_attachments:
+            attachments = [MessageAttachment.from_dict(a) for a in raw_attachments]
+
+        delivery_timestamp = None
+        if data.get("delivery_timestamp"):
+            delivery_timestamp = datetime.fromisoformat(
+                data["delivery_timestamp"].replace("Z", "+00:00")
+            )
+
+        read_timestamp = None
+        if data.get("read_timestamp"):
+            read_timestamp = datetime.fromisoformat(
+                data["read_timestamp"].replace("Z", "+00:00")
+            )
+
+        return cls(
+            index=data.get("index", 0),
+            message_id=data.get("message_id", ""),
+            timestamp=datetime.fromisoformat(
+                data.get("timestamp", "").replace("Z", "+00:00")
+            ),
+            body=data.get("body", ""),
+            is_outgoing=data.get("is_outgoing", False),
+            sender_ref=data.get("sender_ref"),
+            sender_display_name=data.get("sender_display_name"),
+            identifier_refs=identifier_refs,
+            attachments=attachments,
+            timezone=data.get("timezone"),
+            body_html=data.get("body_html"),
+            subject=data.get("subject"),
+            is_deleted=data.get("is_deleted", False),
+            is_edited=data.get("is_edited", False),
+            delivery_status=data.get("delivery_status"),
+            delivery_timestamp=delivery_timestamp,
+            read_timestamp=read_timestamp,
+            in_reply_to=data.get("in_reply_to"),
+            headers=data.get("headers"),
+            platform_metadata=data.get("platform_metadata"),
+        )
 
 
 @dataclass
@@ -629,6 +847,18 @@ class ConversationContinuationDetails:
         if self.non_contiguous:
             data["non_contiguous"] = True
         return data
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ConversationContinuationDetails":
+        """Create from API response dictionary."""
+        messages = [
+            ConversationMessage.from_dict(m) for m in data.get("messages", [])
+        ]
+        return cls(
+            messages=messages,
+            reason=data.get("reason"),
+            non_contiguous=data.get("non_contiguous", False),
+        )
 
 
 @dataclass
@@ -1086,7 +1316,7 @@ class TagOperationDetails:
             description="Staff verified this report",
             parent_journal_entry_id=original_report_id,
             identifier_lookups=[{"type": "phone", "value": "+15551234567"}],
-            tags=[{"tagId": tag_details.tag_id}]
+            tags=[{"tag_id": tag_details.tag_id}]
         )
         ```
     """
@@ -1101,10 +1331,10 @@ class TagOperationDetails:
         """Convert to dictionary for API request."""
         data = {
             "operation": self.operation,
-            "tagId": self.tag_id,
+            "tag_id": self.tag_id,
         }
         if self.tag_value_id:
-            data["tagValueId"] = self.tag_value_id
+            data["tag_value_id"] = self.tag_value_id
         if self.reason:
             data["reason"] = self.reason
         if self.notes:
@@ -1460,7 +1690,8 @@ class JournalEntry:
         end_time: When the activity ended (optional)
         parent_journal_entry_id: Parent entry for causal linking (optional)
         batch_id: Batch ID for grouped entries (optional)
-        tags: Tag display information from server (optional)
+        tags: Direct tag display information from server (optional)
+        effective_tags: Aggregated tags from entry and all descendants (optional)
         total_karma: Total karma points (optional)
         karma_breakdown: Karma calculation breakdown (optional)
         is_draft: Whether this is a draft entry
@@ -1472,6 +1703,8 @@ class JournalEntry:
         child_entries: Child entries (e.g., conversation_continuations)
         failed_identifiers: Identifiers that failed validation during creation (optional).
             Only populated on entries returned from create_* methods, not from get_journal_entry().
+        extracted_identifiers: AI-extracted identifiers with resolved UUIDs and occurrence positions.
+            Only populated on entries returned from create_* methods when ai_extract=True.
         _client: Internal reference to ScambusClient for calling complete()
         _raw_data: Original API response data with all fields
     """
@@ -1492,6 +1725,7 @@ class JournalEntry:
     parent_journal_entry_id: Optional[str] = None
     batch_id: Optional[str] = None
     tags: Optional[List[Dict[str, Any]]] = None
+    effective_tags: Optional[List[Dict[str, Any]]] = None
     total_karma: Optional[int] = None
     karma_breakdown: Optional[Dict[str, Any]] = None
     is_draft: bool = False
@@ -1503,6 +1737,7 @@ class JournalEntry:
     signed_at: Optional[datetime] = None
     child_entries: Optional[List["JournalEntry"]] = None
     failed_identifiers: Optional[List["FailedIdentifier"]] = None
+    extracted_identifiers: Optional[List["ExtractedIdentifier"]] = None
     _client: Optional[Any] = field(default=None, repr=False)
     _raw_data: Optional[Dict[str, Any]] = field(default=None, repr=False)
 
@@ -1608,6 +1843,7 @@ class JournalEntry:
             ),
             batch_id=_get_value(data, "batch_id", "batchId"),
             tags=_get_value(data, "tag_display", "tagDisplay") or data.get("tags"),
+            effective_tags=_get_value(data, "effective_tag_display", "effectiveTagDisplay"),
             total_karma=_get_value(data, "total_karma", "totalKarma"),
             karma_breakdown=_get_value(data, "karma_breakdown", "karmaBreakdown"),
             is_draft=_get_value(data, "is_draft", "isDraft", False),
@@ -1619,6 +1855,11 @@ class JournalEntry:
             signed_at=Identifier._parse_datetime(_get_value(data, "signed_at", "signedAt")),
             child_entries=child_entries,
         )
+
+        # Parse extracted identifiers if present (from create response)
+        raw_extracted = data.get("extracted_identifiers")
+        if raw_extracted:
+            entry.extracted_identifiers = [ExtractedIdentifier.from_dict(ei) for ei in raw_extracted]
 
         # Store the complete raw response for to_dict()
         entry._raw_data = data

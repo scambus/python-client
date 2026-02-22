@@ -62,6 +62,7 @@ from .models import (
     Evidence,
     ExportDetails,
     ExportStream,
+    ExtractedIdentifier,
     FailedIdentifier,
     Identifier,
     IdentifierLookup,
@@ -931,11 +932,18 @@ class ScambusClient:
 
         response = self._request("POST", "/journal-entries", json_data=data)
 
-        # Capture failed_identifiers before fetching full entry
+        # Capture failed_identifiers and extracted_identifiers before fetching full entry
         failed_identifiers = None
         if "failed_identifiers" in response:
             failed_identifiers = [
                 FailedIdentifier.from_dict(fi) for fi in response["failed_identifiers"]
+            ]
+
+        extracted_identifiers = None
+        if "extracted_identifiers" in response:
+            extracted_identifiers = [
+                ExtractedIdentifier.from_dict(ei)
+                for ei in response["extracted_identifiers"]
             ]
 
         # Backend only returns {"id": "..."}, so fetch the full entry
@@ -945,10 +953,68 @@ class ScambusClient:
         # Set client reference so entry.complete() works
         entry._client = self
 
-        # Attach failed identifiers from creation response
+        # Attach failed/extracted identifiers from creation response
         entry.failed_identifiers = failed_identifiers
+        entry.extracted_identifiers = extracted_identifiers
 
         return entry
+
+    def batch_create_journal_entries(
+        self, entries: List[Dict[str, Any]]
+    ) -> "BatchCreateResult":
+        """
+        Create multiple journal entries in a single request.
+
+        Accepts up to 50 entries. Each entry is processed independently —
+        failures in one entry do not affect others. Returns per-entry results
+        with success/failure status.
+
+        Features NOT supported in batch mode (rejected per-entry with error):
+        - request_signing
+        - validation_stream_cursor
+
+        Args:
+            entries: List of journal entry dictionaries, each following the same
+                format as the body of create_journal_entry (type, description,
+                identifier_lookups, etc.)
+
+        Returns:
+            BatchCreateResult with per-entry results and summary counts
+
+        Raises:
+            ScambusValidationError: If the envelope is invalid (empty or >50 entries)
+            ScambusAuthenticationError: If not authenticated
+            ScambusAPIError: If rate limit exceeded before processing
+
+        Example:
+            ```python
+            result = client.batch_create_journal_entries([
+                {
+                    "type": "detection",
+                    "description": "Phishing site detected",
+                    "identifier_lookups": [
+                        {"type": "url", "value": "https://evil.example.com", "confidence": 0.95}
+                    ],
+                },
+                {
+                    "type": "note",
+                    "description": "Suspicious activity observed",
+                },
+            ])
+            print(f"Created {result.succeeded}/{result.total}")
+            for r in result.results:
+                if r.status == "created":
+                    print(f"  [{r.index}] OK: {r.id}")
+                else:
+                    print(f"  [{r.index}] FAILED: {r.error}")
+            ```
+        """
+        from .models import BatchCreateResult
+
+        response = self._request(
+            "POST", "/journal-entries/batch", json_data={"entries": entries}
+        )
+        return BatchCreateResult.from_dict(response)
 
     def create_detection(
         self,

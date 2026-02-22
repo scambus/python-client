@@ -2167,3 +2167,124 @@ def add_conversation_messages(
     except Exception as e:
         print_error(f"Failed to add conversation messages: {e}")
         sys.exit(1)
+
+
+@journal.command("batch-create")
+@click.option(
+    "--file",
+    "entries_file",
+    required=True,
+    type=click.Path(exists=True),
+    help="JSON file containing an array of journal entry objects",
+)
+@click.option("--json", "output_json", is_flag=True, help="Output raw JSON response")
+@click.pass_context
+def batch_create(ctx, entries_file, output_json):
+    """Create multiple journal entries in a single batch request.
+
+    Accepts a JSON file containing an array of journal entry objects (up to 50).
+    Each entry is processed independently — failures in one do not affect others.
+
+    Example JSON file:
+
+    \b
+    [
+      {
+        "type": "detection",
+        "description": "Phishing site detected",
+        "identifier_lookups": [
+          {"type": "url", "value": "https://evil.example.com", "confidence": 0.95}
+        ]
+      },
+      {
+        "type": "note",
+        "description": "Suspicious activity observed"
+      }
+    ]
+    """
+    client = ctx.obj.get_client()
+
+    try:
+        with open(entries_file, "r") as f:
+            entries = json.load(f)
+
+        if not isinstance(entries, list):
+            print_error("JSON file must contain an array of journal entry objects")
+            sys.exit(1)
+
+        if len(entries) == 0:
+            print_error("Entries array must not be empty")
+            sys.exit(1)
+
+        if len(entries) > 50:
+            print_error(f"Too many entries ({len(entries)}). Maximum batch size is 50.")
+            sys.exit(1)
+
+        print_info(f"Submitting batch of {len(entries)} journal entries...")
+
+        result = client.batch_create_journal_entries(entries)
+
+        if output_json:
+            # Output raw response
+            raw = {
+                "results": [
+                    {
+                        "index": r.index,
+                        "status": r.status,
+                        **({"id": r.id} if r.id else {}),
+                        **({"error": r.error} if r.error else {}),
+                        **(
+                            {
+                                "failed_identifiers": [
+                                    {"type": fi.type, "value": fi.value, "reason": fi.reason}
+                                    for fi in r.failed_identifiers
+                                ]
+                            }
+                            if r.failed_identifiers
+                            else {}
+                        ),
+                    }
+                    for r in result.results
+                ],
+                "summary": {
+                    "total": result.total,
+                    "succeeded": result.succeeded,
+                    "failed": result.failed,
+                },
+            }
+            print_json(raw)
+        else:
+            for r in result.results:
+                if r.status == "created":
+                    msg = f"  [{r.index}] Created: {r.id}"
+                    if r.failed_identifiers:
+                        msg += f" ({len(r.failed_identifiers)} identifier(s) skipped)"
+                    print_success(msg)
+                else:
+                    print_error(f"  [{r.index}] Failed: {r.error}")
+
+            # Summary line
+            if result.failed == 0:
+                print_success(
+                    f"\nAll {result.total} entries created successfully."
+                )
+            elif result.succeeded == 0:
+                print_error(
+                    f"\nAll {result.total} entries failed."
+                )
+            else:
+                print_warning(
+                    f"\n{result.succeeded}/{result.total} entries created, "
+                    f"{result.failed} failed."
+                )
+
+        # Exit with code 1 if any entries failed
+        if result.failed > 0:
+            sys.exit(1)
+
+    except json.JSONDecodeError as e:
+        print_error(f"Invalid JSON in entries file: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print_error(f"Failed to batch create journal entries: {e}")
+        sys.exit(1)

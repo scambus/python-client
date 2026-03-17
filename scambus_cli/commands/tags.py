@@ -43,8 +43,8 @@ def list_tags(ctx, output_json):
                 [
                     {
                         "id": t.id,
-                        "name": t.name,
-                        "type": t.type,
+                        "name": t.title,
+                        "type": t.tag_type,
                         "created_at": (
                             t.created_at.isoformat()
                             if hasattr(t, "created_at") and t.created_at
@@ -58,8 +58,8 @@ def list_tags(ctx, output_json):
             table_data = [
                 {
                     "ID": t.id[:8],
-                    "Name": t.name,
-                    "Type": t.type or "N/A",
+                    "Name": t.title,
+                    "Type": t.tag_type or "N/A",
                 }
                 for t in tag_list
             ]
@@ -91,8 +91,8 @@ def create(ctx, name, tag_type, output_json):
             print_json(
                 {
                     "id": tag.id,
-                    "name": tag.name,
-                    "type": tag.type,
+                    "name": tag.title,
+                    "type": tag.tag_type,
                 }
             )
         else:
@@ -100,8 +100,8 @@ def create(ctx, name, tag_type, output_json):
             print_detail(
                 {
                     "ID": tag.id,
-                    "Name": tag.name,
-                    "Type": tag.type,
+                    "Name": tag.title,
+                    "Type": tag.tag_type,
                 },
                 title="Created Tag",
             )

@@ -613,7 +613,7 @@ def listen_stream(ctx, consumer_key, output_json, from_beginning, cursor, test):
         )
         sys.exit(1)
 
-    import requests as sse_requests
+    import httpx as sse_httpx
 
     from scambus_cli.config import get_api_url
     from scambus_cli.auth_device import DeviceAuthManager
@@ -662,46 +662,46 @@ def listen_stream(ctx, consumer_key, output_json, from_beginning, cursor, test):
     message_count = 0
 
     try:
-        response = sse_requests.get(sse_url, headers=headers, params=params, stream=True)
-        response.raise_for_status()
+        with sse_httpx.stream("GET", sse_url, headers=headers, params=params) as response:
+            response.raise_for_status()
 
-        client = sseclient.SSEClient(response)
+            client = sseclient.SSEClient(response.iter_bytes())
 
-        for event in client.events():
-            try:
-                if event.event == "connected":
-                    info = json.loads(event.data)
-                    print_info(f"Connected to stream: {info.get('stream', consumer_key)}")
-                    continue
+            for event in client.events():
+                try:
+                    if event.event == "connected":
+                        info = json.loads(event.data)
+                        print_info(f"Connected to stream: {info.get('stream', consumer_key)}")
+                        continue
 
-                elif event.event == "batch":
-                    # Historical replay — array of messages
-                    messages = json.loads(event.data)
-                    for msg in messages:
+                    elif event.event == "batch":
+                        # Historical replay — array of messages
+                        messages = json.loads(event.data)
+                        for msg in messages:
+                            message_count += 1
+                            if output_json:
+                                print_json(msg)
+                            else:
+                                _format_stream_message_dict(message_count, msg)
+
+                    elif event.event == "message":
+                        # Real-time individual message
+                        msg = json.loads(event.data)
                         message_count += 1
                         if output_json:
                             print_json(msg)
                         else:
                             _format_stream_message_dict(message_count, msg)
 
-                elif event.event == "message":
-                    # Real-time individual message
-                    msg = json.loads(event.data)
-                    message_count += 1
-                    if output_json:
-                        print_json(msg)
-                    else:
-                        _format_stream_message_dict(message_count, msg)
-
-                elif event.event == "error":
-                    error = json.loads(event.data)
-                    print_error(f"Stream error: {error.get('error', event.data)}")
-            except json.JSONDecodeError as e:
-                print_error(f"Failed to parse SSE event ({event.event}): {e}")
+                    elif event.event == "error":
+                        error = json.loads(event.data)
+                        print_error(f"Stream error: {error.get('error', event.data)}")
+                except json.JSONDecodeError as e:
+                    print_error(f"Failed to parse SSE event ({event.event}): {e}")
 
     except KeyboardInterrupt:
         print_info(f"\n\nStopped listening. Received {message_count} messages.")
-    except sse_requests.exceptions.HTTPError as e:
+    except sse_httpx.HTTPStatusError as e:
         print_error(f"HTTP error connecting to stream: {e}")
         sys.exit(1)
     except Exception as e:

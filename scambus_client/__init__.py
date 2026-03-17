@@ -16,6 +16,7 @@ from .client import (
     build_identifier_type_filter,
     build_combined_filter,
 )
+from ._async_client import AsyncScambusClient
 from .exceptions import (
     ScambusAPIError,
     ScambusAuthenticationError,
@@ -28,6 +29,7 @@ from .types import (
     FilterCriteria,
     IdentifierType,
     JournalEntryType,
+    PaymentService,
     StreamDataType,
     TagLookup,
     StreamFilter,
@@ -54,6 +56,7 @@ from .models import (
     Evidence,
     ExportDetails,
     ExportStream,
+    ExternalIdentifierRecord,
     ExtractedIdentifier,
     ExtractedIdentifierOccurrence,
     BatchCreateResult,
@@ -64,6 +67,7 @@ from .models import (
     IdentifierEmailDetails,
     IdentifierLookup,
     IdentifierStreamMessage,
+    IdentifierURLReference,
     ImportDetails,
     JournalEntry,
     JournalEntryChildSummary,
@@ -85,6 +89,7 @@ from .models import (
     ResearchDetails,
     Session,
     SocialMediaDetails,
+    SpecialDomainRule,
     StreamEvidenceInfo,
     StreamIdentifierInfo,
     StreamJournalEntryInfo,
@@ -94,9 +99,9 @@ from .models import (
     TagOperationDetails,
     TagValue,
     TextConversationDetails,
+    URLConsolidationStatus,
     URLDetails,
     UpdateDetails,
-    ValidationDetails,
     View,
     ZelleDetails,
     parse_identifier_details,
@@ -105,6 +110,7 @@ from .models import (
 __version__ = "0.1.0"
 __all__ = [
     "ScambusClient",
+    "AsyncScambusClient",
     "ScambusWebSocketClient",
     "build_identifier_type_filter",
     "build_combined_filter",
@@ -117,6 +123,7 @@ __all__ = [
     "IdentifierType",
     "JournalEntryType",
     "StreamDataType",
+    "PaymentService",
     "TagLookup",
     "StreamFilter",
     "ViewFilter",
@@ -141,7 +148,6 @@ __all__ = [
     "DetectionDetails",
     "ImportDetails",
     "ExportDetails",
-    "ValidationDetails",
     "ContactDetails",
     "ResearchDetails",
     "AnalysisDetails",
@@ -162,6 +168,7 @@ __all__ = [
     "Case",
     "CaseComment",
     "ExportStream",
+    "ExternalIdentifierRecord",
     "ExtractedIdentifier",
     "ExtractedIdentifierOccurrence",
     "IdentifierStreamMessage",
@@ -177,6 +184,10 @@ __all__ = [
     "Session",
     "Passkey",
     "View",
+    # URL domain consolidation types
+    "IdentifierURLReference",
+    "SpecialDomainRule",
+    "URLConsolidationStatus",
     # Identifier detail types
     "PhoneDetails",
     "IdentifierEmailDetails",

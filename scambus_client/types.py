@@ -20,6 +20,17 @@ class IdentifierType:
     PAYMENT_TOKEN = "payment_token"
 
 
+class PaymentService:
+    """Payment service constants for payment_token identifiers."""
+
+    ZELLE = "zelle"
+    CASHAPP = "cashapp"
+    PAYPAL = "paypal"
+    WISE = "wise"
+    KRAK = "krak"
+    VENMO = "venmo"
+
+
 class JournalEntryType:
     """Journal entry type constants."""
 
@@ -31,7 +42,6 @@ class JournalEntryType:
     DETECTION = "detection"
     IMPORT = "import"
     EXPORT = "export"
-    VALIDATION = "validation"
     NOTE = "note"
     TAG_OPERATION = "tag_operation"
     CONFIDENCE_OPERATION = "confidence_operation"
@@ -45,6 +55,10 @@ class JournalEntryType:
     TASK_UPDATE = "task_update"
     TASK_ASSIGNMENT = "task_assignment"
     CASE_HANDOFF = "case_handoff"
+    EVIDENCE_REVIEW = "evidence_review"
+    FINANCIAL_TRANSACTION = "financial_transaction"
+    FALSE_POSITIVE = "false_positive"
+    EVIDENCE_OPERATION = "evidence_operation"
 
 
 class StreamDataType:
@@ -62,18 +76,24 @@ class TagLookup:
         # Boolean tag
         TagLookup(tag_name="HighPriority")
 
-        # Valued tag
+        # Valued tag (existing value)
         TagLookup(tag_name="ScamType", tag_value="Phishing")
+
+        # Dynamic value creation (requires allow_dynamic_values=True on the tag)
+        TagLookup(tag_name="ScamType", tag_value_title="New Scam Type")
     """
 
     tag_name: str
     tag_value: Optional[str] = None
+    tag_value_title: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API."""
         result = {"tag_name": self.tag_name}
         if self.tag_value is not None:
             result["tag_value"] = self.tag_value
+        if self.tag_value_title is not None:
+            result["tag_value_title"] = self.tag_value_title
         return result
 
 

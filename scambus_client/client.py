@@ -3,45 +3,20 @@ Main Scambus API client.
 """
 
 import logging
-import random
 import time
-import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-logger = logging.getLogger(__name__)
+import httpx
 
-# ---------------------------------------------------------------------------
-# Retry constants (inspired by AWS SDK standard retry mode)
-# See: https://docs.aws.amazon.com/sdkref/latest/guide/feature-retry-behavior.html
-# See: https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
-# ---------------------------------------------------------------------------
-_RETRY_BASE_DELAY = 1.0       # Base delay in seconds (AWS default)
-_RETRY_MAX_BACKOFF = 20.0     # Cap per-retry delay (AWS standard mode default)
-_RETRY_THROTTLE_BASE = 2.0    # Higher base delay for 429 throttling responses
-
-# HTTP status codes that are safe to retry (transient / server-side errors).
-_RETRYABLE_STATUS_CODES = frozenset({408, 429, 500, 502, 503, 504})
-
-
-def _to_rfc3339(dt: datetime) -> str:
-    """Convert a datetime to RFC3339 string. Assumes UTC if no timezone is set."""
-    if dt.tzinfo is None:
-        warnings.warn(
-            f"Naive datetime {dt!r} has no timezone info; assuming UTC. "
-            "Pass a timezone-aware datetime to silence this warning "
-            "(e.g., datetime(..., tzinfo=timezone.utc)).",
-            stacklevel=3,
-        )
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.isoformat()
-
-import requests
-from requests.adapters import HTTPAdapter  # noqa: used for max_retries=0 mount
-
-from .config import get_api_url, get_api_token, get_api_key_id, get_api_key_secret
-
+from ._base_client import BaseScambusClient, _to_rfc3339
+from ._retry import (
+    RETRY_BASE_DELAY,
+    RETRY_MAX_BACKOFF,
+    RETRY_THROTTLE_BASE,
+    RETRYABLE_STATUS_CODES,
+)
 from .exceptions import (
     ScambusAPIError,
     ScambusAuthenticationError,
@@ -57,6 +32,8 @@ from .models import (
     CaseComment,
     ConfidenceOperationDetails,
     ContactDetails,
+    ConversationContinuationDetails,
+    ConversationMessage,
     DetectionDetails,
     EmailDetails,
     Evidence,
@@ -66,6 +43,7 @@ from .models import (
     FailedIdentifier,
     Identifier,
     IdentifierLookup,
+    IdentifierURLReference,
     ImportDetails,
     JournalEntry,
     Media,
@@ -77,12 +55,13 @@ from .models import (
     Report,
     ResearchDetails,
     Session,
+    SpecialDomainRule,
     Tag,
     TagOperationDetails,
     TagValue,
     TextConversationDetails,
     UpdateDetails,
-    ValidationDetails,
+    URLConsolidationStatus,
     View,
 )
 from .types import (
@@ -259,7 +238,10 @@ def build_combined_filter(
     return " && ".join(conditions)
 
 
-class ScambusClient:
+logger = logging.getLogger(__name__)
+
+
+class ScambusClient(BaseScambusClient):
     """
     Client for the Scambus API.
 
@@ -340,97 +322,48 @@ class ScambusClient:
                 truncated exponential backoff with full jitter (AWS standard mode
                 algorithm).
         """
-        # Load configuration with priority: explicit param > env var > config file > default
-        api_url = get_api_url(api_url)
-        api_key_id = get_api_key_id(api_key_id)
-        api_key_secret = get_api_key_secret(api_key_secret)
+        super().__init__(
+            api_url=api_url,
+            api_key_id=api_key_id,
+            api_key_secret=api_key_secret,
+            api_token=api_token,
+            timeout=timeout,
+            max_retries=max_retries,
+            retry_max_time=retry_max_time,
+        )
 
-        # Ensure /api suffix
-        if not api_url.endswith("/api"):
-            api_url = f"{api_url}/api"
+        # Create httpx client with auth headers — all retry logic is handled
+        # by _request() using truncated exponential backoff with full jitter.
+        self._client = httpx.Client(
+            headers=self._auth_headers,
+            timeout=httpx.Timeout(self.timeout),
+        )
 
-        # Only try to load api_token if api_key auth not available
-        if not (api_key_id and api_key_secret):
-            api_token = get_api_token(api_token)
+    @property
+    def session(self):
+        """Backward-compatible alias for the HTTP client.
 
-        self.api_url = api_url.rstrip("/") if api_url else "https://scambus.net/api"
-        self.timeout = timeout
-        self.max_retries = max_retries
-        self.retry_max_time = retry_max_time
-
-        # Create session — all retry logic is handled by _request() using
-        # truncated exponential backoff with full jitter, following the AWS SDK
-        # standard retry mode pattern. This gives us unified control over both
-        # connection-level and HTTP-level retries.
-        self.session = requests.Session()
-        adapter = HTTPAdapter(max_retries=0)
-        self.session.mount("http://", adapter)
-        self.session.mount("https://", adapter)
-
-        # Set authentication headers
-        if api_key_id and api_key_secret:
-            # New format: API key ID and secret
-            self.session.headers.update(
-                {
-                    "X-API-Key": f"{api_key_id}:{api_key_secret}",
-                    "User-Agent": "scambus-python-client/1.0.0",
-                }
-            )
-        elif api_token:
-            # Legacy format: JWT token
-            self.session.headers.update(
-                {
-                    "Authorization": f"Bearer {api_token}",
-                    "User-Agent": "scambus-python-client/1.0.0",
-                }
-            )
-        else:
-            raise ValueError(
-                "No authentication provided. Either:\n"
-                "1. Set SCAMBUS_API_KEY_ID and SCAMBUS_API_KEY_SECRET environment variables, or\n"
-                "2. Provide api_key_id/api_key_secret parameters, or\n"
-                "3. Run 'scambus auth login' to authenticate via CLI, or\n"
-                "4. Set SCAMBUS_API_TOKEN environment variable"
-            )
-
-    @staticmethod
-    def _compute_backoff(attempt: int, base: float, max_backoff: float) -> float:
-        """Compute retry delay using truncated exponential backoff with full jitter.
-
-        Implements the "Full Jitter" algorithm recommended by AWS:
-            sleep = random(0, min(max_backoff, base * 2^attempt))
-
-        This spreads retry attempts uniformly across the backoff window,
-        preventing the thundering-herd problem when many clients retry
-        simultaneously.
-
-        See: https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
+        .. deprecated::
+            Use ``_client`` directly. This property exists for backward
+            compatibility with code that accessed ``client.session``.
         """
-        ceiling = min(max_backoff, base * (2 ** attempt))
-        return random.uniform(0, ceiling)
+        return self._client
 
-    @staticmethod
-    def _parse_retry_after(response: requests.Response) -> Optional[float]:
-        """Extract delay from the Retry-After header, if present.
+    @session.setter
+    def session(self, value):
+        """Allow setting _client via the session property for backward compat."""
+        self._client = value
 
-        Supports both integer (seconds) and HTTP-date formats.
-        Returns None when the header is missing or unparseable.
-        """
-        header = response.headers.get("Retry-After")
-        if header is None:
-            return None
-        try:
-            return float(header)
-        except ValueError:
-            pass
-        # HTTP-date format (RFC 7231)
-        from email.utils import parsedate_to_datetime
-        try:
-            retry_dt = parsedate_to_datetime(header)
-            delta = (retry_dt - datetime.now(timezone.utc)).total_seconds()
-            return max(0.0, delta)
-        except (TypeError, ValueError):
-            return None
+    def close(self):
+        """Close the underlying HTTP client."""
+        self._client.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
 
     def _request(
         self,
@@ -485,7 +418,7 @@ class ScambusClient:
 
         while True:
             try:
-                response = self.session.request(
+                response = self._client.request(
                     method=method,
                     url=url,
                     json=json_data,
@@ -510,7 +443,7 @@ class ScambusClient:
                         )
 
                 # --- Retryable HTTP errors ----------------------------------------
-                if response.status_code in _RETRYABLE_STATUS_CODES:
+                if response.status_code in RETRYABLE_STATUS_CODES:
                     elapsed = time.monotonic() - start_time
                     if attempt < self.max_retries and elapsed < self.retry_max_time:
                         attempt += 1
@@ -518,15 +451,15 @@ class ScambusClient:
                         # Use Retry-After header when present (e.g. 429, 503)
                         retry_after = self._parse_retry_after(response)
                         if retry_after is not None:
-                            delay = min(retry_after, _RETRY_MAX_BACKOFF)
+                            delay = min(retry_after, RETRY_MAX_BACKOFF)
                         else:
                             # Throttling (429) gets a higher base delay
                             base = (
-                                _RETRY_THROTTLE_BASE
+                                RETRY_THROTTLE_BASE
                                 if response.status_code == 429
-                                else _RETRY_BASE_DELAY
+                                else RETRY_BASE_DELAY
                             )
-                            delay = self._compute_backoff(attempt, base, _RETRY_MAX_BACKOFF)
+                            delay = self._compute_backoff(attempt, base, RETRY_MAX_BACKOFF)
 
                         # Never exceed the remaining time budget
                         remaining = self.retry_max_time - elapsed
@@ -544,8 +477,7 @@ class ScambusClient:
                 # --- Non-retryable or retries exhausted ---------------------------
                 self._handle_error_response(response)
 
-            except (requests.exceptions.ConnectionError,
-                    requests.exceptions.Timeout) as exc:
+            except (httpx.ConnectError, httpx.TimeoutException) as exc:
                 elapsed = time.monotonic() - start_time
 
                 if attempt >= self.max_retries or elapsed >= self.retry_max_time:
@@ -555,7 +487,7 @@ class ScambusClient:
                     ) from exc
 
                 attempt += 1
-                delay = self._compute_backoff(attempt, _RETRY_BASE_DELAY, _RETRY_MAX_BACKOFF)
+                delay = self._compute_backoff(attempt, RETRY_BASE_DELAY, RETRY_MAX_BACKOFF)
                 remaining = self.retry_max_time - elapsed
                 delay = min(delay, remaining)
 
@@ -567,47 +499,8 @@ class ScambusClient:
                 )
                 time.sleep(delay)
 
-            except requests.exceptions.RequestException as exc:
+            except httpx.HTTPError as exc:
                 raise ScambusAPIError(f"Request failed: {exc}") from exc
-
-    def _handle_error_response(self, response: requests.Response):
-        """Handle error responses from the API."""
-        try:
-            error_data = response.json()
-            error_message = error_data.get("error", response.text)
-        except ValueError:
-            error_message = response.text or f"HTTP {response.status_code}"
-
-        if response.status_code == 401:
-            raise ScambusAuthenticationError(
-                error_message,
-                response.status_code,
-                error_data if "error_data" in locals() else None,
-            )
-        elif response.status_code == 400:
-            raise ScambusValidationError(
-                error_message,
-                response.status_code,
-                error_data if "error_data" in locals() else None,
-            )
-        elif response.status_code == 404:
-            raise ScambusNotFoundError(
-                error_message,
-                response.status_code,
-                error_data if "error_data" in locals() else None,
-            )
-        elif response.status_code >= 500:
-            raise ScambusServerError(
-                error_message,
-                response.status_code,
-                error_data if "error_data" in locals() else None,
-            )
-        else:
-            raise ScambusAPIError(
-                error_message,
-                response.status_code,
-                error_data if "error_data" in locals() else None,
-            )
 
     # Media Methods
 
@@ -683,10 +576,10 @@ class ScambusClient:
         Example:
             ```python
             import io
-            import requests
+            import httpx
 
             # Download image from URL
-            response = requests.get("https://example.com/scam-site.png")
+            response = httpx.get("https://example.com/scam-site.png")
             image_data = response.content
 
             # Upload directly from buffer
@@ -759,6 +652,9 @@ class ScambusClient:
         metadata: Optional[Dict[str, Any]] = None,
         is_test: bool = False,
         ai_extract: bool = False,
+        retracted_identifier_ids: Optional[List[str]] = None,
+        external_identifiers: Optional[List[Dict[str, str]]] = None,
+        extract_external_identifiers: bool = False,
     ) -> JournalEntry:
         """
         Create a journal entry with automatic identifier resolution.
@@ -771,7 +667,6 @@ class ScambusClient:
                 - detection: Automated detection or discovery
                 - import: Import of data/identifiers
                 - export: Export of data/identifiers
-                - validation: Validation of identifier
                 - note: General note or observation
                 - contact_attempt: Attempted contact
                 - contact_success: Successful contact
@@ -804,6 +699,15 @@ class ScambusClient:
             ai_extract: If True, uses AI to extract identifiers from attached media
                 and/or conversation message text. For conversation_continuation entries,
                 inline identifier positions are computed automatically.
+            retracted_identifier_ids: List of identifier UUIDs to retract (delete JEI links)
+                from the parent journal entry. Only valid when parent_journal_entry_id is set.
+                Used when a child entry (e.g., evidence_review) determines that identifiers
+                on the parent were incorrectly identified.
+            external_identifiers: List of external system identifiers to manually associate.
+                Each dict should have "external_system" and "external_id" keys.
+                Example: [{"external_system": "mycoin", "external_id": "user123"}]
+            extract_external_identifiers: If True, runs registered external system plugins
+                to automatically extract external identifiers from the entry content.
 
         Returns:
             Created JournalEntry object
@@ -912,6 +816,18 @@ class ScambusClient:
         # Add ai_extract flag if set
         if ai_extract:
             data["ai_extract"] = True
+
+        # Add retracted identifier IDs if provided (for retracting from parent entry)
+        if retracted_identifier_ids:
+            data["retracted_identifier_ids"] = retracted_identifier_ids
+
+        # Add external identifiers if provided
+        if external_identifiers:
+            data["external_identifiers"] = external_identifiers
+
+        # Add extract_external_identifiers flag if set
+        if extract_external_identifiers:
+            data["extract_external_identifiers"] = True
 
         # Handle start_time and end_time
         if start_time:
@@ -1036,6 +952,8 @@ class ScambusClient:
         create_originator: bool = False,
         is_test: bool = False,
         performed_at: Optional[datetime] = None,
+        external_identifiers: Optional[List[Dict[str, str]]] = None,
+        extract_external_identifiers: bool = False,
     ) -> JournalEntry:
         """
         Convenience method to create a 'detection' type journal entry.
@@ -1168,6 +1086,8 @@ class ScambusClient:
             originator_identifier=originator_identifier,
             create_originator=create_originator,
             is_test=is_test,
+            external_identifiers=external_identifiers,
+            extract_external_identifiers=extract_external_identifiers,
         )
 
     def create_phone_call(
@@ -1190,6 +1110,9 @@ class ScambusClient:
         originator_identifier: Optional[str] = None,
         create_originator: bool = False,
         in_progress: bool = False,
+        is_test: bool = False,
+        external_identifiers: Optional[List[Dict[str, str]]] = None,
+        extract_external_identifiers: bool = False,
     ) -> JournalEntry:
         """
         Convenience method to create a 'phone_call' type journal entry.
@@ -1314,6 +1237,9 @@ class ScambusClient:
             start_time=start_time,
             end_time=end_time,
             in_progress=in_progress,
+            is_test=is_test,
+            external_identifiers=external_identifiers,
+            extract_external_identifiers=extract_external_identifiers,
         )
 
     def create_email(
@@ -1341,6 +1267,9 @@ class ScambusClient:
         originator_type: Optional[str] = None,
         originator_identifier: Optional[str] = None,
         create_originator: bool = False,
+        is_test: bool = False,
+        external_identifiers: Optional[List[Dict[str, str]]] = None,
+        extract_external_identifiers: bool = False,
     ) -> JournalEntry:
         """
         Convenience method to create an 'email' type journal entry.
@@ -1463,6 +1392,9 @@ class ScambusClient:
             originator_type=originator_type,
             originator_identifier=originator_identifier,
             create_originator=create_originator,
+            is_test=is_test,
+            external_identifiers=external_identifiers,
+            extract_external_identifiers=extract_external_identifiers,
         )
 
     def create_text_conversation(
@@ -1483,6 +1415,10 @@ class ScambusClient:
         originator_identifier: Optional[str] = None,
         create_originator: bool = False,
         in_progress: bool = False,
+        ai_extract: bool = False,
+        is_test: bool = False,
+        external_identifiers: Optional[List[Dict[str, str]]] = None,
+        extract_external_identifiers: bool = False,
     ) -> JournalEntry:
         """
         Convenience method to create a 'text_conversation' type journal entry.
@@ -1504,6 +1440,7 @@ class ScambusClient:
             originator_identifier: Identifier for the originator
             create_originator: Create originator record if it doesn't exist
             in_progress: If True, creates an in-progress conversation (omits end_time)
+            ai_extract: If True, uses AI to extract identifiers from attached media
 
         Returns:
             Created JournalEntry object
@@ -1528,7 +1465,7 @@ class ScambusClient:
                 ],
             )
 
-            # SMS with screenshots and tags
+            # SMS with screenshots and AI extraction
             screenshot1 = client.upload_media("sms-screenshot-1.png")
             screenshot2 = client.upload_media("sms-screenshot-2.png")
             entry = client.create_text_conversation(
@@ -1537,9 +1474,7 @@ class ScambusClient:
                 start_time=datetime(2024, 1, 15, 14, 0, tzinfo=timezone.utc),
                 end_time=datetime(2024, 1, 15, 14, 30, tzinfo=timezone.utc),
                 media=[screenshot1, screenshot2],
-                identifiers=[
-                    IdentifierLookup(type="phone", value="+18005551234", confidence=0.9)
-                ],
+                ai_extract=True,  # AI will extract identifiers from screenshots
                 tags=[TagLookup(tag_name="EvidenceCollected")],
             )
 
@@ -1601,6 +1536,189 @@ class ScambusClient:
             start_time=start_time,
             end_time=end_time,
             in_progress=in_progress,
+            ai_extract=ai_extract,
+            is_test=is_test,
+            external_identifiers=external_identifiers,
+            extract_external_identifiers=extract_external_identifiers,
+        )
+
+    def create_conversation_continuation(
+        self,
+        parent_entry: Union[str, "JournalEntry"],
+        messages: List[Union[ConversationMessage, Dict[str, Any]]],
+        description: str = "Conversation continuation",
+        reason: Optional[str] = None,
+        non_contiguous: bool = False,
+        identifiers: Optional[List[Union[Dict[str, Any], IdentifierLookup]]] = None,
+        our_identifier_lookups: Optional[List[Union[Dict[str, Any], IdentifierLookup]]] = None,
+        media: Optional[Union[Media, List[Media]]] = None,
+        evidence: Optional[Union[Dict[str, Any], Evidence]] = None,
+        case_id: Optional[str] = None,
+        tags: Optional[List[TagLookupInput]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        originator_type: Optional[str] = None,
+        originator_identifier: Optional[str] = None,
+        create_originator: bool = False,
+        ai_extract: bool = False,
+        is_test: bool = False,
+        external_identifiers: Optional[List[Dict[str, str]]] = None,
+        extract_external_identifiers: bool = False,
+    ) -> JournalEntry:
+        """
+        Convenience method to create a 'conversation_continuation' journal entry.
+
+        Adds messages to a parent text_conversation, phone_call, or email entry.
+
+        Args:
+            parent_entry: Parent journal entry ID (str) or JournalEntry object
+            messages: List of ConversationMessage objects or dicts
+            description: Description of this continuation batch
+            reason: Why this batch was added (e.g., "initial import", "new messages")
+            non_contiguous: If True, indicates a time gap before this batch
+            identifiers: List of suspect/scammer identifiers (use ref field to link to messages)
+            our_identifier_lookups: List of honeypot/bot identifiers (our side)
+            media: Single Media object or list of Media objects
+            evidence: Optional evidence structure
+            case_id: Optional case ID to link to
+            tags: Tags to apply to this entry
+            metadata: Additional metadata
+            originator_type: Optional originator type
+            originator_identifier: Identifier for the originator
+            create_originator: Create originator record if it doesn't exist
+            ai_extract: If True, uses AI to extract identifiers from messages and media
+
+        Returns:
+            Created JournalEntry object
+
+        Example:
+            ```python
+            from datetime import datetime
+            from scambus_client import IdentifierLookup
+            from scambus_client.models import ConversationMessage
+
+            # Create parent conversation first
+            parent = client.create_text_conversation(
+                description="WhatsApp scam conversation",
+                platform="WhatsApp",
+                start_time=datetime(2025, 1, 15, 10, 0),
+                end_time=datetime(2025, 1, 15, 11, 0),
+            )
+
+            # Add messages as a continuation
+            entry = client.create_conversation_continuation(
+                parent_entry=parent,
+                messages=[
+                    ConversationMessage(
+                        index=0,
+                        message_id="msg_001",
+                        timestamp=datetime(2025, 1, 15, 10, 0),
+                        body="Hello, this is tech support.",
+                        is_outgoing=False,
+                        sender_ref="scammer",
+                    ),
+                    ConversationMessage(
+                        index=1,
+                        message_id="msg_002",
+                        timestamp=datetime(2025, 1, 15, 10, 1),
+                        body="Oh, what's wrong?",
+                        is_outgoing=True,
+                        sender_ref="victim",
+                    ),
+                ],
+                reason="initial import",
+                identifiers=[
+                    IdentifierLookup(type="phone", value="+1555123456", ref="scammer"),
+                    IdentifierLookup(type="phone", value="+1555987654", ref="victim"),
+                ],
+            )
+
+            # Add later messages with AI extraction
+            entry = client.create_conversation_continuation(
+                parent_entry=parent,
+                messages=[
+                    ConversationMessage(
+                        index=2,
+                        message_id="msg_003",
+                        timestamp=datetime(2025, 1, 15, 14, 30),
+                        body="Send $500 to +1555999888",
+                        is_outgoing=False,
+                        sender_ref="scammer",
+                    ),
+                ],
+                reason="payment request",
+                non_contiguous=True,
+                ai_extract=True,  # AI extracts +1555999888 from message text
+            )
+            ```
+        """
+        if not messages:
+            raise ValueError("messages must not be empty")
+
+        parent_id = parent_entry.id if isinstance(parent_entry, JournalEntry) else parent_entry
+
+        # Convert messages to ConversationMessage objects if needed
+        msg_objects = []
+        for msg in messages:
+            if isinstance(msg, ConversationMessage):
+                msg_objects.append(msg)
+            else:
+                msg_objects.append(ConversationMessage.from_dict(msg))
+
+        details_obj = ConversationContinuationDetails(
+            messages=msg_objects,
+            reason=reason,
+            non_contiguous=non_contiguous,
+        )
+
+        # Derive start/end times from messages
+        timestamps = [m.timestamp for m in msg_objects]
+        start_time = min(timestamps) if timestamps else None
+        end_time = max(timestamps) if timestamps else None
+
+        # Handle media parameter
+        if media is not None:
+            media_list = media if isinstance(media, list) else [media]
+            media_ids = [m.id for m in media_list]
+
+            if evidence is None:
+                evidence = {
+                    "type": "screenshot",
+                    "title": "Conversation Continuation Evidence",
+                    "description": f"Evidence for continuation: {description}",
+                    "source": "Conversation Messages",
+                    "media_ids": media_ids,
+                }
+                if start_time:
+                    evidence["collectedAt"] = _to_rfc3339(start_time)
+            else:
+                if isinstance(evidence, Evidence):
+                    evidence.media_ids.extend(media_ids)
+                elif isinstance(evidence, dict):
+                    if "media_ids" not in evidence:
+                        evidence["media_ids"] = []
+                    evidence["media_ids"].extend(media_ids)
+
+        return self.create_journal_entry(
+            entry_type="conversation_continuation",
+            description=description,
+            details=details_obj.to_dict(),
+            performed_at=start_time,
+            parent_journal_entry_id=parent_id,
+            case_id=case_id,
+            identifier_lookups=identifiers,
+            our_identifier_lookups=our_identifier_lookups,
+            evidence=evidence,
+            tags=tags,
+            metadata=metadata,
+            originator_type=originator_type,
+            originator_identifier=originator_identifier,
+            create_originator=create_originator,
+            start_time=start_time,
+            end_time=end_time,
+            ai_extract=ai_extract,
+            is_test=is_test,
+            external_identifiers=external_identifiers,
+            extract_external_identifiers=extract_external_identifiers,
         )
 
     def create_note(
@@ -1622,6 +1740,9 @@ class ScambusClient:
         originator_type: Optional[str] = None,
         originator_identifier: Optional[str] = None,
         create_originator: bool = False,
+        is_test: bool = False,
+        external_identifiers: Optional[List[Dict[str, str]]] = None,
+        extract_external_identifiers: bool = False,
     ) -> JournalEntry:
         """
         Convenience method to create a 'note' type journal entry.
@@ -1729,6 +1850,9 @@ class ScambusClient:
             originator_type=originator_type,
             originator_identifier=originator_identifier,
             create_originator=create_originator,
+            is_test=is_test,
+            external_identifiers=external_identifiers,
+            extract_external_identifiers=extract_external_identifiers,
         )
 
     def create_import(
@@ -1741,6 +1865,9 @@ class ScambusClient:
         originator_type: Optional[str] = None,
         originator_identifier: Optional[str] = None,
         create_originator: bool = False,
+        is_test: bool = False,
+        external_identifiers: Optional[List[Dict[str, str]]] = None,
+        extract_external_identifiers: bool = False,
     ) -> JournalEntry:
         """
         Convenience method to create an 'import' type journal entry.
@@ -1787,6 +1914,9 @@ class ScambusClient:
             originator_type=originator_type,
             originator_identifier=originator_identifier,
             create_originator=create_originator,
+            is_test=is_test,
+            external_identifiers=external_identifiers,
+            extract_external_identifiers=extract_external_identifiers,
         )
 
     def create_export(
@@ -1799,6 +1929,9 @@ class ScambusClient:
         originator_type: Optional[str] = None,
         originator_identifier: Optional[str] = None,
         create_originator: bool = False,
+        is_test: bool = False,
+        external_identifiers: Optional[List[Dict[str, str]]] = None,
+        extract_external_identifiers: bool = False,
     ) -> JournalEntry:
         """
         Convenience method to create an 'export' type journal entry.
@@ -1845,6 +1978,9 @@ class ScambusClient:
             originator_type=originator_type,
             originator_identifier=originator_identifier,
             create_originator=create_originator,
+            is_test=is_test,
+            external_identifiers=external_identifiers,
+            extract_external_identifiers=extract_external_identifiers,
         )
 
     def get_journal_entry(self, entry_id: str) -> JournalEntry:
@@ -1868,6 +2004,24 @@ class ScambusClient:
         entry._client = self
 
         return entry
+
+    def get_external_systems(self) -> List[Dict[str, str]]:
+        """
+        List registered external system plugins.
+
+        Returns a list of external systems that can be used with the
+        external_identifiers parameter when creating journal entries.
+
+        Returns:
+            List of dicts with "key" and "display_name" for each system.
+
+        Example:
+            ```python
+            systems = client.get_external_systems()
+            # [{"key": "mycoin", "display_name": "MyCoin Receipt"}]
+            ```
+        """
+        return self._request("GET", "/external-systems")
 
     def delete_journal_entry(self, entry_id: str) -> bool:
         """
@@ -2593,6 +2747,114 @@ class ScambusClient:
 
         return result
 
+    def create_venmo_identifier(
+        self,
+        identifier: str,
+        name: Optional[str] = None,
+        confidence: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """
+        Helper to create a properly formatted Venmo payment_token identifier lookup.
+
+        Accepts three formats for the ``identifier`` parameter:
+
+        - **@venmotag**: A Venmo username (e.g. ``"@john-doe-123"``)
+        - **Venmo QR URL**: A ``venmo.com/code`` URL
+          (e.g. ``"https://venmo.com/code?user_id=4000589381899999&created=..."``).
+          The numeric ``user_id`` is extracted automatically and stored as the
+          identifier value.  The ``created`` and ``printed`` query parameters are
+          preserved as metadata.
+        - **Raw user_id**: A 16-19 digit numeric string
+          (e.g. ``"4000589381899999"``)
+
+        Args:
+            identifier: Venmo @username, QR code URL, or numeric user_id
+            name: Optional account holder name
+            confidence: Optional confidence score (0.0-1.0)
+
+        Returns:
+            Dictionary ready for use in ``identifier_lookups``
+
+        Example:
+            ```python
+            # From a Venmo QR code URL
+            venmo_id = client.create_venmo_identifier(
+                "https://venmo.com/code?user_id=4000589381899999&created=1753992276",
+                confidence=0.85,
+            )
+
+            # From a @username
+            venmo_id = client.create_venmo_identifier(
+                "@john-doe-123",
+                name="John Doe",
+                confidence=0.9,
+            )
+
+            # From a raw user_id
+            venmo_id = client.create_venmo_identifier(
+                "4000589381899999",
+                confidence=0.8,
+            )
+
+            entry = client.create_detection(
+                description="Venmo scam detected",
+                identifiers=[venmo_id],
+            )
+            ```
+        """
+        import json
+        import re
+        from urllib.parse import urlparse, parse_qs
+
+        identifier = identifier.strip()
+        venmo_data: Dict[str, Any] = {"service": "venmo"}
+
+        if identifier.startswith("https://") or identifier.startswith("http://"):
+            # Venmo QR code URL — validate client-side, but pass the full URL
+            # to the backend so it can extract user_id + QR metadata itself.
+            parsed = urlparse(identifier)
+            if parsed.hostname and parsed.hostname.lower() != "venmo.com":
+                raise ValueError(f"Venmo URL must be from venmo.com, got: {parsed.hostname}")
+            clean_path = parsed.path.rstrip("/")
+            if clean_path != "/code":
+                raise ValueError(f"Venmo URL must use /code path, got: {clean_path}")
+            params = parse_qs(parsed.query)
+            user_ids = params.get("user_id", [])
+            if not user_ids or not user_ids[0]:
+                raise ValueError("Venmo URL missing user_id query parameter")
+            user_id = user_ids[0]
+            if not re.match(r"^\d{16,19}$", user_id):
+                raise ValueError(f"Venmo user_id must be 16-19 digits, got: {user_id}")
+            venmo_data["identifier"] = identifier
+        elif identifier.startswith("@"):
+            # @venmotag
+            if not re.match(r"^@[a-zA-Z0-9_-]{5,30}$", identifier):
+                raise ValueError(
+                    "Invalid Venmo @username (must be 5-30 alphanumeric/hyphen/underscore characters)"
+                )
+            venmo_data["identifier"] = identifier
+        elif re.match(r"^\d{16,19}$", identifier):
+            # Raw numeric user_id
+            venmo_data["identifier"] = identifier
+        else:
+            raise ValueError(
+                "Venmo identifier must be an @username, numeric user_id (16-19 digits), "
+                "or venmo.com/code QR URL"
+            )
+
+        if name is not None:
+            venmo_data["name"] = name
+
+        result: Dict[str, Any] = {
+            "type": "payment_token",
+            "value": json.dumps(venmo_data),
+        }
+
+        if confidence is not None:
+            result["confidence"] = confidence
+
+        return result
+
     # Case Methods
 
     def list_cases(
@@ -2870,7 +3132,6 @@ class ScambusClient:
                 DetectionDetails,
                 ImportDetails,
                 ExportDetails,
-                ValidationDetails,
                 ContactDetails,
                 ResearchDetails,
                 AnalysisDetails,
@@ -2951,7 +3212,7 @@ class ScambusClient:
 
             # Filter for entries with parent (follow-up actions)
             filter_expr = ScambusClient.build_stream_filter(
-                entry_type="validation",
+                entry_type="note",
                 has_parent=True
             )
 
@@ -3371,7 +3632,7 @@ class ScambusClient:
             params["include_test"] = str(include_test).lower()
 
         try:
-            response = self.session.request(
+            response = self._client.request(
                 method="GET",
                 url=url,
                 params=params,
@@ -3451,7 +3712,7 @@ class ScambusClient:
         url = f"{self.api_url}/consume/{consumer_key}/info"
 
         try:
-            response = self.session.request(
+            response = self._client.request(
                 method="GET",
                 url=url,
                 timeout=timeout,
@@ -3721,15 +3982,15 @@ class ScambusClient:
             client.download_file_export("export-id", "output.csv")
             ```
         """
-        response = self.session.get(
+        with self._client.stream(
+            "GET",
             f"{self.api_url}/file-exports/{export_id}/download",
             timeout=self.timeout,
-            stream=True,
-        )
-        response.raise_for_status()
-        with open(output_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
+        ) as response:
+            response.raise_for_status()
+            with open(output_path, "wb") as f:
+                for chunk in response.iter_bytes(chunk_size=8192):
+                    f.write(chunk)
 
     def rename_file_export(self, export_id: str, name: str) -> Dict[str, Any]:
         """
@@ -3916,28 +4177,34 @@ class ScambusClient:
         title: str,
         tag_type: str = "valued",
         description: Optional[str] = None,
-        applicable_models: Optional[List[str]] = None,
+        aliases: Optional[List[str]] = None,
+        is_global: bool = False,
+        flow_up: bool = True,
+        flow_down: bool = True,
+        allow_dynamic_values: bool = False,
         color: Optional[str] = None,
         icon: Optional[str] = None,
-        flows_up_to_case: bool = False,
-        flows_down_to_evidence: bool = False,
         allocates_karma: Optional[int] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        tag_values: Optional[List[Dict[str, Any]]] = None,
     ) -> Tag:
         """
         Create a tag.
 
         Args:
             title: Tag title
-            tag_type: Tag type (boolean or valued)
+            tag_type: Tag type ("boolean" or "valued")
             description: Tag description
-            applicable_models: Models this tag applies to
+            aliases: Alternative names for tag lookup
+            is_global: Whether tag is visible to all organizations
+            flow_up: Whether tag flows up to cases
+            flow_down: Whether tag flows down to evidence
+            allow_dynamic_values: Whether new tag values can be created on-the-fly during ingestion
             color: Optional hex color
             icon: Optional icon identifier
-            flows_up_to_case: Whether tag flows up to cases
-            flows_down_to_evidence: Whether tag flows down to evidence
             allocates_karma: Karma points to award
-            metadata: Optional metadata dictionary for additional tracking (e.g., test_batch, environment)
+            metadata: Optional metadata dictionary
+            tag_values: Initial tag values (list of dicts with "title", optional "aliases", "order")
 
         Returns:
             Created Tag object
@@ -3945,33 +4212,41 @@ class ScambusClient:
         Example:
             ```python
             tag = client.create_tag(
-                title="High Priority",
-                tag_type="boolean",
-                description="High priority items",
-                flows_up_to_case=True
+                title="Scam Type",
+                tag_type="valued",
+                description="Classification of scam type",
+                allow_dynamic_values=True,
+                flow_up=True,
+                tag_values=[
+                    {"title": "Phishing", "order": 0},
+                    {"title": "Romance", "order": 1},
+                ],
             )
             ```
         """
-        data = {
+        data: Dict[str, Any] = {
             "title": title,
-            "tagType": tag_type,
+            "tag_type": tag_type,
+            "flow_up": flow_up,
+            "flow_down": flow_down,
+            "allow_dynamic_values": allow_dynamic_values,
         }
         if description:
             data["description"] = description
-        if applicable_models:
-            data["applicableModels"] = applicable_models
+        if aliases:
+            data["aliases"] = aliases
+        if is_global:
+            data["is_global"] = is_global
         if color:
             data["color"] = color
         if icon:
             data["icon"] = icon
-        if flows_up_to_case:
-            data["flowsUpToCase"] = flows_up_to_case
-        if flows_down_to_evidence:
-            data["flowsDownToEvidence"] = flows_down_to_evidence
         if allocates_karma is not None:
-            data["allocatesKarma"] = allocates_karma
+            data["allocates_karma"] = allocates_karma
         if metadata:
             data["metadata"] = metadata
+        if tag_values:
+            data["tag_values"] = tag_values
 
         response = self._request("POST", "/tags", json_data=data)
         return Tag.from_dict(response)
@@ -3981,9 +4256,15 @@ class ScambusClient:
         tag_id: str,
         title: Optional[str] = None,
         description: Optional[str] = None,
+        aliases: Optional[List[str]] = None,
+        is_global: Optional[bool] = None,
+        flow_up: Optional[bool] = None,
+        flow_down: Optional[bool] = None,
+        allow_dynamic_values: Optional[bool] = None,
         color: Optional[str] = None,
         icon: Optional[str] = None,
         active: Optional[bool] = None,
+        tag_values: Optional[List[Dict[str, Any]]] = None,
     ) -> Tag:
         """
         Update a tag.
@@ -3992,9 +4273,15 @@ class ScambusClient:
             tag_id: Tag UUID
             title: New title
             description: New description
+            aliases: New aliases
+            is_global: Whether tag is visible to all organizations
+            flow_up: Whether tag flows up to cases
+            flow_down: Whether tag flows down to evidence
+            allow_dynamic_values: Whether new tag values can be created on-the-fly
             color: New color
             icon: New icon
             active: Whether tag is active
+            tag_values: Updated tag values (list of dicts with optional "id", "title", "aliases", "order")
 
         Returns:
             Updated Tag object
@@ -4003,21 +4290,34 @@ class ScambusClient:
             ```python
             tag = client.update_tag(
                 "tag-123",
-                description="Updated description"
+                allow_dynamic_values=True,
+                description="Updated description",
             )
             ```
         """
-        data = {}
+        data: Dict[str, Any] = {}
         if title is not None:
             data["title"] = title
         if description is not None:
             data["description"] = description
+        if aliases is not None:
+            data["aliases"] = aliases
+        if is_global is not None:
+            data["is_global"] = is_global
+        if flow_up is not None:
+            data["flow_up"] = flow_up
+        if flow_down is not None:
+            data["flow_down"] = flow_down
+        if allow_dynamic_values is not None:
+            data["allow_dynamic_values"] = allow_dynamic_values
         if color is not None:
             data["color"] = color
         if icon is not None:
             data["icon"] = icon
         if active is not None:
             data["active"] = active
+        if tag_values is not None:
+            data["tag_values"] = tag_values
 
         response = self._request("PUT", f"/tags/{tag_id}", json_data=data)
         return Tag.from_dict(response)
@@ -4627,7 +4927,7 @@ class ScambusClient:
 
         # Extract authentication credentials
         auth_header = None
-        for key, value in self.session.headers.items():
+        for key, value in self._auth_headers.items():
             if key == "X-API-Key":
                 # Parse API key format: "key_id:secret"
                 parts = value.split(":", 1)
@@ -5013,7 +5313,7 @@ class ScambusClient:
             client.download_report(report.id, Path("reports") / "output.pdf")
         """
         url = f"{self.api_url}/reports/{report_id}/download"
-        response = self.session.get(url, timeout=self.timeout)
+        response = self._client.get(url, timeout=self.timeout)
 
         if response.status_code == 404:
             raise ScambusNotFoundError("Report not found")
@@ -5081,5 +5381,263 @@ class ScambusClient:
             report = self.get_report_status(report_id)
 
         return report
+
+    # ── URL Reference Methods ──────────────────────────────────────────
+
+    def get_url_references(
+        self,
+        identifier_id: str,
+        page: int = 1,
+        page_size: int = 25,
+        sort: str = "last_seen_at",
+        order: str = "desc",
+    ) -> Dict[str, Any]:
+        """
+        Get URL references for a URL-type identifier.
+
+        When URL identifiers are consolidated to the domain level, individual
+        URLs are tracked as references. This endpoint returns those references.
+
+        Args:
+            identifier_id: Identifier UUID
+            page: Page number (1-based)
+            page_size: Results per page (1-100, default 25)
+            sort: Sort field (last_seen_at, first_seen_at, seen_count, url, created_at)
+            order: Sort order (asc or desc)
+
+        Returns:
+            Dict with keys: url_references (list), total, page, page_size
+
+        Example:
+            ```python
+            result = client.get_url_references("abc-123")
+            for ref in result["url_references"]:
+                print(f"{ref.url} seen {ref.seen_count} times")
+            ```
+        """
+        params: Dict[str, Any] = {
+            "page": page,
+            "page_size": page_size,
+            "sort": sort,
+            "order": order,
+        }
+        response = self._request(
+            "GET", f"/identifiers/{identifier_id}/url-references", params=params
+        )
+        if response.get("url_references"):
+            response["url_references"] = [
+                IdentifierURLReference.from_dict(r)
+                for r in response["url_references"]
+            ]
+        else:
+            response["url_references"] = []
+        return response
+
+    # ── Special Domain Rule Methods ───────────────────────────────────
+
+    def list_special_domain_rules(
+        self,
+        category: Optional[str] = None,
+        active: Optional[bool] = None,
+    ) -> List[SpecialDomainRule]:
+        """
+        List special domain rules.
+
+        Special domain rules control how URL identifiers are consolidated.
+        Domains matching these rules (shorteners, pastebins, etc.) keep
+        path-sensitive behavior instead of consolidating to domain level.
+
+        Args:
+            category: Filter by category (shortener, pastebin, archive, cloud_storage, custom)
+            active: Filter by active status (True/False)
+
+        Returns:
+            List of SpecialDomainRule objects
+
+        Example:
+            ```python
+            rules = client.list_special_domain_rules(category="shortener")
+            for rule in rules:
+                print(f"{rule.domain} ({rule.category})")
+            ```
+        """
+        params: Dict[str, Any] = {}
+        if category is not None:
+            params["category"] = category
+        if active is not None:
+            params["active"] = "true" if active else "false"
+        response = self._request("GET", "/admin/special-domain-rules", params=params)
+        if isinstance(response, list):
+            return [SpecialDomainRule.from_dict(r) for r in response]
+        return []
+
+    def create_special_domain_rule(
+        self,
+        domain: str,
+        category: str,
+        path_depth: int = 1,
+        strip_query: bool = True,
+        strip_fragment: bool = True,
+    ) -> SpecialDomainRule:
+        """
+        Create a new special domain rule.
+
+        Requires system admin permission.
+
+        Args:
+            domain: Domain name (e.g. "bit.ly")
+            category: One of: shortener, pastebin, archive, cloud_storage, custom
+            path_depth: Number of path segments to preserve (0-10, default 1)
+            strip_query: Whether to strip query parameters (default True)
+            strip_fragment: Whether to strip fragment (default True)
+
+        Returns:
+            Created SpecialDomainRule
+
+        Example:
+            ```python
+            rule = client.create_special_domain_rule(
+                domain="t.co",
+                category="shortener",
+                path_depth=1,
+            )
+            ```
+        """
+        data = {
+            "domain": domain,
+            "category": category,
+            "path_depth": path_depth,
+            "strip_query": strip_query,
+            "strip_fragment": strip_fragment,
+        }
+        response = self._request("POST", "/admin/special-domain-rules", json_data=data)
+        return SpecialDomainRule.from_dict(response)
+
+    def update_special_domain_rule(
+        self,
+        rule_id: str,
+        domain: Optional[str] = None,
+        category: Optional[str] = None,
+        path_depth: Optional[int] = None,
+        strip_query: Optional[bool] = None,
+        strip_fragment: Optional[bool] = None,
+        is_active: Optional[bool] = None,
+    ) -> SpecialDomainRule:
+        """
+        Update an existing special domain rule.
+
+        Requires system admin permission. Only provided fields are updated.
+
+        Args:
+            rule_id: Rule UUID
+            domain: New domain name
+            category: New category
+            path_depth: New path depth (0-10)
+            strip_query: New strip_query setting
+            strip_fragment: New strip_fragment setting
+            is_active: New active status
+
+        Returns:
+            Updated SpecialDomainRule
+
+        Example:
+            ```python
+            rule = client.update_special_domain_rule(
+                rule_id="abc-123",
+                is_active=False,
+            )
+            ```
+        """
+        data: Dict[str, Any] = {}
+        if domain is not None:
+            data["domain"] = domain
+        if category is not None:
+            data["category"] = category
+        if path_depth is not None:
+            data["path_depth"] = path_depth
+        if strip_query is not None:
+            data["strip_query"] = strip_query
+        if strip_fragment is not None:
+            data["strip_fragment"] = strip_fragment
+        if is_active is not None:
+            data["is_active"] = is_active
+        response = self._request(
+            "PUT", f"/admin/special-domain-rules/{rule_id}", json_data=data
+        )
+        return SpecialDomainRule.from_dict(response)
+
+    def delete_special_domain_rule(self, rule_id: str) -> None:
+        """
+        Delete a special domain rule.
+
+        Requires system admin permission. Default rules cannot be deleted
+        (deactivate them instead via update_special_domain_rule).
+
+        Args:
+            rule_id: Rule UUID
+
+        Example:
+            ```python
+            client.delete_special_domain_rule("abc-123")
+            ```
+        """
+        self._request("DELETE", f"/admin/special-domain-rules/{rule_id}")
+
+    # ── URL Consolidation Methods ─────────────────────────────────────
+
+    def start_url_consolidation(self) -> URLConsolidationStatus:
+        """
+        Start the URL consolidation background job.
+
+        This retroactively consolidates existing URL identifiers to domain
+        level. Requires system admin permission.
+
+        Returns:
+            URLConsolidationStatus with job progress info
+
+        Example:
+            ```python
+            status = client.start_url_consolidation()
+            print(f"Status: {status.status}")
+            ```
+        """
+        response = self._request("POST", "/admin/url-consolidation/start")
+        return URLConsolidationStatus.from_dict(response)
+
+    def get_url_consolidation_status(self) -> URLConsolidationStatus:
+        """
+        Get the current URL consolidation job status.
+
+        Requires system admin permission.
+
+        Returns:
+            URLConsolidationStatus with current progress
+
+        Example:
+            ```python
+            status = client.get_url_consolidation_status()
+            if status.is_running:
+                print(f"Progress: {status.processed_groups}/{status.total_groups}")
+            ```
+        """
+        response = self._request("GET", "/admin/url-consolidation/status")
+        return URLConsolidationStatus.from_dict(response)
+
+    def cancel_url_consolidation(self) -> Dict[str, Any]:
+        """
+        Cancel a running URL consolidation job.
+
+        Requires system admin permission.
+
+        Returns:
+            Dict with cancellation status message
+
+        Example:
+            ```python
+            result = client.cancel_url_consolidation()
+            print(result.get("message"))
+            ```
+        """
+        return self._request("POST", "/admin/url-consolidation/cancel")
 
     # Group Methods

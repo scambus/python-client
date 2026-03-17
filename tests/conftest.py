@@ -21,23 +21,24 @@ def mock_api_url():
 
 @pytest.fixture
 def client(mock_api_url, mock_api_key):
-    """Return a ScambusClient instance with mocked requests."""
+    """Return a ScambusClient instance with mocked HTTP client."""
     from unittest.mock import Mock
 
-    # Create client with real session first
+    # Create client
     client = ScambusClient(api_url=mock_api_url, api_token=mock_api_key)
 
-    # Replace session with a mock that tests can configure
-    mock_session = Mock()
-    mock_session.headers = client.session.headers  # Keep the auth headers
-    client.session = mock_session
+    # Replace _client with a mock that tests can configure.
+    # The session property is a backward-compat alias for _client.
+    mock_http_client = Mock()
+    mock_http_client.headers = dict(client._auth_headers)
+    client._client = mock_http_client
 
     return client
 
 
 @pytest.fixture
 def mock_response():
-    """Return a mock requests.Response object."""
+    """Return a mock httpx.Response-like object."""
     response = Mock()
     response.status_code = 200
     response.headers = {"Content-Type": "application/json"}
@@ -154,6 +155,12 @@ def mock_tag_data():
         "title": "High Priority",
         "tag_type": "valued",
         "description": "High priority items",
+        "flow_up": True,
+        "flow_down": False,
+        "allow_dynamic_values": True,
+        "tag_values": [
+            {"id": "tv-1", "tag_id": "tag-999", "title": "Low", "order": 0},
+        ],
         "created_at": "2025-01-01T00:00:00Z",
     }
 

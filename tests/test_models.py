@@ -269,3 +269,9 @@ class TestTag:
         assert tag.title == "High Priority"
         assert tag.tag_type == "valued"
         assert tag.description == "High priority items"
+        assert tag.flow_up is True
+        assert tag.flow_down is False
+        assert tag.allow_dynamic_values is True
+        assert tag.tag_values is not None
+        assert len(tag.tag_values) == 1
+        assert tag.tag_values[0].title == "Low"

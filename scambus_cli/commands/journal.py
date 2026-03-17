@@ -127,6 +127,32 @@ def journal():
     pass
 
 
+@journal.command("external-systems")
+@click.option("--json", "output_json", is_flag=True, help="Output JSON")
+@click.pass_context
+def list_external_systems(ctx, output_json):
+    """List available external system plugins."""
+    client = ctx.obj.get_client()
+
+    try:
+        systems = client.get_external_systems()
+
+        if output_json:
+            print_json(systems)
+        else:
+            if not systems:
+                print_info("No external systems registered")
+                return
+            table_data = [
+                {"Key": s["key"], "Display Name": s["display_name"]} for s in systems
+            ]
+            print_table(table_data, title=f"External Systems ({len(systems)})")
+
+    except Exception as e:
+        print_error(f"Failed to list external systems: {e}")
+        sys.exit(1)
+
+
 @journal.command("list")
 @click.option("--type", "entry_type", help="Filter by type")
 @click.option("--page", default=1)
@@ -586,6 +612,16 @@ def query(
     "--enrichments-json",
     help='JSON map of enrichments to apply to all identifiers (e.g., \'{"hosting_provider": {"value": "Hostinger", "source": "whois"}}\')',
 )
+@click.option(
+    "--external-id",
+    multiple=True,
+    help="External system identifier in format system:id (e.g., mycoin:user123). Can be specified multiple times.",
+)
+@click.option(
+    "--extract-external-ids",
+    is_flag=True,
+    help="Automatically extract external system identifiers from entry content using plugins",
+)
 @click.pass_context
 def create_note(
     ctx,
@@ -601,6 +637,8 @@ def create_note(
     tag,
     is_test,
     enrichments_json,
+    external_id,
+    extract_external_ids,
 ):
     """Create a note entry."""
     client = ctx.obj.get_client()
@@ -702,6 +740,22 @@ def create_note(
         if is_test:
             data["is_test"] = is_test
 
+        # Add external identifiers if provided
+        if external_id:
+            ext_ids = []
+            for ext in external_id:
+                if ":" not in ext:
+                    print_error(
+                        f"Invalid external ID format: {ext}. Use system:id (e.g., mycoin:user123)"
+                    )
+                    sys.exit(1)
+                system, ext_value = ext.split(":", 1)
+                ext_ids.append({"external_system": system, "external_id": ext_value})
+            data["external_identifiers"] = ext_ids
+
+        if extract_external_ids:
+            data["extract_external_identifiers"] = True
+
         entry = client._request("POST", "/journal-entries", json_data=data)
         print_success(f"Note created: {entry['id']}")
         print_detail(entry, title="Created Entry")
@@ -778,6 +832,16 @@ def create_note(
     help="Mark entry as test/demo data (excluded from normal queries)",
 )
 @click.option("--json", "output_json", is_flag=True, help="Output JSON")
+@click.option(
+    "--external-id",
+    multiple=True,
+    help="External system identifier in format system:id (e.g., mycoin:user123)",
+)
+@click.option(
+    "--extract-external-ids",
+    is_flag=True,
+    help="Auto-extract external system identifiers from entry content",
+)
 @click.pass_context
 def create_phone_call(
     ctx,
@@ -802,6 +866,8 @@ def create_phone_call(
     is_test,
     platform,
     output_json,
+    external_id,
+    extract_external_ids,
 ):
     """Create a phone call entry."""
     client = ctx.obj.get_client()
@@ -972,6 +1038,22 @@ def create_phone_call(
         if is_test:
             data["is_test"] = is_test
 
+        # Add external identifiers if provided
+        if external_id:
+            ext_ids = []
+            for ext in external_id:
+                if ":" not in ext:
+                    print_error(
+                        f"Invalid external ID format: {ext}. Use system:id (e.g., mycoin:user123)"
+                    )
+                    sys.exit(1)
+                system, ext_value = ext.split(":", 1)
+                ext_ids.append({"external_system": system, "external_id": ext_value})
+            data["external_identifiers"] = ext_ids
+
+        if extract_external_ids:
+            data["extract_external_identifiers"] = True
+
         entry = client._request("POST", "/journal-entries", json_data=data)
 
         if output_json:
@@ -1037,6 +1119,16 @@ def create_phone_call(
     is_flag=True,
     help="Mark entry as test/demo data (excluded from normal queries)",
 )
+@click.option(
+    "--external-id",
+    multiple=True,
+    help="External system identifier in format system:id (e.g., mycoin:user123)",
+)
+@click.option(
+    "--extract-external-ids",
+    is_flag=True,
+    help="Auto-extract external system identifiers from entry content",
+)
 @click.pass_context
 def create_email(
     ctx,
@@ -1057,6 +1149,8 @@ def create_email(
     originator_type,
     originator_identifier,
     create_originator,
+    external_id,
+    extract_external_ids,
 ):
     """Create an email entry."""
     client = ctx.obj.get_client()
@@ -1169,6 +1263,22 @@ def create_email(
         if is_test:
             data["is_test"] = is_test
 
+        # Add external identifiers if provided
+        if external_id:
+            ext_ids = []
+            for ext in external_id:
+                if ":" not in ext:
+                    print_error(
+                        f"Invalid external ID format: {ext}. Use system:id (e.g., mycoin:user123)"
+                    )
+                    sys.exit(1)
+                system, ext_value = ext.split(":", 1)
+                ext_ids.append({"external_system": system, "external_id": ext_value})
+            data["external_identifiers"] = ext_ids
+
+        if extract_external_ids:
+            data["extract_external_identifiers"] = True
+
         entry = client._request("POST", "/journal-entries", json_data=data)
         print_success(f"Email entry created: {entry['id']}")
         print_detail(entry, title="Created Entry")
@@ -1224,6 +1334,16 @@ def create_email(
     is_flag=True,
     help="Mark entry as test/demo data (excluded from normal queries)",
 )
+@click.option(
+    "--external-id",
+    multiple=True,
+    help="External system identifier in format system:id (e.g., mycoin:user123)",
+)
+@click.option(
+    "--extract-external-ids",
+    is_flag=True,
+    help="Auto-extract external system identifiers from entry content",
+)
 @click.pass_context
 def create_text_conversation(
     ctx,
@@ -1240,6 +1360,8 @@ def create_text_conversation(
     create_originator,
     tag,
     is_test,
+    external_id,
+    extract_external_ids,
 ):
     """Create a text conversation entry.
 
@@ -1347,6 +1469,22 @@ def create_text_conversation(
         if is_test:
             data["is_test"] = is_test
 
+        # Add external identifiers if provided
+        if external_id:
+            ext_ids = []
+            for ext in external_id:
+                if ":" not in ext:
+                    print_error(
+                        f"Invalid external ID format: {ext}. Use system:id (e.g., mycoin:user123)"
+                    )
+                    sys.exit(1)
+                system, ext_value = ext.split(":", 1)
+                ext_ids.append({"external_system": system, "external_id": ext_value})
+            data["external_identifiers"] = ext_ids
+
+        if extract_external_ids:
+            data["extract_external_identifiers"] = True
+
         entry = client._request("POST", "/journal-entries", json_data=data)
         print_success(f"Text conversation entry created: {entry['id']}")
         print_detail(entry, title="Created Entry")
@@ -1394,6 +1532,16 @@ def create_text_conversation(
     "--enrichments-json",
     help='JSON map of enrichments to apply to all identifiers (e.g., \'{"hosting_provider": {"value": "Hostinger", "source": "whois"}}\')',
 )
+@click.option(
+    "--external-id",
+    multiple=True,
+    help="External system identifier in format system:id (e.g., mycoin:user123)",
+)
+@click.option(
+    "--extract-external-ids",
+    is_flag=True,
+    help="Auto-extract external system identifiers from entry content",
+)
 @click.pass_context
 def create_detection(
     ctx,
@@ -1408,6 +1556,8 @@ def create_detection(
     tag,
     is_test,
     enrichments_json,
+    external_id,
+    extract_external_ids,
 ):
     """Create a detection entry."""
     client = ctx.obj.get_client()
@@ -1500,6 +1650,22 @@ def create_detection(
 
         if is_test:
             data["is_test"] = is_test
+
+        # Add external identifiers if provided
+        if external_id:
+            ext_ids = []
+            for ext in external_id:
+                if ":" not in ext:
+                    print_error(
+                        f"Invalid external ID format: {ext}. Use system:id (e.g., mycoin:user123)"
+                    )
+                    sys.exit(1)
+                system, ext_value = ext.split(":", 1)
+                ext_ids.append({"external_system": system, "external_id": ext_value})
+            data["external_identifiers"] = ext_ids
+
+        if extract_external_ids:
+            data["extract_external_identifiers"] = True
 
         entry = client._request("POST", "/journal-entries", json_data=data)
         print_success(f"Detection entry created: {entry['id']}")
@@ -1736,6 +1902,16 @@ def in_progress(ctx, output_json):
     help="Mark entry as test/demo data (excluded from normal queries)",
 )
 @click.option("--json", "output_json", is_flag=True, help="Output JSON")
+@click.option(
+    "--external-id",
+    multiple=True,
+    help="External system identifier in format system:id (e.g., mycoin:user123)",
+)
+@click.option(
+    "--extract-external-ids",
+    is_flag=True,
+    help="Auto-extract external system identifiers from entry content",
+)
 @click.pass_context
 def create_conversation(
     ctx,
@@ -1761,6 +1937,8 @@ def create_conversation(
     tag,
     is_test,
     output_json,
+    external_id,
+    extract_external_ids,
 ):
     """Create a text_conversation entry with optional metadata.
 
@@ -1948,6 +2126,22 @@ def create_conversation(
         if is_test:
             data["is_test"] = is_test
 
+        # Add external identifiers if provided
+        if external_id:
+            ext_ids = []
+            for ext in external_id:
+                if ":" not in ext:
+                    print_error(
+                        f"Invalid external ID format: {ext}. Use system:id (e.g., mycoin:user123)"
+                    )
+                    sys.exit(1)
+                system, ext_value = ext.split(":", 1)
+                ext_ids.append({"external_system": system, "external_id": ext_value})
+            data["external_identifiers"] = ext_ids
+
+        if extract_external_ids:
+            data["extract_external_identifiers"] = True
+
         entry = client._request("POST", "/journal-entries", json_data=data)
 
         if output_json:
@@ -2004,6 +2198,17 @@ def create_conversation(
     default=False,
     help="Use AI to extract identifiers from message text (computes inline positions automatically)",
 )
+@click.option(
+    "--external-id",
+    multiple=True,
+    help="External system identifier in format 'system:id' (e.g., 'mycoin:user123'). Can be specified multiple times.",
+)
+@click.option(
+    "--extract-external-ids",
+    is_flag=True,
+    default=False,
+    help="Run registered external system plugins to auto-extract external identifiers",
+)
 @click.option("--json", "output_json", is_flag=True, help="Output JSON")
 @click.pass_context
 def add_conversation_messages(
@@ -2019,6 +2224,8 @@ def add_conversation_messages(
     create_originator,
     non_contiguous,
     ai_extract,
+    external_id,
+    extract_external_ids,
     output_json,
 ):
     """Add messages to an existing conversation (creates conversation_continuation entry).
@@ -2151,6 +2358,22 @@ def add_conversation_messages(
                 "identifier": originator_identifier,
                 "create_if_not_exists": create_originator,
             }
+
+        # Add external identifiers if provided
+        if external_id:
+            ext_ids = []
+            for ext in external_id:
+                parts = ext.split(":", 1)
+                if len(parts) != 2:
+                    print_error(
+                        f"Invalid external-id format: {ext}. Use 'system:id' (e.g., 'mycoin:user123')"
+                    )
+                    sys.exit(1)
+                ext_ids.append({"external_system": parts[0], "external_id": parts[1]})
+            data["external_identifiers"] = ext_ids
+
+        if extract_external_ids:
+            data["extract_external_identifiers"] = True
 
         entry = client._request("POST", "/journal-entries", json_data=data)
 

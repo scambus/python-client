@@ -3,8 +3,34 @@ Data models for the Scambus API.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+
+
+def _local_tz() -> "tzinfo":
+    """Return the system's local timezone, falling back to UTC."""
+    try:
+        local = datetime.now().astimezone().tzinfo
+        if local is not None:
+            return local
+    except Exception:
+        pass
+    return timezone.utc
+
+
+def _dt_to_rfc3339(dt: datetime) -> str:
+    """Convert a datetime to RFC3339 string.
+
+    For naive datetimes (no tzinfo), assumes the system's local timezone,
+    falling back to UTC if the local timezone cannot be determined.
+
+    Go's time.Time.UnmarshalJSON requires RFC3339 (with timezone suffix).
+    Python's isoformat() omits timezone for naive datetimes, which causes
+    Go JSON parsing to fail. This helper ensures all datetimes include timezone.
+    """
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_local_tz())
+    return dt.isoformat()
 
 
 def _get_value(data: Dict[str, Any], snake_key: str, camel_key: str, default: Any = None) -> Any:
@@ -138,6 +164,65 @@ class ExtractedIdentifier:
 
 
 @dataclass
+class ExternalIdentifierRecord:
+    """
+    An external system identifier linked to a journal entry.
+
+    Attributes:
+        id: UUID of this external identifier record
+        journal_entry_id: UUID of the journal entry this belongs to
+        external_system: Key of the external system (e.g., "mycoin")
+        external_id: The identifier within the external system
+        source: How this was added ("manual" or "plugin")
+        raw_match: The raw text matched by the plugin (plugin-extracted only)
+        link: Computed URL to view in the external system (not persisted)
+        created_at: When this record was created
+    """
+
+    id: str
+    journal_entry_id: str
+    external_system: str
+    external_id: str
+    source: str = "manual"
+    raw_match: Optional[str] = None
+    link: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ExternalIdentifierRecord":
+        """Create from API response dictionary."""
+        return cls(
+            id=data.get("id", ""),
+            journal_entry_id=_get_value(data, "journal_entry_id", "journalEntryId", ""),
+            external_system=_get_value(data, "external_system", "externalSystem", ""),
+            external_id=_get_value(data, "external_id", "externalId", ""),
+            source=data.get("source", "manual"),
+            raw_match=_get_value(data, "raw_match", "rawMatch"),
+            link=data.get("link"),
+            created_at=Identifier._parse_datetime(
+                _get_value(data, "created_at", "createdAt")
+            ) if _get_value(data, "created_at", "createdAt") else None,
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        result = {
+            "id": self.id,
+            "journal_entry_id": self.journal_entry_id,
+            "external_system": self.external_system,
+            "external_id": self.external_id,
+            "source": self.source,
+        }
+        if self.raw_match is not None:
+            result["raw_match"] = self.raw_match
+        if self.link is not None:
+            result["link"] = self.link
+        if self.created_at is not None:
+            result["created_at"] = self.created_at.isoformat()
+        return result
+
+
+@dataclass
 class FailedIdentifier:
     """
     Represents an identifier that failed validation during journal entry creation.
@@ -244,8 +329,13 @@ class Identifier:
         id: Identifier UUID
         type: Type of identifier
         display_value: Human-readable display value
-        confidence: Confidence score (0.0 to 1.0)
+        confidence: Effective confidence score (0.0 to 1.0), derived from all confidence_operation entries
         data: Type-specific data
+        tag_display: Effective tags on this identifier from event-sourced tag operations.
+            Each entry has: tag_id, tag_title, value_id (optional), value_title (optional),
+            display (formatted string), is_flowed_up (bool).
+        label: Contextual label from journal entry linkage (e.g., "from", "to")
+        classification: Classification level ("none" or "sensitive")
     """
 
     id: str
@@ -256,6 +346,9 @@ class Identifier:
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     is_test: bool = False  # Whether this is test/demo data (excluded from normal queries)
+    tag_display: Optional[List[Dict[str, Any]]] = None
+    label: Optional[str] = None
+    classification: Optional[str] = None
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Identifier":
@@ -273,6 +366,9 @@ class Identifier:
             created_at=cls._parse_datetime(_get_value(data, "created_at", "createdAt")),
             updated_at=cls._parse_datetime(_get_value(data, "updated_at", "updatedAt")),
             is_test=_get_value(data, "is_test", "isTest", False),
+            tag_display=data.get("tag_display"),
+            label=data.get("label"),
+            classification=data.get("classification"),
         )
 
     @staticmethod
@@ -397,9 +493,9 @@ class PhoneCallDetails:
             "direction": self.direction,
         }
         if self.recording_url:
-            data["recordingUrl"] = self.recording_url
+            data["recording_url"] = self.recording_url
         if self.transcript_url:
-            data["transcriptUrl"] = self.transcript_url
+            data["transcript_url"] = self.transcript_url
         return data
 
 
@@ -433,14 +529,14 @@ class EmailDetails:
         data = {
             "direction": self.direction,
             "subject": self.subject,
-            "sentAt": self.sent_at.isoformat(),
+            "sent_at": _dt_to_rfc3339(self.sent_at),
         }
         if self.body:
             data["body"] = self.body
         if self.html_body:
-            data["htmlBody"] = self.html_body
+            data["html_body"] = self.html_body
         if self.message_id:
-            data["messageId"] = self.message_id
+            data["message_id"] = self.message_id
         if self.headers:
             data["headers"] = self.headers
         if self.attachments:
@@ -470,7 +566,7 @@ class CustodyEvent:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API request."""
         data = {
-            "timestamp": self.timestamp.isoformat(),
+            "timestamp": _dt_to_rfc3339(self.timestamp),
             "event": self.event,
             "method": self.method,
         }
@@ -620,7 +716,7 @@ class ConversationMessage:
         data = {
             "index": self.index,
             "message_id": self.message_id,
-            "timestamp": self.timestamp.isoformat(),
+            "timestamp": _dt_to_rfc3339(self.timestamp),
             "body": self.body,
             "is_outgoing": self.is_outgoing,
         }
@@ -645,9 +741,9 @@ class ConversationMessage:
         if self.delivery_status:
             data["delivery_status"] = self.delivery_status
         if self.delivery_timestamp:
-            data["delivery_timestamp"] = self.delivery_timestamp.isoformat()
+            data["delivery_timestamp"] = _dt_to_rfc3339(self.delivery_timestamp)
         if self.read_timestamp:
-            data["read_timestamp"] = self.read_timestamp.isoformat()
+            data["read_timestamp"] = _dt_to_rfc3339(self.read_timestamp)
         if self.in_reply_to:
             data["in_reply_to"] = self.in_reply_to
         if self.headers:
@@ -772,9 +868,9 @@ class TextConversationDetails:
         if self.conversation_id:
             data["conversation_id"] = self.conversation_id
         if self.first_message_at:
-            data["first_message_at"] = self.first_message_at.isoformat()
+            data["first_message_at"] = _dt_to_rfc3339(self.first_message_at)
         if self.last_message_at:
-            data["last_message_at"] = self.last_message_at.isoformat()
+            data["last_message_at"] = _dt_to_rfc3339(self.last_message_at)
         if self.source_type:
             data["source_type"] = self.source_type
         if self.subject:
@@ -937,11 +1033,11 @@ class ImportDetails:
         """Convert to dictionary for API request."""
         data = {
             "source": self.source,
-            "recordCount": self.record_count,
-            "importedAt": self.imported_at.isoformat(),
+            "record_count": self.record_count,
+            "imported_at": _dt_to_rfc3339(self.imported_at),
         }
         if self.file_name:
-            data["fileName"] = self.file_name
+            data["file_name"] = self.file_name
         if self.notes:
             data["notes"] = self.notes
         return data
@@ -970,44 +1066,11 @@ class ExportDetails:
         """Convert to dictionary for API request."""
         data = {
             "destination": self.destination,
-            "recordCount": self.record_count,
-            "exportedAt": self.exported_at.isoformat(),
+            "record_count": self.record_count,
+            "exported_at": _dt_to_rfc3339(self.exported_at),
         }
         if self.file_name:
-            data["fileName"] = self.file_name
-        if self.notes:
-            data["notes"] = self.notes
-        return data
-
-
-@dataclass
-class ValidationDetails:
-    """
-    Details for a validation journal entry.
-
-    Attributes:
-        validation_type: Type of validation performed (e.g., "manual_review", "automated_check")
-        result: Validation result (e.g., "confirmed", "rejected", "needs_review")
-        validated_at: When the validation occurred
-        confidence: Confidence score after validation (0.0 to 1.0, optional)
-        notes: Additional notes about the validation (optional)
-    """
-
-    validation_type: str
-    result: str
-    validated_at: datetime
-    confidence: Optional[float] = None
-    notes: Optional[str] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for API request."""
-        data = {
-            "validationType": self.validation_type,
-            "result": self.result,
-            "validatedAt": self.validated_at.isoformat(),
-        }
-        if self.confidence is not None:
-            data["confidence"] = self.confidence
+            data["file_name"] = self.file_name
         if self.notes:
             data["notes"] = self.notes
         return data
@@ -1039,7 +1102,7 @@ class ContactDetails:
         data = {
             "method": self.method,
             "direction": self.direction,
-            "contactedAt": self.contacted_at.isoformat(),
+            "contacted_at": _dt_to_rfc3339(self.contacted_at),
         }
         if self.duration is not None:
             data["duration"] = self.duration
@@ -1073,7 +1136,7 @@ class ResearchDetails:
         """Convert to dictionary for API request."""
         data = {
             "topic": self.topic,
-            "researchedAt": self.researched_at.isoformat(),
+            "researched_at": _dt_to_rfc3339(self.researched_at),
         }
         if self.sources:
             data["sources"] = self.sources
@@ -1106,9 +1169,9 @@ class AnalysisDetails:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API request."""
         data = {
-            "analysisType": self.analysis_type,
+            "analysis_type": self.analysis_type,
             "findings": self.findings,
-            "analyzedAt": self.analyzed_at.isoformat(),
+            "analyzed_at": _dt_to_rfc3339(self.analyzed_at),
         }
         if self.confidence is not None:
             data["confidence"] = self.confidence
@@ -1137,8 +1200,8 @@ class ActionDetails:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API request."""
         data = {
-            "actionType": self.action_type,
-            "takenAt": self.taken_at.isoformat(),
+            "action_type": self.action_type,
+            "taken_at": _dt_to_rfc3339(self.taken_at),
         }
         if self.outcome:
             data["outcome"] = self.outcome
@@ -1167,8 +1230,8 @@ class ObservationDetails:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API request."""
         result = {
-            "observationType": self.observation_type,
-            "observedAt": self.observed_at.isoformat(),
+            "observation_type": self.observation_type,
+            "observed_at": _dt_to_rfc3339(self.observed_at),
             "data": self.data,
         }
         if self.significance:
@@ -1195,7 +1258,7 @@ class NoteDetails:
         """Convert to dictionary for API request."""
         data = {
             "content": self.content,
-            "notedAt": self.noted_at.isoformat(),
+            "noted_at": _dt_to_rfc3339(self.noted_at),
         }
         if self.category:
             data["category"] = self.category
@@ -1224,14 +1287,14 @@ class UpdateDetails:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API request."""
         data = {
-            "updateType": self.update_type,
-            "updatedAt": self.updated_at.isoformat(),
+            "update_type": self.update_type,
+            "updated_at": _dt_to_rfc3339(self.updated_at),
             "changes": self.changes,
         }
         if self.previous_value:
-            data["previousValue"] = self.previous_value
+            data["previous_value"] = self.previous_value
         if self.new_value:
-            data["newValue"] = self.new_value
+            data["new_value"] = self.new_value
         return data
 
 
@@ -1276,10 +1339,10 @@ class ActivityCompleteDetails:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API request."""
         return {
-            "completionReason": self.completion_reason,
-            "startTime": self.start_time.isoformat(),
-            "endTime": self.end_time.isoformat(),
-            "durationSeconds": self.duration_seconds,
+            "completion_reason": self.completion_reason,
+            "start_time": _dt_to_rfc3339(self.start_time),
+            "end_time": _dt_to_rfc3339(self.end_time),
+            "duration_seconds": self.duration_seconds,
         }
 
 
@@ -1312,7 +1375,7 @@ class TagOperationDetails:
 
         # Create journal entry with tag (tag flows to linked identifiers/evidence automatically)
         entry = client.create_journal_entry(
-            entry_type="validation",
+            entry_type="note",
             description="Staff verified this report",
             parent_journal_entry_id=original_report_id,
             identifier_lookups=[{"type": "phone", "value": "+15551234567"}],
@@ -1433,7 +1496,7 @@ class RedactionDetails:
             "identifier_type": self.identifier_type,
             "original_hash": self.original_hash,
             "redacted_fields": self.redacted_fields,
-            "redacted_at": self.redacted_at.isoformat(),
+            "redacted_at": _dt_to_rfc3339(self.redacted_at),
         }
         if self.reason:
             data["reason"] = self.reason
@@ -1705,6 +1768,7 @@ class JournalEntry:
             Only populated on entries returned from create_* methods, not from get_journal_entry().
         extracted_identifiers: AI-extracted identifiers with resolved UUIDs and occurrence positions.
             Only populated on entries returned from create_* methods when ai_extract=True.
+        external_identifiers: External system identifiers linked to this entry (optional).
         _client: Internal reference to ScambusClient for calling complete()
         _raw_data: Original API response data with all fields
     """
@@ -1738,6 +1802,7 @@ class JournalEntry:
     child_entries: Optional[List["JournalEntry"]] = None
     failed_identifiers: Optional[List["FailedIdentifier"]] = None
     extracted_identifiers: Optional[List["ExtractedIdentifier"]] = None
+    external_identifiers: Optional[List["ExternalIdentifierRecord"]] = None
     _client: Optional[Any] = field(default=None, repr=False)
     _raw_data: Optional[Dict[str, Any]] = field(default=None, repr=False)
 
@@ -1860,6 +1925,13 @@ class JournalEntry:
         raw_extracted = data.get("extracted_identifiers")
         if raw_extracted:
             entry.extracted_identifiers = [ExtractedIdentifier.from_dict(ei) for ei in raw_extracted]
+
+        # Parse external identifiers if present
+        raw_external = _get_value(data, "external_identifiers", "externalIdentifiers")
+        if raw_external:
+            entry.external_identifiers = [
+                ExternalIdentifierRecord.from_dict(ext) for ext in raw_external
+            ]
 
         # Store the complete raw response for to_dict()
         entry._raw_data = data
@@ -2615,14 +2687,23 @@ class PaymentTokenDetails:
     Structured details for a payment token identifier.
 
     Attributes:
-        service: Payment service name (e.g. "PayPal", "Venmo")
-        identifier: Token or account identifier
-        type: Token type
+        service: Payment service name (e.g. "zelle", "venmo", "cashapp", "paypal", "wise", "krak")
+        identifier: Token or account identifier value
+        type: Identifier sub-type: "email", "phone", "cashtag", "wisetag",
+              "kraktag", "venmotag", or "user_id"
+        name: Account holder name (when available)
+        source_url_created: Venmo QR URL ``created`` timestamp (present when
+              identifier was extracted from a venmo.com/code URL)
+        source_url_printed: Venmo QR URL ``printed`` flag (present when
+              identifier was extracted from a venmo.com/code URL)
     """
 
     service: Optional[str] = None
     identifier: Optional[str] = None
     type: Optional[str] = None
+    name: Optional[str] = None
+    source_url_created: Optional[str] = None
+    source_url_printed: Optional[str] = None
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "PaymentTokenDetails":
@@ -2630,6 +2711,9 @@ class PaymentTokenDetails:
             service=data.get("service"),
             identifier=data.get("identifier"),
             type=data.get("type"),
+            name=data.get("name"),
+            source_url_created=data.get("source_url_created"),
+            source_url_printed=data.get("source_url_printed"),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -2640,6 +2724,12 @@ class PaymentTokenDetails:
             d["identifier"] = self.identifier
         if self.type is not None:
             d["type"] = self.type
+        if self.name is not None:
+            d["name"] = self.name
+        if self.source_url_created is not None:
+            d["source_url_created"] = self.source_url_created
+        if self.source_url_printed is not None:
+            d["source_url_printed"] = self.source_url_printed
         return d
 
 
@@ -2747,10 +2837,12 @@ class Tag:
         active: Whether tag is active
         is_system: Whether this is a system tag
         is_global: Whether tag is visible to all organizations
-        flows_up_to_case: Tag flows up to cases
-        flows_down_to_evidence: Tag flows down to evidence
+        flow_up: Tag flows up to cases
+        flow_down: Tag flows down to evidence
+        allow_dynamic_values: Whether new tag values can be created on-the-fly during ingestion
         allocates_karma: Karma points awarded
         owner_org_id: Organization that owns this tag
+        tag_values: Tag values (for valued tags)
         created_at: When tag was created
         updated_at: When tag was updated
     """
@@ -2766,16 +2858,24 @@ class Tag:
     active: bool = True
     is_system: bool = False
     is_global: bool = False
-    flows_up_to_case: bool = True
-    flows_down_to_evidence: bool = True
+    flow_up: bool = True
+    flow_down: bool = True
+    allow_dynamic_values: bool = False
     allocates_karma: Optional[int] = None
     owner_org_id: Optional[str] = None
+    tag_values: Optional[List["TagValue"]] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Tag":
         """Create from API response dictionary."""
+        tag_values_data = data.get("tag_values")
+        tag_values = (
+            [TagValue.from_dict(tv) for tv in tag_values_data]
+            if tag_values_data
+            else None
+        )
         return cls(
             id=data["id"],
             title=data["title"],
@@ -2788,10 +2888,12 @@ class Tag:
             active=data.get("active", True),
             is_system=data.get("is_system", False),
             is_global=data.get("is_global", False),
-            flows_up_to_case=data.get("flows_up_to_case", True),
-            flows_down_to_evidence=data.get("flows_down_to_evidence", True),
+            flow_up=data.get("flow_up", True),
+            flow_down=data.get("flow_down", True),
+            allow_dynamic_values=data.get("allow_dynamic_values", False),
             allocates_karma=data.get("allocates_karma"),
             owner_org_id=data.get("owner_org_id"),
+            tag_values=tag_values,
             created_at=Identifier._parse_datetime(data.get("created_at")),
             updated_at=Identifier._parse_datetime(data.get("updated_at")),
         )
@@ -3151,3 +3253,158 @@ class Report:
     def is_processing(self) -> bool:
         """Check if report is still being generated."""
         return self.status in ("pending", "processing")
+
+
+@dataclass
+class IdentifierURLReference:
+    """A URL reference tracked for a domain-consolidated URL identifier.
+
+    When URLs are consolidated to the domain level (e.g. evil.com/page1 and
+    evil.com/page2 both map to the evil.com identifier), each unique URL is
+    recorded as a reference with first/last seen timestamps and a count.
+
+    Attributes:
+        id: Reference UUID
+        identifier_id: Parent identifier UUID
+        url: Full URL that was observed
+        hostname: Hostname portion of the URL
+        path: Path portion of the URL
+        first_seen_at: When this URL was first observed
+        last_seen_at: When this URL was most recently observed
+        seen_count: Number of times this URL has been submitted
+        owner_org_id: Owning organization UUID
+        is_test: Whether this is test/demo data
+        created_at: Record creation timestamp
+    """
+
+    id: str
+    identifier_id: str
+    url: str
+    hostname: str = ""
+    path: str = ""
+    first_seen_at: Optional[str] = None
+    last_seen_at: Optional[str] = None
+    seen_count: int = 1
+    owner_org_id: Optional[str] = None
+    is_test: bool = False
+    created_at: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "IdentifierURLReference":
+        return cls(
+            id=data.get("id", ""),
+            identifier_id=data.get("identifier_id", ""),
+            url=data.get("url", ""),
+            hostname=data.get("hostname", ""),
+            path=data.get("path", ""),
+            first_seen_at=data.get("first_seen_at"),
+            last_seen_at=data.get("last_seen_at"),
+            seen_count=data.get("seen_count", 1),
+            owner_org_id=data.get("owner_org_id"),
+            is_test=data.get("is_test", False),
+            created_at=data.get("created_at"),
+        )
+
+
+@dataclass
+class SpecialDomainRule:
+    """A rule that controls how special domains (shorteners, pastebins, etc.)
+    are handled during URL identifier consolidation.
+
+    Special domains keep their path-sensitive behavior instead of being
+    consolidated to the domain level.
+
+    Attributes:
+        id: Rule UUID
+        domain: Domain name (e.g. "bit.ly", "pastebin.com")
+        category: Rule category (shortener, pastebin, archive, cloud_storage, custom)
+        path_depth: How many path segments to preserve (0-10)
+        strip_query: Whether to strip query parameters
+        strip_fragment: Whether to strip URL fragments
+        is_active: Whether the rule is currently active
+        is_default: Whether this is a built-in default rule (cannot be deleted)
+        created_at: Record creation timestamp
+        updated_at: Record last update timestamp
+    """
+
+    id: str
+    domain: str
+    category: str
+    path_depth: int = 1
+    strip_query: bool = True
+    strip_fragment: bool = True
+    is_active: bool = True
+    is_default: bool = False
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "SpecialDomainRule":
+        return cls(
+            id=data.get("id", ""),
+            domain=data.get("domain", ""),
+            category=data.get("category", ""),
+            path_depth=data.get("path_depth", 1),
+            strip_query=data.get("strip_query", True),
+            strip_fragment=data.get("strip_fragment", True),
+            is_active=data.get("is_active", True),
+            is_default=data.get("is_default", False),
+            created_at=data.get("created_at"),
+            updated_at=data.get("updated_at"),
+        )
+
+
+@dataclass
+class URLConsolidationStatus:
+    """Status of a URL consolidation migration run.
+
+    Attributes:
+        status: Current state (idle, running, completed, cancelled, failed)
+        started_at: When the consolidation started
+        completed_at: When the consolidation ended
+        total_groups: Total number of domain groups to process
+        processed_groups: Number of groups processed so far
+        merged: Number of identifiers merged into domain-level targets
+        skipped: Number of groups skipped (already consolidated)
+        errors: Number of groups that encountered errors
+        last_error: Most recent error message (sanitized)
+    """
+
+    status: str = "idle"
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    total_groups: int = 0
+    processed_groups: int = 0
+    merged: int = 0
+    skipped: int = 0
+    errors: int = 0
+    last_error: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "URLConsolidationStatus":
+        return cls(
+            status=data.get("status", "idle"),
+            started_at=data.get("started_at"),
+            completed_at=data.get("completed_at"),
+            total_groups=data.get("total_groups", 0),
+            processed_groups=data.get("processed_groups", 0),
+            merged=data.get("merged", 0),
+            skipped=data.get("skipped", 0),
+            errors=data.get("errors", 0),
+            last_error=data.get("last_error"),
+        )
+
+    @property
+    def is_running(self) -> bool:
+        """Check if consolidation is currently running."""
+        return self.status == "running"
+
+    @property
+    def is_completed(self) -> bool:
+        """Check if consolidation completed successfully."""
+        return self.status == "completed"
+
+    @property
+    def is_failed(self) -> bool:
+        """Check if consolidation failed."""
+        return self.status == "failed"

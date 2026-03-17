@@ -4,20 +4,19 @@ Text Conversation with Continuation Example
 
 This example demonstrates the parent-child structure for text conversations:
 1. Create a parent `text_conversation` entry with metadata
-2. Add messages via `conversation_continuation` child entries
+2. Add messages via `conversation_continuation` child entries using the helper
 3. Handle non-contiguous messages (time gaps)
 4. Mark identifier positions within message text
+5. Use AI extraction to automatically find identifiers in messages
 
 This structure allows adding messages incrementally and tracking
 conversation history over time.
 """
 
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from scambus_client import ScambusClient, IdentifierLookup
 from scambus_client.models import (
-    TextConversationDetails,
-    ConversationContinuationDetails,
     ConversationMessage,
     MessageIdentifierRef,
 )
@@ -42,18 +41,14 @@ def main():
     # =========================================================================
     print("\n1. Creating parent text_conversation entry...")
 
-    parent = client.create_journal_entry(
-        entry_type="text_conversation",
+    parent = client.create_text_conversation(
         description="WhatsApp scam conversation - tech support fraud",
-        details=TextConversationDetails(
-            platform="whatsapp",
-            conversation_type="individual",
-            source_type="export",
-            export_format="json",
-        ).to_dict(),
+        platform="whatsapp",
+        start_time=datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc),
+        end_time=datetime(2025, 1, 15, 15, 0, 0, tzinfo=timezone.utc),
         # Define identifiers for all participants
         # The 'ref' field is used to reference these in messages via sender_ref
-        identifier_lookups=[
+        identifiers=[
             IdentifierLookup(type="phone", value="+1555123456", ref="scammer", confidence=0.9),
             IdentifierLookup(type="phone", value="+1555987654", ref="victim", confidence=1.0),
         ],
@@ -72,7 +67,7 @@ def main():
         ConversationMessage(
             index=0,
             message_id="msg_001",
-            timestamp=datetime(2025, 1, 15, 10, 0, 0),
+            timestamp=datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc),
             body="Hello, this is Microsoft Support. Your computer has a virus.",
             is_outgoing=False,
             sender_ref="scammer",  # References identifier_lookup with ref="scammer"
@@ -80,7 +75,7 @@ def main():
         ConversationMessage(
             index=1,
             message_id="msg_002",
-            timestamp=datetime(2025, 1, 15, 10, 1, 30),
+            timestamp=datetime(2025, 1, 15, 10, 1, 30, tzinfo=timezone.utc),
             body="Oh no! What should I do?",
             is_outgoing=True,
             sender_ref="victim",
@@ -88,22 +83,18 @@ def main():
         ConversationMessage(
             index=2,
             message_id="msg_003",
-            timestamp=datetime(2025, 1, 15, 10, 2, 15),
+            timestamp=datetime(2025, 1, 15, 10, 2, 15, tzinfo=timezone.utc),
             body="Please download TeamViewer and give me the access code.",
             is_outgoing=False,
             sender_ref="scammer",
         ),
     ]
 
-    continuation1 = client.create_journal_entry(
-        entry_type="conversation_continuation",
-        description="Initial messages",
-        details=ConversationContinuationDetails(
-            messages=initial_messages,
-            reason="initial import",
-        ).to_dict(),
-        parent_journal_entry_id=parent.id,  # Link to parent conversation
-        identifier_lookups=[
+    continuation1 = client.create_conversation_continuation(
+        parent_entry=parent,
+        messages=initial_messages,
+        reason="initial import",
+        identifiers=[
             IdentifierLookup(type="phone", value="+1555123456", ref="scammer"),
             IdentifierLookup(type="phone", value="+1555987654", ref="victim"),
         ],
@@ -122,7 +113,7 @@ def main():
         ConversationMessage(
             index=3,  # Continue from where we left off
             message_id="msg_004",
-            timestamp=datetime(2025, 1, 15, 14, 30, 0),  # 4+ hours later
+            timestamp=datetime(2025, 1, 15, 14, 30, 0, tzinfo=timezone.utc),  # 4+ hours later
             body="I gave you access. Now what?",
             is_outgoing=True,
             sender_ref="victim",
@@ -130,23 +121,19 @@ def main():
         ConversationMessage(
             index=4,
             message_id="msg_005",
-            timestamp=datetime(2025, 1, 15, 14, 31, 0),
+            timestamp=datetime(2025, 1, 15, 14, 31, 0, tzinfo=timezone.utc),
             body="Please send $500 in gift cards to fix your computer.",
             is_outgoing=False,
             sender_ref="scammer",
         ),
     ]
 
-    continuation2 = client.create_journal_entry(
-        entry_type="conversation_continuation",
-        description="Later messages after time gap",
-        details=ConversationContinuationDetails(
-            messages=later_messages,
-            reason="additional messages",
-            non_contiguous=True,  # Shows visual separator in UI
-        ).to_dict(),
-        parent_journal_entry_id=parent.id,
-        identifier_lookups=[
+    continuation2 = client.create_conversation_continuation(
+        parent_entry=parent,
+        messages=later_messages,
+        reason="additional messages",
+        non_contiguous=True,  # Shows visual separator in UI
+        identifiers=[
             IdentifierLookup(type="phone", value="+1555123456", ref="scammer"),
             IdentifierLookup(type="phone", value="+1555987654", ref="victim"),
         ],
@@ -178,7 +165,7 @@ def main():
         ConversationMessage(
             index=5,
             message_id="msg_006",
-            timestamp=datetime(2025, 1, 15, 14, 35, 0),
+            timestamp=datetime(2025, 1, 15, 14, 35, 0, tzinfo=timezone.utc),
             body=message_body,
             is_outgoing=False,
             sender_ref="scammer",
@@ -200,16 +187,13 @@ def main():
         ),
     ]
 
-    continuation3 = client.create_journal_entry(
-        entry_type="conversation_continuation",
+    continuation3 = client.create_conversation_continuation(
+        parent_entry=parent,
+        messages=messages_with_identifiers,
         description="Payment instructions from scammer",
-        details=ConversationContinuationDetails(
-            messages=messages_with_identifiers,
-            reason="payment request",
-            non_contiguous=True,
-        ).to_dict(),
-        parent_journal_entry_id=parent.id,
-        identifier_lookups=[
+        reason="payment request",
+        non_contiguous=True,
+        identifiers=[
             IdentifierLookup(type="phone", value="+1555123456", ref="scammer"),
             IdentifierLookup(type="phone", value="+1555987654", ref="victim"),
             # New identifiers discovered in this message
@@ -230,15 +214,60 @@ def main():
     print(f"  URL at position {url_position}, length {url_length}")
 
     # =========================================================================
+    # STEP 5: AI extraction from messages
+    # =========================================================================
+    print("\n5. Adding messages with AI extraction...")
+
+    # Instead of manually specifying identifier_refs, let AI find identifiers
+    ai_messages = [
+        ConversationMessage(
+            index=6,
+            message_id="msg_007",
+            timestamp=datetime(2025, 1, 15, 14, 40, 0, tzinfo=timezone.utc),
+            body="You can also send Bitcoin to 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+            is_outgoing=False,
+            sender_ref="scammer",
+        ),
+        ConversationMessage(
+            index=7,
+            message_id="msg_008",
+            timestamp=datetime(2025, 1, 15, 14, 41, 0, tzinfo=timezone.utc),
+            body="Or email payment proof to payments@scam-support.example.com",
+            is_outgoing=False,
+            sender_ref="scammer",
+        ),
+    ]
+
+    continuation4 = client.create_conversation_continuation(
+        parent_entry=parent,
+        messages=ai_messages,
+        description="Additional payment instructions",
+        reason="more payment methods",
+        non_contiguous=True,
+        ai_extract=True,  # AI will extract crypto wallet and email from message text
+        identifiers=[
+            # Still provide known participant identifiers
+            IdentifierLookup(type="phone", value="+1555123456", ref="scammer"),
+        ],
+    )
+
+    print(f"✓ Added messages with AI extraction: {continuation4.id}")
+    if continuation4.extracted_identifiers:
+        for ei in continuation4.extracted_identifiers:
+            print(f"  AI found: {ei.type} = {ei.value} (confidence: {ei.confidence})")
+    else:
+        print("  (AI extraction results depend on server configuration)")
+
+    # =========================================================================
     # Summary
     # =========================================================================
     print("\n" + "=" * 70)
     print("Summary")
     print("=" * 70)
     print(f"\nParent conversation: {parent.id}")
-    print(f"Total continuations: 3")
-    print(f"Total messages: 6")
-    print(f"Identifiers tracked: 4 (2 participants + 2 discovered)")
+    print(f"Total continuations: 4")
+    print(f"Total messages: 8")
+    print(f"Identifiers tracked: 4+ (2 participants + 2 discovered + AI extracted)")
     print("\nKey points:")
     print("  - Parent entry holds conversation metadata (platform, type)")
     print("  - Child entries (continuations) hold actual messages")
@@ -246,6 +275,7 @@ def main():
     print("  - sender_ref references identifier_lookups by 'ref' field")
     print("  - Use non_contiguous=True for time gaps (shows UI separator)")
     print("  - identifier_refs use byte offsets to mark positions in text")
+    print("  - ai_extract=True lets AI find identifiers in message text")
 
 
 def calculate_byte_position_example():

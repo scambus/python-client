@@ -7,7 +7,7 @@ for various platforms (SMS, WhatsApp, Telegram, Signal, etc.).
 """
 
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from scambus_client import ScambusClient, IdentifierLookup, TagLookup
 
 # Configuration
@@ -27,7 +27,7 @@ def main():
 
     # Example 1: SMS conversation
     print("\n1. Creating SMS conversation entry...")
-    start = datetime(2024, 1, 15, 14, 0)
+    start = datetime(2024, 1, 15, 14, 0, tzinfo=timezone.utc)
     entry = client.create_text_conversation(
         description="Suspicious SMS messages requesting immediate payment",
         platform="SMS",
@@ -46,7 +46,7 @@ def main():
 
     # Example 2: WhatsApp conversation
     print("\n2. Creating WhatsApp conversation entry...")
-    start = datetime.now()
+    start = datetime.now(timezone.utc)
     entry = client.create_text_conversation(
         description="WhatsApp conversation with suspected cryptocurrency scammer",
         platform="WhatsApp",
@@ -65,7 +65,7 @@ def main():
 
     # Example 3: Telegram conversation
     print("\n3. Creating Telegram conversation entry...")
-    start = datetime(2024, 1, 20, 9, 0)
+    start = datetime(2024, 1, 20, 9, 0, tzinfo=timezone.utc)
     entry = client.create_text_conversation(
         description="Telegram conversation regarding fake investment opportunity",
         platform="Telegram",
@@ -88,7 +88,7 @@ def main():
 
     # Example 4: Signal conversation
     print("\n4. Creating Signal conversation entry...")
-    start = datetime(2024, 1, 22, 16, 30)
+    start = datetime(2024, 1, 22, 16, 30, tzinfo=timezone.utc)
     entry = client.create_text_conversation(
         description="Signal conversation with romance scammer",
         platform="Signal",
@@ -107,8 +107,8 @@ def main():
 
     print("\n✓ All text conversation entries created successfully!")
 
-    # Example with media
-    print("\n5. Example with screenshot evidence...")
+    # Example 5: With media and AI extraction
+    print("\n5. Example with screenshot evidence and AI extraction...")
     print("Note: This requires actual image files. Example code:")
     print(
         """
@@ -116,7 +116,7 @@ def main():
     screenshot1 = client.upload_media("chat-screenshot-1.png")
     screenshot2 = client.upload_media("chat-screenshot-2.png")
 
-    # Create conversation entry with screenshots
+    # Create conversation entry with screenshots and AI extraction
     start = datetime.now()
     entry = client.create_text_conversation(
         description="WhatsApp scam conversation with screenshots",
@@ -124,10 +124,16 @@ def main():
         start_time=start,
         end_time=start + timedelta(hours=1),
         media=[screenshot1, screenshot2],  # Automatically creates evidence
+        ai_extract=True,  # AI extracts identifiers from screenshots
         identifiers=[
             IdentifierLookup(type="phone", value="+12125551234", confidence=0.95)
         ],
     )
+
+    # Check AI-extracted identifiers
+    if entry.extracted_identifiers:
+        for ei in entry.extracted_identifiers:
+            print(f"  AI found: {ei.type} = {ei.value} (confidence: {ei.confidence})")
     """
     )
 

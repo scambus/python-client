@@ -276,6 +276,7 @@ def show_config():
 
 # Import command groups - imported here to avoid circular imports
 from .commands import (
+    admin,
     automations,
     cases,
     exports,
@@ -300,6 +301,7 @@ cli.add_command(views.views)
 cli.add_command(automations.automations)
 cli.add_command(reports.reports)
 cli.add_command(exports.exports)
+cli.add_command(admin.admin)
 
 
 def main():

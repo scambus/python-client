@@ -27,10 +27,10 @@ class TestScambusClientInit:
 
     def test_init_without_api_key(self, mock_api_url, monkeypatch):
         """Test client initialization without API key raises ValueError."""
-        monkeypatch.setattr("scambus_client.client.get_api_token", lambda api_token=None: None)
-        monkeypatch.setattr("scambus_client.client.get_api_key_id", lambda api_key_id=None: None)
+        monkeypatch.setattr("scambus_client._base_client.get_api_token", lambda api_token=None: None)
+        monkeypatch.setattr("scambus_client._base_client.get_api_key_id", lambda api_key_id=None: None)
         monkeypatch.setattr(
-            "scambus_client.client.get_api_key_secret", lambda api_key_secret=None: None
+            "scambus_client._base_client.get_api_key_secret", lambda api_key_secret=None: None
         )
         with pytest.raises(ValueError, match="No authentication provided"):
             ScambusClient(api_url=mock_api_url)

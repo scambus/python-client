@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import requests
+import httpx
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -55,7 +55,7 @@ class DeviceAuthManager:
         """
         # Step 1: Request device code
         try:
-            response = requests.post(f"{self.api_url}/api/auth/device/code", timeout=10)
+            response = httpx.post(f"{self.api_url}/api/auth/device/code", timeout=10)
             response.raise_for_status()
             device_data = response.json()
         except Exception as e:
@@ -90,7 +90,7 @@ class DeviceAuthManager:
 
             while time.time() - start_time < expires_in:
                 try:
-                    poll_response = requests.post(
+                    poll_response = httpx.post(
                         f"{self.api_url}/api/auth/device/token",
                         json={"device_code": device_code},
                         timeout=10,
@@ -137,7 +137,7 @@ class DeviceAuthManager:
                         console.print("[red]✗[/red] Invalid device code")
                         return None
 
-                except requests.RequestException:
+                except httpx.HTTPError:
                     pass
 
                 # Wait before next poll
@@ -157,7 +157,7 @@ class DeviceAuthManager:
             JWT token if successful, None otherwise
         """
         try:
-            response = requests.post(
+            response = httpx.post(
                 f"{self.api_url}/api/auth/apikey", json={"apiKey": api_key}, timeout=10
             )
             response.raise_for_status()
@@ -176,7 +176,7 @@ class DeviceAuthManager:
             console.print("[green]✓[/green] API key authentication successful!")
             return jwt_token
 
-        except requests.RequestException as e:
+        except httpx.HTTPError as e:
             console.print(f"[red]✗[/red] API key authentication failed: {e}")
             return None
 
@@ -195,7 +195,7 @@ class DeviceAuthManager:
             return None
 
         try:
-            response = requests.post(
+            response = httpx.post(
                 f"{self.api_url}/api/auth/refresh",
                 json={"refresh_token": refresh_token},
                 timeout=10,
@@ -216,7 +216,7 @@ class DeviceAuthManager:
                 # Refresh failed (invalid or expired refresh token)
                 return None
 
-        except requests.RequestException:
+        except httpx.HTTPError:
             return None
 
     def get_token(self) -> Optional[str]:
@@ -291,7 +291,7 @@ class DeviceAuthManager:
             return None
 
         try:
-            response = requests.get(
+            response = httpx.get(
                 f"{self.api_url}/api/auth/me",
                 headers={"Authorization": f"Bearer {token}"},
                 timeout=10,
@@ -345,7 +345,7 @@ class DeviceAuthManager:
 
                 # Verify it exists
                 try:
-                    verify_response = requests.get(
+                    verify_response = httpx.get(
                         f"{self.api_url}/api/automations/{automation_id}",
                         headers={"Authorization": f"Bearer {current_token}"},
                         timeout=10,
@@ -354,14 +354,14 @@ class DeviceAuthManager:
                     automation = verify_response.json()
                     automation_name = automation.get("name", "Unknown")
                     console.print(f"[green]✓[/green] Found automation: {automation_name}")
-                except requests.RequestException:
+                except httpx.HTTPError:
                     console.print(f"[red]✗[/red] Automation not found: {automation_id}")
                     return None
             else:
                 # Input is a name - search for it
                 automation_name = name_or_id
                 console.print(f"[cyan]Checking for existing automation:[/cyan] {automation_name}")
-                list_response = requests.get(
+                list_response = httpx.get(
                     f"{self.api_url}/api/automations",
                     headers={"Authorization": f"Bearer {current_token}"},
                     timeout=10,
@@ -386,7 +386,7 @@ class DeviceAuthManager:
                     if description:
                         automation_body["description"] = description
 
-                    automation_response = requests.post(
+                    automation_response = httpx.post(
                         f"{self.api_url}/api/automations",
                         headers={"Authorization": f"Bearer {current_token}"},
                         json=automation_body,
@@ -407,7 +407,7 @@ class DeviceAuthManager:
             else:
                 # For UUID input, fetch the automation name
                 try:
-                    auto_response = requests.get(
+                    auto_response = httpx.get(
                         f"{self.api_url}/api/automations/{automation_id}",
                         headers={"Authorization": f"Bearer {current_token}"},
                         timeout=10,
@@ -420,7 +420,7 @@ class DeviceAuthManager:
 
             api_key_body = {"name": key_name}
 
-            api_key_response = requests.post(
+            api_key_response = httpx.post(
                 f"{self.api_url}/api/automations/{automation_id}/api-keys",
                 headers={"Authorization": f"Bearer {current_token}"},
                 json=api_key_body,
@@ -456,6 +456,6 @@ class DeviceAuthManager:
                 console.print("[red]✗[/red] Failed to switch to automation identity")
                 return None
 
-        except requests.RequestException as e:
+        except httpx.HTTPError as e:
             console.print(f"[red]✗[/red] Failed to create automation: {e}")
             return None

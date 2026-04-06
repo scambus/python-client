@@ -2687,10 +2687,10 @@ class PaymentTokenDetails:
     Structured details for a payment token identifier.
 
     Attributes:
-        service: Payment service name (e.g. "zelle", "venmo", "cashapp", "paypal", "wise", "krak")
+        service: Payment service name (e.g. "zelle", "venmo", "cashapp", "paypal", "wise", "krak", "chime")
         identifier: Token or account identifier value
         type: Identifier sub-type: "email", "phone", "cashtag", "wisetag",
-              "kraktag", "venmotag", or "user_id"
+              "kraktag", "venmotag", "user_id", or "chimesign"
         name: Account holder name (when available)
         source_url_created: Venmo QR URL ``created`` timestamp (present when
               identifier was extracted from a venmo.com/code URL)
@@ -3307,6 +3307,45 @@ class IdentifierURLReference:
 
 
 @dataclass
+class IdentifierExclusion:
+    """An identifier exclusion entry that prevents specific identifiers from being
+    created or linked during journal entry ingestion, imports, and standalone creation.
+
+    Attributes:
+        id: Exclusion UUID
+        owner_org_id: Organization that owns this exclusion
+        identifier_type: Type of identifier excluded (email, phone, url, etc.)
+        uniqueness_key: Normalized key for the identifier value
+        display_value: Human-readable display value
+        reason: Optional reason for exclusion
+        created_by_id: ID of the user who created the exclusion
+        created_at: When the exclusion was created
+    """
+
+    id: str
+    owner_org_id: str
+    identifier_type: str
+    uniqueness_key: str
+    display_value: str
+    reason: Optional[str] = None
+    created_by_id: Optional[str] = None
+    created_at: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "IdentifierExclusion":
+        return cls(
+            id=data.get("id", ""),
+            owner_org_id=data.get("owner_org_id", ""),
+            identifier_type=data.get("identifier_type", ""),
+            uniqueness_key=data.get("uniqueness_key", ""),
+            display_value=data.get("display_value", ""),
+            reason=data.get("reason"),
+            created_by_id=data.get("created_by_id"),
+            created_at=data.get("created_at"),
+        )
+
+
+@dataclass
 class SpecialDomainRule:
     """A rule that controls how special domains (shorteners, pastebins, etc.)
     are handled during URL identifier consolidation.
@@ -3408,3 +3447,147 @@ class URLConsolidationStatus:
     def is_failed(self) -> bool:
         """Check if consolidation failed."""
         return self.status == "failed"
+
+
+@dataclass
+class PersonaIdentifierLink:
+    """
+    Link between a persona and an identifier.
+
+    Attributes:
+        persona_id: Persona UUID
+        identifier_id: Identifier UUID
+        annotation: Optional annotation for this link
+        identifier_value: Display value of the linked identifier (read-only)
+        identifier_type: Type of the linked identifier (read-only)
+        created_at: When the link was created
+    """
+
+    persona_id: str
+    identifier_id: str
+    annotation: str = ""
+    identifier_value: Optional[str] = None
+    identifier_type: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "PersonaIdentifierLink":
+        return cls(
+            persona_id=_get_value(data, "persona_id", "personaId", ""),
+            identifier_id=_get_value(data, "identifier_id", "identifierId", ""),
+            annotation=data.get("annotation", ""),
+            identifier_value=_get_value(data, "identifier_value", "identifierValue"),
+            identifier_type=_get_value(data, "identifier_type", "identifierType"),
+            created_at=Identifier._parse_datetime(_get_value(data, "created_at", "createdAt")),
+        )
+
+
+@dataclass
+class PersonaMediaLink:
+    """
+    Link between a persona and a media item.
+
+    Attributes:
+        persona_id: Persona UUID
+        media_id: Media UUID
+        category: Media category (e.g., "profile_photo", "document", "other")
+        notes: Optional notes about this media link
+        file_name: Original file name (read-only)
+        mime_type: MIME type of the file (read-only)
+        file_size: File size in bytes (read-only)
+        created_at: When the link was created
+    """
+
+    persona_id: str
+    media_id: str
+    category: str = "other"
+    notes: str = ""
+    file_name: Optional[str] = None
+    mime_type: Optional[str] = None
+    file_size: Optional[int] = None
+    created_at: Optional[datetime] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "PersonaMediaLink":
+        return cls(
+            persona_id=_get_value(data, "persona_id", "personaId", ""),
+            media_id=_get_value(data, "media_id", "mediaId", ""),
+            category=data.get("category", "other"),
+            notes=data.get("notes", ""),
+            file_name=_get_value(data, "file_name", "fileName"),
+            mime_type=_get_value(data, "mime_type", "mimeType"),
+            file_size=_get_value(data, "file_size", "fileSize"),
+            created_at=Identifier._parse_datetime(_get_value(data, "created_at", "createdAt")),
+        )
+
+
+@dataclass
+class Persona:
+    """
+    Persona from API response.
+
+    Attributes:
+        id: Persona UUID
+        name: Display name
+        description: General description
+        personality: Personality traits or style
+        background: Background story or context
+        address_line1: Street address line 1
+        address_line2: Street address line 2
+        address_city: City
+        address_state: State or province
+        address_postal_code: Postal/ZIP code
+        address_country: Country
+        owner_org_id: Owning organization UUID
+        created_by: Creator user UUID
+        is_active: Whether persona is active
+        is_test: Whether this is test/demo data
+        created_at: Creation timestamp
+        updated_at: Last update timestamp
+        identifiers: Linked identifiers
+        media: Linked media items
+    """
+
+    id: str
+    name: str
+    description: str = ""
+    personality: str = ""
+    background: str = ""
+    address_line1: str = ""
+    address_line2: str = ""
+    address_city: str = ""
+    address_state: str = ""
+    address_postal_code: str = ""
+    address_country: str = ""
+    owner_org_id: Optional[str] = None
+    created_by: Optional[str] = None
+    is_active: bool = True
+    is_test: bool = False
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    identifiers: List[PersonaIdentifierLink] = field(default_factory=list)
+    media: List[PersonaMediaLink] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Persona":
+        return cls(
+            id=data.get("id", ""),
+            name=data.get("name", ""),
+            description=data.get("description", ""),
+            personality=data.get("personality", ""),
+            background=data.get("background", ""),
+            address_line1=_get_value(data, "address_line1", "addressLine1", ""),
+            address_line2=_get_value(data, "address_line2", "addressLine2", ""),
+            address_city=_get_value(data, "address_city", "addressCity", ""),
+            address_state=_get_value(data, "address_state", "addressState", ""),
+            address_postal_code=_get_value(data, "address_postal_code", "addressPostalCode", ""),
+            address_country=_get_value(data, "address_country", "addressCountry", ""),
+            owner_org_id=_get_value(data, "owner_org_id", "ownerOrgId"),
+            created_by=_get_value(data, "created_by", "createdBy"),
+            is_active=_get_value(data, "is_active", "isActive", True),
+            is_test=_get_value(data, "is_test", "isTest", False),
+            created_at=Identifier._parse_datetime(_get_value(data, "created_at", "createdAt")),
+            updated_at=Identifier._parse_datetime(_get_value(data, "updated_at", "updatedAt")),
+            identifiers=[PersonaIdentifierLink.from_dict(i) for i in data.get("identifiers") or []],
+            media=[PersonaMediaLink.from_dict(m) for m in data.get("media") or []],
+        )

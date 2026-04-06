@@ -609,6 +609,11 @@ def query(
     help="Mark entry as test/demo data (excluded from normal queries)",
 )
 @click.option(
+    "--is-nsfw",
+    is_flag=True,
+    help="Mark entry as NSFW (media thumbnails blurred until revealed)",
+)
+@click.option(
     "--enrichments-json",
     help='JSON map of enrichments to apply to all identifiers (e.g., \'{"hosting_provider": {"value": "Hostinger", "source": "whois"}}\')',
 )
@@ -636,6 +641,7 @@ def create_note(
     create_originator,
     tag,
     is_test,
+    is_nsfw,
     enrichments_json,
     external_id,
     extract_external_ids,
@@ -740,6 +746,10 @@ def create_note(
         if is_test:
             data["is_test"] = is_test
 
+        # Add is_nsfw flag if set
+        if is_nsfw:
+            data["is_nsfw"] = is_nsfw
+
         # Add external identifiers if provided
         if external_id:
             ext_ids = []
@@ -831,6 +841,11 @@ def create_note(
     is_flag=True,
     help="Mark entry as test/demo data (excluded from normal queries)",
 )
+@click.option(
+    "--is-nsfw",
+    is_flag=True,
+    help="Mark entry as NSFW (media thumbnails blurred until revealed)",
+)
 @click.option("--json", "output_json", is_flag=True, help="Output JSON")
 @click.option(
     "--external-id",
@@ -864,6 +879,7 @@ def create_phone_call(
     create_originator,
     tag,
     is_test,
+    is_nsfw,
     platform,
     output_json,
     external_id,
@@ -1038,6 +1054,10 @@ def create_phone_call(
         if is_test:
             data["is_test"] = is_test
 
+        # Add is_nsfw flag if set
+        if is_nsfw:
+            data["is_nsfw"] = is_nsfw
+
         # Add external identifiers if provided
         if external_id:
             ext_ids = []
@@ -1120,6 +1140,11 @@ def create_phone_call(
     help="Mark entry as test/demo data (excluded from normal queries)",
 )
 @click.option(
+    "--is-nsfw",
+    is_flag=True,
+    help="Mark entry as NSFW (media thumbnails blurred until revealed)",
+)
+@click.option(
     "--external-id",
     multiple=True,
     help="External system identifier in format system:id (e.g., mycoin:user123)",
@@ -1142,6 +1167,7 @@ def create_email(
     body,
     tag,
     is_test,
+    is_nsfw,
     screenshot,
     eml_file,
     attach,
@@ -1263,6 +1289,9 @@ def create_email(
         if is_test:
             data["is_test"] = is_test
 
+        if is_nsfw:
+            data["is_nsfw"] = is_nsfw
+
         # Add external identifiers if provided
         if external_id:
             ext_ids = []
@@ -1335,6 +1364,11 @@ def create_email(
     help="Mark entry as test/demo data (excluded from normal queries)",
 )
 @click.option(
+    "--is-nsfw",
+    is_flag=True,
+    help="Mark entry as NSFW (media thumbnails blurred until revealed)",
+)
+@click.option(
     "--external-id",
     multiple=True,
     help="External system identifier in format system:id (e.g., mycoin:user123)",
@@ -1360,6 +1394,7 @@ def create_text_conversation(
     create_originator,
     tag,
     is_test,
+    is_nsfw,
     external_id,
     extract_external_ids,
 ):
@@ -1469,6 +1504,9 @@ def create_text_conversation(
         if is_test:
             data["is_test"] = is_test
 
+        if is_nsfw:
+            data["is_nsfw"] = is_nsfw
+
         # Add external identifiers if provided
         if external_id:
             ext_ids = []
@@ -1529,6 +1567,11 @@ def create_text_conversation(
     help="Mark entry as test/demo data (excluded from normal queries)",
 )
 @click.option(
+    "--is-nsfw",
+    is_flag=True,
+    help="Mark entry as NSFW (media thumbnails blurred until revealed)",
+)
+@click.option(
     "--enrichments-json",
     help='JSON map of enrichments to apply to all identifiers (e.g., \'{"hosting_provider": {"value": "Hostinger", "source": "whois"}}\')',
 )
@@ -1555,6 +1598,7 @@ def create_detection(
     create_originator,
     tag,
     is_test,
+    is_nsfw,
     enrichments_json,
     external_id,
     extract_external_ids,
@@ -1650,6 +1694,9 @@ def create_detection(
 
         if is_test:
             data["is_test"] = is_test
+
+        if is_nsfw:
+            data["is_nsfw"] = is_nsfw
 
         # Add external identifiers if provided
         if external_id:
@@ -1901,6 +1948,11 @@ def in_progress(ctx, output_json):
     is_flag=True,
     help="Mark entry as test/demo data (excluded from normal queries)",
 )
+@click.option(
+    "--is-nsfw",
+    is_flag=True,
+    help="Mark entry as NSFW (media thumbnails blurred until revealed)",
+)
 @click.option("--json", "output_json", is_flag=True, help="Output JSON")
 @click.option(
     "--external-id",
@@ -1936,6 +1988,7 @@ def create_conversation(
     create_originator,
     tag,
     is_test,
+    is_nsfw,
     output_json,
     external_id,
     extract_external_ids,
@@ -2125,6 +2178,9 @@ def create_conversation(
 
         if is_test:
             data["is_test"] = is_test
+
+        if is_nsfw:
+            data["is_nsfw"] = is_nsfw
 
         # Add external identifiers if provided
         if external_id:

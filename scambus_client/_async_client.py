@@ -304,6 +304,7 @@ class AsyncScambusClient(BaseScambusClient):
         retracted_identifier_ids: Optional[List[str]] = None,
         external_identifiers: Optional[List[Dict[str, str]]] = None,
         extract_external_identifiers: bool = False,
+        allow_confidence_decrease: bool = False,
     ) -> JournalEntry:
         """Create a journal entry with automatic identifier resolution."""
         data = {
@@ -351,6 +352,8 @@ class AsyncScambusClient(BaseScambusClient):
             data["external_identifiers"] = external_identifiers
         if extract_external_identifiers:
             data["extract_external_identifiers"] = True
+        if allow_confidence_decrease:
+            data["allow_confidence_decrease"] = True
 
         # Handle start_time and end_time
         if start_time:
@@ -1394,6 +1397,38 @@ class AsyncScambusClient(BaseScambusClient):
         result: Dict[str, Any] = {
             "type": "payment_token",
             "value": json.dumps(venmo_data),
+        }
+
+        if confidence is not None:
+            result["confidence"] = confidence
+
+        return result
+
+    def create_chime_identifier(
+        self,
+        chimesign: str,
+        name: Optional[str] = None,
+        confidence: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """Helper to create a properly formatted Chime payment_token identifier lookup."""
+        import json
+        import re
+
+        chimesign = chimesign.strip()
+        if not chimesign.startswith("$"):
+            raise ValueError("Chime identifier must be a $ChimeSign (e.g. $JohnDoe)")
+        if not re.match(r"^\$[a-zA-Z0-9_]{1,20}$", chimesign):
+            raise ValueError(
+                "Invalid $ChimeSign (must be $username, 1-20 alphanumeric/underscore characters)"
+            )
+
+        chime_data: Dict[str, Any] = {"service": "chime", "identifier": chimesign}
+        if name is not None:
+            chime_data["name"] = name
+
+        result: Dict[str, Any] = {
+            "type": "payment_token",
+            "value": json.dumps(chime_data),
         }
 
         if confidence is not None:

@@ -51,6 +51,9 @@ from .models import (
     Notification,
     ObservationDetails,
     Passkey,
+    Persona,
+    PersonaIdentifierLink,
+    PersonaMediaLink,
     PhoneCallDetails,
     Report,
     ResearchDetails,
@@ -651,10 +654,12 @@ class ScambusClient(BaseScambusClient):
         in_progress: bool = False,
         metadata: Optional[Dict[str, Any]] = None,
         is_test: bool = False,
+        is_nsfw: bool = False,
         ai_extract: bool = False,
         retracted_identifier_ids: Optional[List[str]] = None,
         external_identifiers: Optional[List[Dict[str, str]]] = None,
         extract_external_identifiers: bool = False,
+        allow_confidence_decrease: bool = False,
     ) -> JournalEntry:
         """
         Create a journal entry with automatic identifier resolution.
@@ -696,6 +701,7 @@ class ScambusClient(BaseScambusClient):
                 Use entry.complete() later to mark as complete.
             metadata: Optional metadata dictionary for additional tracking (e.g., test_batch, environment)
             is_test: If True, marks entry as test/demo data (excluded from normal queries)
+            is_nsfw: If True, media thumbnails are blurred in the UI until explicitly revealed
             ai_extract: If True, uses AI to extract identifiers from attached media
                 and/or conversation message text. For conversation_continuation entries,
                 inline identifier positions are computed automatically.
@@ -708,6 +714,8 @@ class ScambusClient(BaseScambusClient):
                 Example: [{"external_system": "mycoin", "external_id": "user123"}]
             extract_external_identifiers: If True, runs registered external system plugins
                 to automatically extract external identifiers from the entry content.
+            allow_confidence_decrease: If True, confidence can decrease. If False (default),
+                only confidence increases are recorded. Human actions should set this to True.
 
         Returns:
             Created JournalEntry object
@@ -813,6 +821,10 @@ class ScambusClient(BaseScambusClient):
         if is_test:
             data["is_test"] = is_test
 
+        # Add is_nsfw flag if set
+        if is_nsfw:
+            data["is_nsfw"] = is_nsfw
+
         # Add ai_extract flag if set
         if ai_extract:
             data["ai_extract"] = True
@@ -828,6 +840,10 @@ class ScambusClient(BaseScambusClient):
         # Add extract_external_identifiers flag if set
         if extract_external_identifiers:
             data["extract_external_identifiers"] = True
+
+        # Add allow_confidence_decrease flag if set
+        if allow_confidence_decrease:
+            data["allow_confidence_decrease"] = True
 
         # Handle start_time and end_time
         if start_time:
@@ -2672,6 +2688,88 @@ class ScambusClient(BaseScambusClient):
         response = self._request("GET", f"/identifiers/{identifier_id}")
         return Identifier.from_dict(response)
 
+    # Identifier Exclusions
+
+    def list_identifier_exclusions(
+        self,
+        page: int = 1,
+        limit: int = 25,
+    ) -> List["IdentifierExclusion"]:
+        """
+        List identifier exclusions for the caller's organization.
+
+        Args:
+            page: Page number (default: 1)
+            limit: Items per page (default: 25)
+
+        Returns:
+            List of IdentifierExclusion objects
+        """
+        from .models import IdentifierExclusion
+
+        params = {"page": page, "pageSize": limit}
+        response = self._request("GET", "/identifier-exclusions", params=params)
+        if isinstance(response, dict) and "data" in response:
+            return [IdentifierExclusion.from_dict(e) for e in response["data"]]
+        return []
+
+    def create_identifier_exclusion(
+        self,
+        identifier_id: Optional[str] = None,
+        identifier_type: Optional[str] = None,
+        value: Optional[str] = None,
+        reason: Optional[str] = None,
+    ) -> "IdentifierExclusion":
+        """
+        Add an identifier to the organization's exclusion list. Excluded identifiers
+        are silently skipped during journal entry ingestion, imports, and standalone creation.
+
+        Provide either ``identifier_id`` (to exclude an existing identifier) or both
+        ``identifier_type`` and ``value`` (to exclude by type+value).
+
+        Args:
+            identifier_id: UUID of an existing identifier to exclude
+            identifier_type: Identifier type (email, phone, url, etc.)
+            value: Identifier value to normalize and exclude
+            reason: Optional reason for exclusion
+
+        Returns:
+            IdentifierExclusion object
+
+        Raises:
+            ValueError: If neither identifier_id nor type+value are provided
+        """
+        from .models import IdentifierExclusion
+
+        data: Dict[str, Any] = {}
+        if identifier_id:
+            data["identifier_id"] = identifier_id
+        elif identifier_type and value:
+            data["identifier_type"] = identifier_type
+            data["value"] = value
+        else:
+            raise ValueError(
+                "Provide either identifier_id or both identifier_type and value"
+            )
+        if reason:
+            data["reason"] = reason
+
+        response = self._request("POST", "/identifier-exclusions", json_data=data)
+        return IdentifierExclusion.from_dict(response)
+
+    def delete_identifier_exclusion(self, exclusion_id: str) -> bool:
+        """
+        Remove an identifier exclusion.
+
+        Args:
+            exclusion_id: UUID of the exclusion to delete
+
+        Returns:
+            True if deleted successfully
+        """
+        self._request("DELETE", f"/identifier-exclusions/{exclusion_id}")
+        return True
+
     # Helper Methods
 
     def create_bank_account_identifier(
@@ -2848,6 +2946,64 @@ class ScambusClient(BaseScambusClient):
         result: Dict[str, Any] = {
             "type": "payment_token",
             "value": json.dumps(venmo_data),
+        }
+
+        if confidence is not None:
+            result["confidence"] = confidence
+
+        return result
+
+    def create_chime_identifier(
+        self,
+        chimesign: str,
+        name: Optional[str] = None,
+        confidence: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """
+        Helper to create a properly formatted Chime payment_token identifier lookup.
+
+        Accepts a ``$ChimeSign`` handle (e.g. ``"$JohnDoe"``).
+
+        Args:
+            chimesign: Chime $ChimeSign handle (e.g. ``"$JohnDoe"``)
+            name: Optional account holder name
+            confidence: Optional confidence score (0.0-1.0)
+
+        Returns:
+            Dictionary ready for use in ``identifier_lookups``
+
+        Example:
+            ```python
+            chime_id = client.create_chime_identifier(
+                "$JohnDoe",
+                name="John Doe",
+                confidence=0.85,
+            )
+
+            entry = client.create_detection(
+                description="Chime scam detected",
+                identifiers=[chime_id],
+            )
+            ```
+        """
+        import json
+        import re
+
+        chimesign = chimesign.strip()
+        if not chimesign.startswith("$"):
+            raise ValueError("Chime identifier must be a $ChimeSign (e.g. $JohnDoe)")
+        if not re.match(r"^\$[a-zA-Z0-9_]{1,20}$", chimesign):
+            raise ValueError(
+                "Invalid $ChimeSign (must be $username, 1-20 alphanumeric/underscore characters)"
+            )
+
+        chime_data: Dict[str, Any] = {"service": "chime", "identifier": chimesign}
+        if name is not None:
+            chime_data["name"] = name
+
+        result: Dict[str, Any] = {
+            "type": "payment_token",
+            "value": json.dumps(chime_data),
         }
 
         if confidence is not None:
@@ -5639,5 +5795,230 @@ class ScambusClient(BaseScambusClient):
             ```
         """
         return self._request("POST", "/admin/url-consolidation/cancel")
+
+    # Persona Methods
+
+    def list_personas(self) -> List[Persona]:
+        """
+        List all personas accessible to the authenticated user.
+
+        Returns:
+            List of Persona objects
+
+        Example:
+            ```python
+            personas = client.list_personas()
+            for p in personas:
+                print(f"{p.name}: {p.description}")
+            ```
+        """
+        response = self._request("GET", "/personas")
+        if isinstance(response, list):
+            return [Persona.from_dict(p) for p in response]
+        return []
+
+    def get_persona(self, persona_id: str) -> Persona:
+        """
+        Get a persona by ID.
+
+        Args:
+            persona_id: Persona UUID
+
+        Returns:
+            Persona object
+
+        Example:
+            ```python
+            persona = client.get_persona("abc-123-def-456")
+            print(f"Name: {persona.name}")
+            print(f"Description: {persona.description}")
+            ```
+        """
+        response = self._request("GET", f"/personas/{persona_id}")
+        return Persona.from_dict(response)
+
+    def create_persona(
+        self,
+        name: str,
+        description: str = "",
+        personality: str = "",
+        background: str = "",
+        address_line1: str = "",
+        address_line2: str = "",
+        address_city: str = "",
+        address_state: str = "",
+        address_postal_code: str = "",
+        address_country: str = "",
+        identifiers: Optional[List[Dict[str, str]]] = None,
+    ) -> Persona:
+        """
+        Create a new persona.
+
+        Args:
+            name: Persona display name
+            description: General description
+            personality: Personality traits or style
+            background: Background story or context
+            address_line1: Street address line 1
+            address_line2: Street address line 2
+            address_city: City
+            address_state: State or province
+            address_postal_code: Postal/ZIP code
+            address_country: Country
+            identifiers: List of identifier dicts to link (each with "identifier_id" and optional "annotation")
+
+        Returns:
+            Created Persona object
+
+        Example:
+            ```python
+            persona = client.create_persona(
+                name="John Doe",
+                description="Known phone scammer",
+                background="Active since 2024",
+            )
+            print(f"Created persona: {persona.id}")
+            ```
+        """
+        data: Dict[str, Any] = {"name": name}
+        if description:
+            data["description"] = description
+        if personality:
+            data["personality"] = personality
+        if background:
+            data["background"] = background
+        if address_line1:
+            data["address_line1"] = address_line1
+        if address_line2:
+            data["address_line2"] = address_line2
+        if address_city:
+            data["address_city"] = address_city
+        if address_state:
+            data["address_state"] = address_state
+        if address_postal_code:
+            data["address_postal_code"] = address_postal_code
+        if address_country:
+            data["address_country"] = address_country
+        if identifiers:
+            data["identifiers"] = identifiers
+        response = self._request("POST", "/personas", json_data=data)
+        return Persona.from_dict(response)
+
+    def update_persona(self, persona_id: str, **kwargs) -> Persona:
+        """
+        Update a persona. Pass only the fields to change.
+
+        Args:
+            persona_id: Persona UUID
+            **kwargs: Fields to update (name, description, personality, background, address_*, etc.)
+
+        Returns:
+            Updated Persona object
+
+        Example:
+            ```python
+            persona = client.update_persona(
+                "abc-123-def-456",
+                name="Updated Name",
+                description="New description",
+            )
+            ```
+        """
+        response = self._request("PUT", f"/personas/{persona_id}", json_data=kwargs)
+        return Persona.from_dict(response)
+
+    def delete_persona(self, persona_id: str) -> None:
+        """
+        Delete a persona.
+
+        Args:
+            persona_id: Persona UUID
+
+        Example:
+            ```python
+            client.delete_persona("abc-123-def-456")
+            ```
+        """
+        self._request("DELETE", f"/personas/{persona_id}")
+
+    def add_persona_media(
+        self,
+        persona_id: str,
+        media_id: str,
+        category: str = "other",
+        notes: str = "",
+    ) -> PersonaMediaLink:
+        """
+        Link a media item to a persona with a category.
+
+        Args:
+            persona_id: Persona UUID
+            media_id: Media UUID to link
+            category: Media category (e.g., "profile_photo", "document", "other")
+            notes: Optional notes about this media link
+
+        Returns:
+            PersonaMediaLink object
+
+        Example:
+            ```python
+            link = client.add_persona_media(
+                persona_id="abc-123",
+                media_id="def-456",
+                category="profile_photo",
+                notes="Primary profile image",
+            )
+            ```
+        """
+        data = {"media_id": media_id, "category": category, "notes": notes}
+        response = self._request("POST", f"/personas/{persona_id}/media", json_data=data)
+        return PersonaMediaLink.from_dict(response)
+
+    def remove_persona_media(self, persona_id: str, media_id: str) -> None:
+        """
+        Remove a media item from a persona.
+
+        Args:
+            persona_id: Persona UUID
+            media_id: Media UUID to unlink
+
+        Example:
+            ```python
+            client.remove_persona_media("abc-123", "def-456")
+            ```
+        """
+        self._request("DELETE", f"/personas/{persona_id}/media/{media_id}")
+
+    def update_persona_media(
+        self,
+        persona_id: str,
+        media_id: str,
+        category: str = None,
+        notes: str = None,
+    ) -> None:
+        """
+        Update category or notes on a persona-media link.
+
+        Args:
+            persona_id: Persona UUID
+            media_id: Media UUID
+            category: New category value (optional)
+            notes: New notes value (optional)
+
+        Example:
+            ```python
+            client.update_persona_media(
+                "abc-123", "def-456",
+                category="passport",
+                notes="Updated scan",
+            )
+            ```
+        """
+        data = {}
+        if category is not None:
+            data["category"] = category
+        if notes is not None:
+            data["notes"] = notes
+        self._request("PUT", f"/personas/{persona_id}/media/{media_id}", json_data=data)
 
     # Group Methods

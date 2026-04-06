@@ -279,9 +279,11 @@ from .commands import (
     admin,
     automations,
     cases,
+    exclusions,
     exports,
     journal,
     media,
+    personas,
     profile,
     reports,
     search,
@@ -301,6 +303,8 @@ cli.add_command(views.views)
 cli.add_command(automations.automations)
 cli.add_command(reports.reports)
 cli.add_command(exports.exports)
+cli.add_command(exclusions.exclusions)
+cli.add_command(personas.personas)
 cli.add_command(admin.admin)
 
 

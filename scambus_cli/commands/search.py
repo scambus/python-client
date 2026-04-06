@@ -18,7 +18,7 @@ def search():
 @click.option(
     "--type",
     "identifier_type",
-    help="Filter by identifier type (optional). Available types: email, phone, bank_account, crypto_wallet, social_media, zelle, url, payment_token",
+    help="Filter by identifier type (optional). Available types: email, phone, bank_account, crypto_wallet, social_media, zelle, url, payment_token, company",
 )
 @click.option(
     "--limit", type=int, default=20, help="Maximum results to return (default: 20, only for search)"

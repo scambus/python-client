@@ -29,6 +29,7 @@ class PaymentService:
     WISE = "wise"
     KRAK = "krak"
     VENMO = "venmo"
+    CHIME = "chime"
 
 
 class JournalEntryType:

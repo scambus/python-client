@@ -37,6 +37,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+mcp = [
+    "mcp>=1.0.0",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
@@ -60,10 +63,11 @@ Changelog = "https://github.com/scambus/python-client/blob/main/CHANGELOG.md"
 
 [project.scripts]
 scambus = "scambus_cli.cli:main"
+scambus-mcp = "scambus_mcp.server:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["scambus_client*", "scambus_cli*"]
+include = ["scambus_client*", "scambus_cli*", "scambus_mcp*"]
 
 [tool.black]
 line-length = 100

@@ -43,6 +43,9 @@ from .models import (
     FailedIdentifier,
     Identifier,
     IdentifierLookup,
+    IdentifierSubtypeCount,
+    IdentifierSummary,
+    IdentifierTypeCount,
     IdentifierURLReference,
     ImportDetails,
     JournalEntry,
@@ -2020,6 +2023,96 @@ class ScambusClient(BaseScambusClient):
         entry._client = self
 
         return entry
+
+    def get_extracted_identifiers(self, entry_id: str) -> List[Dict]:
+        """
+        Get extracted identifiers for a journal entry tree.
+
+        Returns identifiers linked to the entry and all descendants, enriched
+        with character-level occurrence positions from conversation details.
+        Useful after async AI extraction completes (poll ai_extract_status first).
+
+        Args:
+            entry_id: Journal entry UUID
+
+        Returns:
+            List of extracted identifier dicts, each with:
+            - identifier_id: Resolved identifier UUID
+            - type: Identifier type (phone, email, etc.)
+            - value: Normalized value
+            - label: Contextual label
+            - confidence: Confidence score (0.0-1.0)
+            - occurrences: List of {message_index, field, position, length}
+
+        Example:
+            ```python
+            entry = client.create_journal_entry(
+                entry_type="conversation_continuation",
+                ai_extract=True,
+                ...
+            )
+            # Poll until extraction completes
+            while True:
+                detail = client.get_journal_entry(entry.id)
+                if detail.ai_extract_status in ("completed", "failed", None):
+                    break
+                time.sleep(2)
+            # Get extracted identifiers with text positions
+            extracted = client.get_extracted_identifiers(entry.id)
+            for ident in extracted:
+                print(f"{ident['type']}: {ident['value']}")
+                for occ in ident.get('occurrences', []):
+                    print(f"  message {occ['message_index']}, pos {occ['position']}")
+            ```
+        """
+        return self._request("GET", f"/journal-entries/{entry_id}/extracted-identifiers")
+
+    def get_identifier_summary(
+        self,
+        entry_id: str,
+        identifier_type: Optional[str] = None,
+    ) -> IdentifierSummary:
+        """
+        Get a count of distinct identifiers attached to a journal entry and its
+        descendants, grouped by type (and, for payment_token / social_media, by
+        subtype).
+
+        Identifiers linked to multiple descendants in the tree are only counted
+        once per type.
+
+        Args:
+            entry_id: Journal entry UUID
+            identifier_type: Optional identifier type to filter by
+                (e.g. "phone", "email", "payment_token", "social_media")
+
+        Returns:
+            IdentifierSummary with total count, per-type counts, and per-subtype
+            breakdown for types that have subtypes.
+
+        Example:
+            ```python
+            summary = client.get_identifier_summary(entry.id)
+            print(f"Total: {summary.total}")
+            for tc in summary.by_type:
+                print(f"  {tc.type}: {tc.count}")
+                for sc in tc.by_subtype:
+                    print(f"    {sc.subtype}: {sc.count}")
+
+            # Or filter to one type
+            payments = client.get_identifier_summary(
+                entry.id, identifier_type="payment_token"
+            )
+            ```
+        """
+        params = {}
+        if identifier_type:
+            params["type"] = identifier_type
+        response = self._request(
+            "GET",
+            f"/journal-entries/{entry_id}/identifier-summary",
+            params=params or None,
+        )
+        return IdentifierSummary.from_dict(response)
 
     def get_external_systems(self) -> List[Dict[str, str]]:
         """

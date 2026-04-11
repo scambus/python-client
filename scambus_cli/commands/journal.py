@@ -207,6 +207,111 @@ def get(ctx, entry_id, output_json):
         sys.exit(1)
 
 
+@journal.command("extracted-identifiers")
+@click.argument("entry_id")
+@click.option("--json", "output_json", is_flag=True)
+@click.pass_context
+def extracted_identifiers(ctx, entry_id, output_json):
+    """Get extracted identifiers with text positions for a journal entry."""
+    client = ctx.obj.get_client()
+
+    try:
+        results = client.get_extracted_identifiers(entry_id)
+
+        if output_json:
+            print_json(results)
+        else:
+            if not results:
+                print_info("No extracted identifiers found.")
+                return
+
+            rows = []
+            for ident in results:
+                occ_count = len(ident.get("occurrences", []))
+                rows.append({
+                    "type": ident.get("type", ""),
+                    "value": ident.get("value", ""),
+                    "label": ident.get("label", ""),
+                    "confidence": ident.get("confidence", ""),
+                    "occurrences": occ_count,
+                    "identifier_id": ident.get("identifier_id", ""),
+                })
+            print_table(rows, title="Extracted Identifiers")
+
+    except Exception as e:
+        print_error(f"Failed to get extracted identifiers: {e}")
+        sys.exit(1)
+
+
+@journal.command("identifier-summary")
+@click.argument("entry_id")
+@click.option(
+    "--type",
+    "identifier_type",
+    help="Filter to a single identifier type (e.g. phone, payment_token)",
+)
+@click.option("--json", "output_json", is_flag=True)
+@click.pass_context
+def identifier_summary(ctx, entry_id, identifier_type, output_json):
+    """Get identifier counts grouped by type (and subtype) for a journal entry tree.
+
+    Counts distinct identifiers attached to the given journal entry and all of
+    its descendants. For payment_token and social_media types, the breakdown
+    also includes per-subtype counts (service / platform).
+    """
+    client = ctx.obj.get_client()
+
+    try:
+        summary = client.get_identifier_summary(
+            entry_id, identifier_type=identifier_type
+        )
+
+        if output_json:
+            # Serialize dataclass back to a plain dict
+            payload = {
+                "journal_entry_id": summary.journal_entry_id,
+                "total": summary.total,
+                "by_type": [
+                    {
+                        "type": tc.type,
+                        "count": tc.count,
+                        "by_subtype": [
+                            {"subtype": sc.subtype, "count": sc.count}
+                            for sc in tc.by_subtype
+                        ],
+                    }
+                    for tc in summary.by_type
+                ],
+            }
+            print_json(payload)
+            return
+
+        if summary.total == 0:
+            print_info("No identifiers found in this journal entry tree.")
+            return
+
+        print_info(f"Total distinct identifiers: {summary.total}")
+        type_rows = [
+            {"type": tc.type, "count": tc.count}
+            for tc in summary.by_type
+        ]
+        print_table(type_rows, title="By Type")
+
+        # Print per-subtype breakdown for any type that has one
+        for tc in summary.by_type:
+            if not tc.by_subtype:
+                continue
+            subtype_rows = [
+                {"subtype": sc.subtype, "count": sc.count}
+                for sc in tc.by_subtype
+            ]
+            print_table(subtype_rows, title=f"{tc.type} — by subtype")
+
+    except Exception as e:
+        print_error(f"Failed to get identifier summary: {e}")
+        sys.exit(1)
+
+
 @journal.command()
 @click.argument("entry_id")
 @click.option("--force", "-f", is_flag=True, help="Skip confirmation prompt")

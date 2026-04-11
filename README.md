@@ -22,6 +22,7 @@ Official Python client for SCAMBUS - submit scam reports and subscribe to data s
 - **Automation Management**: Create automation identities with API key rotation support
 - **Automatic Authentication**: CLI and SDK share cached credentials seamlessly
 - **Device Flow Auth**: Secure browser-based authentication with automatic token refresh
+- **MCP Server**: Model Context Protocol server for AI agent integration (Claude Code, Claude Desktop)
 
 ## Installation
 
@@ -45,6 +46,7 @@ pip install git+https://github.com/scambus/python-client.git@feature-branch
 The package includes:
 - Python client library (`scambus_client`)
 - CLI tool (`scambus` command)
+- MCP server (`scambus-mcp` command, requires `pip install ".[mcp]"`)
 
 ### Optional: Install Development Tools
 
@@ -215,7 +217,117 @@ python my_detector.py
 scambus auth login
 ```
 
-### 5. Local Development
+### 5. MCP Server (AI Agent Integration)
+
+The MCP (Model Context Protocol) server lets AI agents like Claude query SCAMBUS through read-only tools. It uses an automation API key for authentication.
+
+#### Installation
+
+```bash
+# Install with MCP support
+pip install "git+https://github.com/scambus/python-client.git#egg=scambus[mcp]"
+
+# Or from local checkout
+pip install -e ".[mcp]"
+```
+
+#### Creating an Automation with Restricted PII Access
+
+The MCP server is designed to work with an automation that **cannot** see raw PII (account numbers, emails, phone numbers). To set this up:
+
+1. **Create a permission group without PII access:**
+   - In the SCAMBUS web UI, go to **Settings > Groups**
+   - Create a new group (e.g., "MCP Read-Only")
+   - Grant these permissions:
+     - `identifier.view` - View identifiers (with redacted PII)
+     - `journal.view` - View journal entries
+     - `case.view` - View cases
+     - `tag.view` - View tags
+   - **Do NOT grant** `identifier.view_pii` - this controls access to raw PII data
+   - Without `identifier.view_pii`, the API returns redacted display values (e.g., `+1****8888`, `u***@example.com`, `Chase - ****1234`) and empty `data` fields
+
+2. **Create an automation in that group:**
+   ```bash
+   scambus auth login
+   scambus automations create --name "MCP Agent" --description "AI agent integration"
+   ```
+   Then assign the automation to the "MCP Read-Only" group in the web UI.
+
+3. **Generate an API key:**
+   ```bash
+   scambus automations create-key "MCP Agent" --name "MCP Key"
+   # Save the output: key_id:secret_key
+   ```
+
+#### Configuring Claude Code
+
+Add to your project's `.mcp.json` (automatically gitignored):
+
+```json
+{
+  "mcpServers": {
+    "scambus": {
+      "command": "scambus-mcp",
+      "env": {
+        "SCAMBUS_API_URL": "https://scambus.net",
+        "SCAMBUS_API_KEY": "your-key-id:your-secret-key"
+      }
+    }
+  }
+}
+```
+
+Or using separate key variables:
+
+```json
+{
+  "mcpServers": {
+    "scambus": {
+      "command": "python",
+      "args": ["-m", "scambus_mcp"],
+      "env": {
+        "SCAMBUS_API_URL": "https://scambus.net",
+        "SCAMBUS_API_KEY_ID": "your-key-id",
+        "SCAMBUS_API_KEY_SECRET": "your-secret-key"
+      }
+    }
+  }
+}
+```
+
+#### Available MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `search_identifiers` | Search identifiers by type, tags, confidence, date range, enriched details |
+| `query_journal_entries` | Query journal entries with filtering and pagination |
+| `search_cases` | Search investigation cases by status, priority, query |
+| `get_identifier` | Get details for a single identifier by UUID |
+| `get_journal_entry` | Get a single journal entry by UUID |
+| `get_case` | Get case details by UUID |
+| `get_identifier_network` | Get the connection graph for an identifier |
+| `get_identifier_journal_entries` | Get journal entries linked to an identifier |
+| `list_tags` | List all available tags |
+| `get_filter_options` | Get available filter values for building queries |
+| `get_confidence_history` | Get confidence score history for an identifier |
+
+#### What AI Agents Can See
+
+With a properly configured (no `identifier.view_pii`) automation:
+
+- Identifier types, UUIDs, and redacted display values
+- Enriched metadata: area codes, regions, countries, institutions, platforms, domain categories
+- Confidence scores and tag classifications
+- Network size and graph relationships
+- Journal entry types, timestamps, and descriptions
+- Case metadata and status
+
+What they **cannot** see:
+- Raw phone numbers, email addresses, bank account numbers
+- Crypto wallet addresses, social media handles
+- Payment token identifiers (Zelle emails, CashApp tags, etc.)
+
+### 6. Local Development
 
 ```python
 # Override API URL for local development

@@ -44,6 +44,7 @@ from .models import (
     FailedIdentifier,
     Identifier,
     IdentifierLookup,
+    IdentifierSummary,
     IdentifierURLReference,
     ImportDetails,
     JournalEntry,
@@ -943,6 +944,34 @@ class AsyncScambusClient(BaseScambusClient):
         entry = JournalEntry.from_dict(journal_entry_data)
         entry._client = self
         return entry
+
+    async def get_identifier_summary(
+        self,
+        entry_id: str,
+        identifier_type: Optional[str] = None,
+    ) -> IdentifierSummary:
+        """
+        Get a count of distinct identifiers attached to a journal entry and its
+        descendants, grouped by type (and by subtype for payment_token /
+        social_media).
+
+        Args:
+            entry_id: Journal entry UUID
+            identifier_type: Optional identifier type to filter by
+
+        Returns:
+            IdentifierSummary with total, per-type counts, and per-subtype
+            breakdown.
+        """
+        params = {}
+        if identifier_type:
+            params["type"] = identifier_type
+        response = await self._request(
+            "GET",
+            f"/journal-entries/{entry_id}/identifier-summary",
+            params=params or None,
+        )
+        return IdentifierSummary.from_dict(response)
 
     async def get_external_systems(self) -> List[Dict[str, str]]:
         """List registered external system plugins."""

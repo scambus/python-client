@@ -164,6 +164,89 @@ class ExtractedIdentifier:
 
 
 @dataclass
+class IdentifierSubtypeCount:
+    """
+    Count of distinct identifiers of a given subtype within a parent type.
+
+    For payment_token identifiers the subtype is the service
+    (zelle, venmo, cashapp, paypal, ...). For social_media identifiers the
+    subtype is the platform (instagram, tiktok, twitter, ...).
+
+    Attributes:
+        subtype: Subtype value (service name or platform name)
+        count: Number of distinct identifiers with this subtype
+    """
+
+    subtype: str
+    count: int
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "IdentifierSubtypeCount":
+        """Create from API response dictionary."""
+        return cls(
+            subtype=data.get("subtype", ""),
+            count=int(data.get("count", 0)),
+        )
+
+
+@dataclass
+class IdentifierTypeCount:
+    """
+    Count of distinct identifiers of a given type attached to a journal entry tree.
+
+    Attributes:
+        type: Identifier type (phone, email, url, payment_token, social_media, ...)
+        count: Number of distinct identifiers of this type (sum over subtypes)
+        by_subtype: Per-subtype breakdown for types with a subtype dimension
+            (payment_token, social_media). Empty for types without subtypes.
+    """
+
+    type: str
+    count: int
+    by_subtype: List[IdentifierSubtypeCount] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "IdentifierTypeCount":
+        """Create from API response dictionary."""
+        raw_subtypes = data.get("by_subtype") or []
+        return cls(
+            type=data.get("type", ""),
+            count=int(data.get("count", 0)),
+            by_subtype=[IdentifierSubtypeCount.from_dict(s) for s in raw_subtypes],
+        )
+
+
+@dataclass
+class IdentifierSummary:
+    """
+    Summary of identifiers attached to a journal entry and all of its descendants.
+
+    Counts are deduplicated: an identifier linked to multiple descendants in the
+    tree only contributes once to its type's count. Types like payment_token and
+    social_media also include a per-subtype breakdown.
+
+    Attributes:
+        journal_entry_id: UUID of the journal entry whose tree was summarized
+        total: Total count of distinct identifiers across all types
+        by_type: Per-type counts (sorted by type)
+    """
+
+    journal_entry_id: str
+    total: int
+    by_type: List[IdentifierTypeCount] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "IdentifierSummary":
+        """Create from API response dictionary."""
+        raw_by_type = data.get("by_type") or []
+        return cls(
+            journal_entry_id=data.get("journal_entry_id", ""),
+            total=int(data.get("total", 0)),
+            by_type=[IdentifierTypeCount.from_dict(t) for t in raw_by_type],
+        )
+
+
+@dataclass
 class ExternalIdentifierRecord:
     """
     An external system identifier linked to a journal entry.

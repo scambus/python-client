@@ -195,6 +195,19 @@ class FilterCriteria:
     is_private_suffix: Optional[bool] = None
     routing_number_owner: Optional[str] = None
 
+    # crypto_wallet enriched details
+    # Array filters use OR-semantics (match any entry in the identifier's array).
+    # networks / format_class / is_contract / sanctioned / known_labels are
+    # populated by the external-API enrichment tier (Covalent + Chainalysis).
+    networks: Optional[List[str]] = None
+    format_class: Optional[str] = None
+    is_contract: Optional[bool] = None
+    sanctioned: Optional[bool] = None
+    sanctions_list: Optional[List[str]] = None
+    known_labels: Optional[List[str]] = None
+    enriched_after: Optional[str] = None  # ISO-8601 timestamp
+    enriched_before: Optional[str] = None  # ISO-8601 timestamp
+
     # Assignment
     assigned_to: Optional[str] = None
 

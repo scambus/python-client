@@ -587,6 +587,11 @@ class EmailDetails:
     """
     Details for an email journal entry.
 
+    All fields are optional to support both single-email entries (with
+    direction/subject/body) and email-conversation parents (with only
+    conversation-level metadata, where messages arrive via
+    conversation_continuation children).
+
     Attributes:
         direction: Email direction ("inbound" or "outbound")
         subject: Email subject line
@@ -598,9 +603,9 @@ class EmailDetails:
         attachments: List of attachment filenames (optional)
     """
 
-    direction: str
-    subject: str
-    sent_at: datetime
+    direction: Optional[str] = None
+    subject: Optional[str] = None
+    sent_at: Optional[datetime] = None
     body: Optional[str] = None
     html_body: Optional[str] = None
     message_id: Optional[str] = None
@@ -609,11 +614,13 @@ class EmailDetails:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API request."""
-        data = {
-            "direction": self.direction,
-            "subject": self.subject,
-            "sent_at": _dt_to_rfc3339(self.sent_at),
-        }
+        data: Dict[str, Any] = {}
+        if self.direction:
+            data["direction"] = self.direction
+        if self.subject:
+            data["subject"] = self.subject
+        if self.sent_at:
+            data["sent_at"] = _dt_to_rfc3339(self.sent_at)
         if self.body:
             data["body"] = self.body
         if self.html_body:

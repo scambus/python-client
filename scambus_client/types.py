@@ -3,7 +3,7 @@
 These types provide a typed interface for SDK operations, similar to AWS CDK.
 """
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
 
 
@@ -138,7 +138,8 @@ class FilterCriteria:
     # Core arrays
     status: Optional[List[str]] = None
     priority: Optional[List[str]] = None
-    tags: Optional[List[str]] = None
+    tags: Optional[List[str]] = None  # AND semantics: must carry ALL listed tags
+    tags_any: Optional[List[str]] = None  # OR semantics: must carry ANY listed tag
     types: Optional[List[str]] = None
     originator_ids: Optional[List[str]] = None
     proxy_originator_ids: Optional[List[str]] = None

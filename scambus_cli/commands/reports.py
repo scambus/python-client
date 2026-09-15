@@ -11,7 +11,6 @@ from scambus_cli.utils import (
     print_info,
     print_json,
     print_success,
-    print_warning,
 )
 
 

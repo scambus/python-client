@@ -7,10 +7,11 @@ using typed classes for identifiers, details, and tags.
 """
 
 import os
+
 from scambus_client import (
-    ScambusClient,
     DetectionDetails,
     IdentifierLookup,
+    ScambusClient,
     TagLookup,
 )
 

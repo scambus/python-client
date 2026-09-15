@@ -224,9 +224,10 @@ def execute_view(ctx, view_id, limit, cursor, follow, output_json):
                 sys.exit(1)
 
             import asyncio
-            from scambus_client.websocket_client import ScambusWebSocketClient
-            from scambus_cli.config import get_api_url
             import time
+
+            from scambus_cli.config import get_api_url
+            from scambus_client.websocket_client import ScambusWebSocketClient
 
             print_info("\n==> Entering follow mode (press Ctrl+C to exit)")
             print_info("Creating stream from view...")
@@ -303,7 +304,7 @@ def execute_view(ctx, view_id, limit, cursor, follow, output_json):
                     print_info("Cleaning up temporary stream...")
                     client.delete_stream(stream.id)
                     print_success("Temporary stream deleted")
-                except:
+                except Exception:
                     pass  # Ignore cleanup errors on failure
 
     except Exception as e:
@@ -332,7 +333,15 @@ def execute_view(ctx, view_id, limit, cursor, follow, output_json):
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 @click.pass_context
 def create_view(
-    ctx, name, entity_type, description, alias, visibility, filter_criteria, query_string, output_json
+    ctx,
+    name,
+    entity_type,
+    description,
+    alias,
+    visibility,
+    filter_criteria,
+    query_string,
+    output_json,
 ):
     """Create a new view (saved query).
 
@@ -402,7 +411,9 @@ def create_view(
 @click.option("--query-string", help="Lucene-style query string for filtering")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 @click.pass_context
-def update_view(ctx, view_id, name, description, visibility, filter_criteria, query_string, output_json):
+def update_view(
+    ctx, view_id, name, description, visibility, filter_criteria, query_string, output_json
+):
     """Update an existing view.
 
     Examples:

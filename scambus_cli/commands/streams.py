@@ -615,8 +615,8 @@ def listen_stream(ctx, consumer_key, output_json, from_beginning, cursor, test):
 
     import httpx as sse_httpx
 
-    from scambus_cli.config import get_api_url
     from scambus_cli.auth_device import DeviceAuthManager
+    from scambus_cli.config import get_api_url
 
     # Determine cursor position
     if cursor:

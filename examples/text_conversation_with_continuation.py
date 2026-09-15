@@ -15,7 +15,8 @@ conversation history over time.
 
 import os
 from datetime import datetime, timezone
-from scambus_client import ScambusClient, IdentifierLookup
+
+from scambus_client import IdentifierLookup, ScambusClient
 from scambus_client.models import (
     ConversationMessage,
     MessageIdentifierRef,
@@ -265,9 +266,9 @@ def main():
     print("Summary")
     print("=" * 70)
     print(f"\nParent conversation: {parent.id}")
-    print(f"Total continuations: 4")
-    print(f"Total messages: 8")
-    print(f"Identifiers tracked: 4+ (2 participants + 2 discovered + AI extracted)")
+    print("Total continuations: 4")
+    print("Total messages: 8")
+    print("Identifiers tracked: 4+ (2 participants + 2 discovered + AI extracted)")
     print("\nKey points:")
     print("  - Parent entry holds conversation metadata (platform, type)")
     print("  - Child entries (continuations) hold actual messages")
@@ -302,7 +303,7 @@ def calculate_byte_position_example():
     position_unicode = unicode_body.encode("utf-8").find(b"+1555123456")
     print(f"\nUnicode: '{unicode_body}'")
     print(f"  Phone '+1555123456' at position={position_unicode}")
-    print(f"  (Note: position is 18, not 13, because '你好' is 6 bytes in UTF-8)")
+    print("  (Note: position is 18, not 13, because '你好' is 6 bytes in UTF-8)")
 
 
 if __name__ == "__main__":

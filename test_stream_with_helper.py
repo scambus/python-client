@@ -4,6 +4,7 @@ Test creating streams using the identifier_types helper.
 """
 
 import os
+
 from scambus_client import ScambusClient
 
 
@@ -18,7 +19,7 @@ def test_stream_creation_with_helpers():
     # Try to read from config file
     config_path = os.path.expanduser("~/.scambus/config.json")
     if os.path.exists(config_path):
-        with open(config_path, "r") as f:
+        with open(config_path) as f:
             config = json.load(f)
             token = (
                 (

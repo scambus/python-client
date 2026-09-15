@@ -143,9 +143,7 @@ def list_external_systems(ctx, output_json):
             if not systems:
                 print_info("No external systems registered")
                 return
-            table_data = [
-                {"Key": s["key"], "Display Name": s["display_name"]} for s in systems
-            ]
+            table_data = [{"Key": s["key"], "Display Name": s["display_name"]} for s in systems]
             print_table(table_data, title=f"External Systems ({len(systems)})")
 
     except Exception as e:
@@ -228,14 +226,16 @@ def extracted_identifiers(ctx, entry_id, output_json):
             rows = []
             for ident in results:
                 occ_count = len(ident.get("occurrences", []))
-                rows.append({
-                    "type": ident.get("type", ""),
-                    "value": ident.get("value", ""),
-                    "label": ident.get("label", ""),
-                    "confidence": ident.get("confidence", ""),
-                    "occurrences": occ_count,
-                    "identifier_id": ident.get("identifier_id", ""),
-                })
+                rows.append(
+                    {
+                        "type": ident.get("type", ""),
+                        "value": ident.get("value", ""),
+                        "label": ident.get("label", ""),
+                        "confidence": ident.get("confidence", ""),
+                        "occurrences": occ_count,
+                        "identifier_id": ident.get("identifier_id", ""),
+                    }
+                )
             print_table(rows, title="Extracted Identifiers")
 
     except Exception as e:
@@ -262,9 +262,7 @@ def identifier_summary(ctx, entry_id, identifier_type, output_json):
     client = ctx.obj.get_client()
 
     try:
-        summary = client.get_identifier_summary(
-            entry_id, identifier_type=identifier_type
-        )
+        summary = client.get_identifier_summary(entry_id, identifier_type=identifier_type)
 
         if output_json:
             # Serialize dataclass back to a plain dict
@@ -276,8 +274,7 @@ def identifier_summary(ctx, entry_id, identifier_type, output_json):
                         "type": tc.type,
                         "count": tc.count,
                         "by_subtype": [
-                            {"subtype": sc.subtype, "count": sc.count}
-                            for sc in tc.by_subtype
+                            {"subtype": sc.subtype, "count": sc.count} for sc in tc.by_subtype
                         ],
                     }
                     for tc in summary.by_type
@@ -291,20 +288,14 @@ def identifier_summary(ctx, entry_id, identifier_type, output_json):
             return
 
         print_info(f"Total distinct identifiers: {summary.total}")
-        type_rows = [
-            {"type": tc.type, "count": tc.count}
-            for tc in summary.by_type
-        ]
+        type_rows = [{"type": tc.type, "count": tc.count} for tc in summary.by_type]
         print_table(type_rows, title="By Type")
 
         # Print per-subtype breakdown for any type that has one
         for tc in summary.by_type:
             if not tc.by_subtype:
                 continue
-            subtype_rows = [
-                {"subtype": sc.subtype, "count": sc.count}
-                for sc in tc.by_subtype
-            ]
+            subtype_rows = [{"subtype": sc.subtype, "count": sc.count} for sc in tc.by_subtype]
             print_table(subtype_rows, title=f"{tc.type} — by subtype")
 
     except Exception as e:
@@ -327,7 +318,7 @@ def delete(ctx, entry_id, force):
 
         if not force:
             # Show entry details and ask for confirmation
-            print_info(f"About to delete journal entry:")
+            print_info("About to delete journal entry:")
             print_info(f"  ID: {entry.id}")
             print_info(f"  Type: {entry.type}")
             print_info(f"  Description: {entry_desc}")
@@ -569,9 +560,10 @@ def query(
         # Follow mode: create stream and subscribe via WebSocket
         if follow:
             import asyncio
-            from scambus_client.websocket_client import ScambusWebSocketClient
-            from scambus_cli.config import get_api_url
             import time
+
+            from scambus_cli.config import get_api_url
+            from scambus_client.websocket_client import ScambusWebSocketClient
 
             print_info("\n==> Entering follow mode (press Ctrl+C to exit)")
             print_info("Creating stream for matching criteria...")
@@ -653,7 +645,7 @@ def query(
                     print_info("Cleaning up temporary stream...")
                     client.delete_stream(stream.id)
                     print_success("Temporary stream deleted")
-                except:
+                except Exception:
                     pass  # Ignore cleanup errors on failure
 
     except Exception as e:
@@ -919,6 +911,11 @@ def create_note(
 @click.option("--recording", type=click.Path(exists=True), help="Phone call recording file")
 @click.option("--transcript", type=click.Path(exists=True), help="Call transcript file")
 @click.option(
+    "--transcript-messages-file",
+    type=click.Path(exists=True),
+    help="JSON file containing structured transcript messages",
+)
+@click.option(
     "--attach", multiple=True, type=click.Path(exists=True), help="Additional attachments"
 )
 @click.option("--case-id", help="Case ID to link to")
@@ -951,6 +948,11 @@ def create_note(
     is_flag=True,
     help="Mark entry as NSFW (media thumbnails blurred until revealed)",
 )
+@click.option(
+    "--ai-extract",
+    is_flag=True,
+    help="Run AI identifier extraction for structured transcript messages",
+)
 @click.option("--json", "output_json", is_flag=True, help="Output JSON")
 @click.option(
     "--external-id",
@@ -977,6 +979,7 @@ def create_phone_call(
     confidence,
     recording,
     transcript,
+    transcript_messages_file,
     attach,
     case_id,
     originator_type,
@@ -985,6 +988,7 @@ def create_phone_call(
     tag,
     is_test,
     is_nsfw,
+    ai_extract,
     platform,
     output_json,
     external_id,
@@ -1025,6 +1029,19 @@ def create_phone_call(
                 )
                 media_ids.append(media["id"])
                 click.echo(click.style(f"✓ Uploaded: {media['filename']}", fg="green"), err=True)
+
+        transcript_messages = None
+        if transcript_messages_file:
+            try:
+                with open(transcript_messages_file, encoding="utf-8") as f:
+                    transcript_messages = json.load(f)
+            except json.JSONDecodeError as e:
+                print_error(f"Invalid JSON in --transcript-messages-file: {e}")
+                sys.exit(1)
+
+            if not isinstance(transcript_messages, list):
+                print_error("--transcript-messages-file must contain a JSON array")
+                sys.exit(1)
 
         # Parse and validate time parameters
         from datetime import timedelta
@@ -1068,6 +1085,12 @@ def create_phone_call(
             "start_time": parsed_start.isoformat(),
             "details": {"direction": direction, "platform": platform},
         }
+
+        if transcript_messages:
+            data["details"]["transcript"] = transcript_messages
+            data["ai_extract"] = True
+        elif ai_extract:
+            data["ai_extract"] = True
 
         # Only add end_time if not in-progress
         if not in_progress and parsed_end:
@@ -2461,7 +2484,7 @@ def add_conversation_messages(
             sys.exit(1)
 
         # Load messages from JSON file
-        with open(messages_file, "r") as f:
+        with open(messages_file) as f:
             messages = json.load(f)
 
         if not isinstance(messages, list) or len(messages) == 0:
@@ -2600,7 +2623,7 @@ def batch_create(ctx, entries_file, output_json):
     client = ctx.obj.get_client()
 
     try:
-        with open(entries_file, "r") as f:
+        with open(entries_file) as f:
             entries = json.load(f)
 
         if not isinstance(entries, list):
@@ -2660,13 +2683,9 @@ def batch_create(ctx, entries_file, output_json):
 
             # Summary line
             if result.failed == 0:
-                print_success(
-                    f"\nAll {result.total} entries created successfully."
-                )
+                print_success(f"\nAll {result.total} entries created successfully.")
             elif result.succeeded == 0:
-                print_error(
-                    f"\nAll {result.total} entries failed."
-                )
+                print_error(f"\nAll {result.total} entries failed.")
             else:
                 print_warning(
                     f"\n{result.succeeded}/{result.total} entries created, "

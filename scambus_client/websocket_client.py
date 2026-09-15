@@ -6,15 +6,13 @@ import asyncio
 import json
 import logging
 import random
-import time
 from typing import Any, Callable, Dict, Optional, Union
 from urllib.parse import urlparse
 
 import websockets
-from websockets.client import WebSocketClientProtocol
 from websockets.exceptions import ConnectionClosed, WebSocketException
 
-from .config import get_api_url, get_api_token
+from .config import get_api_token, get_api_url
 from .models import Identifier, JournalEntry
 
 logger = logging.getLogger(__name__)
@@ -81,7 +79,7 @@ class ScambusWebSocketClient:
         self.max_reconnect_attempts = max_reconnect_attempts
         self.reconnect_delay = reconnect_delay
         self.reconnect_attempts = 0
-        self._ws: Optional[WebSocketClientProtocol] = None
+        self._ws: Optional[Any] = None
         self._running = False
         self._message_handlers: Dict[str, Dict[str, list]] = {}  # channel -> event -> [callbacks]
 

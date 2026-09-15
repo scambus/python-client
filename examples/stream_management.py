@@ -11,7 +11,8 @@ and identifier state changes) to consumers who subscribe with a consumer key.
 """
 
 import os
-from scambus_client import ScambusClient, FilterCriteria, IdentifierType, StreamDataType
+
+from scambus_client import FilterCriteria, IdentifierType, ScambusClient, StreamDataType
 
 # Initialize the client
 API_URL = os.getenv("SCAMBUS_API_URL", "http://localhost:8080/api")
@@ -39,7 +40,7 @@ def create_phone_stream_example():
     print(f"  Data Type: {stream.data_type}")
     print(f"  Consumer Key: {stream.consumer_key}")
     print(f"  Retention: {stream.retention_days} days")
-    print(f"\n  Give the consumer key to external consumers.")
+    print("\n  Give the consumer key to external consumers.")
 
     return stream
 
@@ -62,7 +63,7 @@ def create_identifier_stream_example():
     print(f"\nCreated identifier stream with backfill: {stream.id}")
     print(f"  Name: {stream.name}")
     print(f"  Data Type: {stream.data_type}")
-    print(f"  Backfill: Starting from 2025-01-01")
+    print("  Backfill: Starting from 2025-01-01")
 
     return stream
 
@@ -71,8 +72,8 @@ def consume_stream_example(consumer_key: str):
     """Consume messages from a stream using the consumer key."""
     result = client.consume_stream(
         stream_id=consumer_key,
-        cursor="0",      # Start from beginning
-        order="asc",     # Oldest first
+        cursor="0",  # Start from beginning
+        order="asc",  # Oldest first
         limit=10,
     )
 
@@ -97,7 +98,7 @@ def get_stream_info_example(consumer_key: str):
     """Get stream metadata from the consumer endpoint."""
     info = client.get_stream_info(consumer_key)
 
-    print(f"\nStream Info:")
+    print("\nStream Info:")
     print(f"  Name: {info.get('name')}")
     print(f"  Data Type: {info.get('data_type')}")
     print(f"  Messages: {info.get('messages_in_stream')}")
@@ -111,6 +112,8 @@ def main():
     # Create streams
     phone_stream = create_phone_stream_example()
     identifier_stream = create_identifier_stream_example()
+    identifier_key = identifier_stream.consumer_key or identifier_stream.id
+    print(f"Identifier stream consumer key: {identifier_key}")
 
     # Consume using the consumer key
     consumer_key = phone_stream.consumer_key or phone_stream.id

@@ -3,11 +3,11 @@ Data models for the Scambus API.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, tzinfo
 from typing import Any, Dict, List, Optional
 
 
-def _local_tz() -> "tzinfo":
+def _local_tz() -> tzinfo:
     """Return the system's local timezone, falling back to UTC."""
     try:
         local = datetime.now().astimezone().tzinfo
@@ -148,9 +148,7 @@ class ExtractedIdentifier:
         occurrences = None
         raw_occurrences = data.get("occurrences")
         if raw_occurrences:
-            occurrences = [
-                ExtractedIdentifierOccurrence.from_dict(o) for o in raw_occurrences
-            ]
+            occurrences = [ExtractedIdentifierOccurrence.from_dict(o) for o in raw_occurrences]
 
         return cls(
             ref=data.get("ref", ""),
@@ -282,9 +280,11 @@ class ExternalIdentifierRecord:
             source=data.get("source", "manual"),
             raw_match=_get_value(data, "raw_match", "rawMatch"),
             link=data.get("link"),
-            created_at=Identifier._parse_datetime(
-                _get_value(data, "created_at", "createdAt")
-            ) if _get_value(data, "created_at", "createdAt") else None,
+            created_at=(
+                Identifier._parse_datetime(_get_value(data, "created_at", "createdAt"))
+                if _get_value(data, "created_at", "createdAt")
+                else None
+            ),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -564,11 +564,13 @@ class PhoneCallDetails:
         direction: Call direction ("inbound" or "outbound")
         recording_url: Optional URL to call recording
         transcript_url: Optional URL to call transcript
+        transcript: Structured transcript messages using ConversationMessage format
     """
 
     direction: str
     recording_url: Optional[str] = None
     transcript_url: Optional[str] = None
+    transcript: Optional[List[Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API request."""
@@ -579,6 +581,10 @@ class PhoneCallDetails:
             data["recording_url"] = self.recording_url
         if self.transcript_url:
             data["transcript_url"] = self.transcript_url
+        if self.transcript:
+            data["transcript"] = [
+                msg.to_dict() if hasattr(msg, "to_dict") else dict(msg) for msg in self.transcript
+            ]
         return data
 
 
@@ -761,6 +767,8 @@ class ConversationMessage:
         index: Absolute position in the full conversation (0-based)
         message_id: Platform-specific message ID
         timestamp: When the message was sent
+        message_type: Message/event type; "phone_call_marker" renders a linked call event
+        phone_call_journal_entry_id: Linked phone_call journal entry for marker messages
         body: Plain text message body (required)
         is_outgoing: True if our side sent it, False if their side (required)
         sender_ref: Reference to identifier lookup for the sender (optional)
@@ -785,6 +793,8 @@ class ConversationMessage:
     timestamp: datetime
     body: str
     is_outgoing: bool = False
+    message_type: Optional[str] = None
+    phone_call_journal_entry_id: Optional[str] = None
     sender_ref: Optional[str] = None
     sender_display_name: Optional[str] = None
     identifier_refs: Optional[List[MessageIdentifierRef]] = None
@@ -810,6 +820,10 @@ class ConversationMessage:
             "body": self.body,
             "is_outgoing": self.is_outgoing,
         }
+        if self.message_type:
+            data["message_type"] = self.message_type
+        if self.phone_call_journal_entry_id:
+            data["phone_call_journal_entry_id"] = self.phone_call_journal_entry_id
         if self.sender_ref:
             data["sender_ref"] = self.sender_ref
         if self.sender_display_name:
@@ -863,18 +877,16 @@ class ConversationMessage:
 
         read_timestamp = None
         if data.get("read_timestamp"):
-            read_timestamp = datetime.fromisoformat(
-                data["read_timestamp"].replace("Z", "+00:00")
-            )
+            read_timestamp = datetime.fromisoformat(data["read_timestamp"].replace("Z", "+00:00"))
 
         return cls(
             index=data.get("index", 0),
             message_id=data.get("message_id", ""),
-            timestamp=datetime.fromisoformat(
-                data.get("timestamp", "").replace("Z", "+00:00")
-            ),
+            timestamp=datetime.fromisoformat(data.get("timestamp", "").replace("Z", "+00:00")),
             body=data.get("body", ""),
             is_outgoing=data.get("is_outgoing", False),
+            message_type=data.get("message_type"),
+            phone_call_journal_entry_id=data.get("phone_call_journal_entry_id"),
             sender_ref=data.get("sender_ref"),
             sender_display_name=data.get("sender_display_name"),
             identifier_refs=identifier_refs,
@@ -1037,9 +1049,7 @@ class ConversationContinuationDetails:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ConversationContinuationDetails":
         """Create from API response dictionary."""
-        messages = [
-            ConversationMessage.from_dict(m) for m in data.get("messages", [])
-        ]
+        messages = [ConversationMessage.from_dict(m) for m in data.get("messages", [])]
         return cls(
             messages=messages,
             reason=data.get("reason"),
@@ -2014,7 +2024,9 @@ class JournalEntry:
         # Parse extracted identifiers if present (from create response)
         raw_extracted = data.get("extracted_identifiers")
         if raw_extracted:
-            entry.extracted_identifiers = [ExtractedIdentifier.from_dict(ei) for ei in raw_extracted]
+            entry.extracted_identifiers = [
+                ExtractedIdentifier.from_dict(ei) for ei in raw_extracted
+            ]
 
         # Parse external identifiers if present
         raw_external = _get_value(data, "external_identifiers", "externalIdentifiers")
@@ -2124,6 +2136,364 @@ class Case:
             updated_at=Identifier._parse_datetime(_get_value(data, "updated_at", "updatedAt")),
             created_by=_get_value(data, "created_by", "createdBy"),
             is_test=_get_value(data, "is_test", "isTest", False),
+        )
+
+
+@dataclass
+class Queue:
+    """Queue from API response."""
+
+    id: str
+    name: str
+    description: str = ""
+    filter_criteria: Dict[str, Any] = field(default_factory=dict)
+    cadence_days: int = 7
+    cooldown_hours: int = 24
+    max_contacts_per_cluster: Optional[int] = None
+    rotation_enabled: bool = True
+    priority_mode: str = "fifo"
+    auto_populate: bool = True
+    actor_cluster_id: Optional[str] = None
+    actor_cluster_name: Optional[str] = None
+    redis_stream_key: Optional[str] = None
+    stream_version: int = 0
+    owner_org_id: Optional[str] = None
+    created_by: Optional[str] = None
+    is_active: bool = True
+    is_test: bool = False
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Queue":
+        """Create from API response dictionary."""
+        return cls(
+            id=data["id"],
+            name=data["name"],
+            description=data.get("description", ""),
+            filter_criteria=data.get("filter_criteria") or {},
+            cadence_days=data.get("cadence_days", 7),
+            cooldown_hours=data.get("cooldown_hours", 24),
+            max_contacts_per_cluster=data.get("max_contacts_per_cluster"),
+            rotation_enabled=data.get("rotation_enabled", True),
+            priority_mode=data.get("priority_mode", "fifo"),
+            auto_populate=data.get("auto_populate", True),
+            actor_cluster_id=data.get("actor_cluster_id"),
+            actor_cluster_name=data.get("actor_cluster_name"),
+            redis_stream_key=data.get("redis_stream_key"),
+            stream_version=data.get("stream_version", 0),
+            owner_org_id=data.get("owner_org_id"),
+            created_by=data.get("created_by"),
+            is_active=data.get("is_active", True),
+            is_test=data.get("is_test", False),
+            created_at=Identifier._parse_datetime(data.get("created_at")),
+            updated_at=Identifier._parse_datetime(data.get("updated_at")),
+        )
+
+
+@dataclass
+class QueueItem:
+    """Queue item from API response."""
+
+    id: str
+    queue_id: str
+    cluster_id: str
+    representative_id: str
+    state: str
+    funnel_id: Optional[str] = None
+    funnel_entry_id: Optional[str] = None
+    funnel_stage_id: Optional[str] = None
+    persona_id: Optional[str] = None
+    actor_cluster_id: Optional[str] = None
+    selected_channel: Optional[str] = None
+    journey_state: Dict[str, Any] = field(default_factory=dict)
+    provenance: str = "queue"
+    claimed_by: Optional[str] = None
+    claimed_at: Optional[datetime] = None
+    last_contacted_at: Optional[datetime] = None
+    last_contacted_by: Optional[str] = None
+    contact_count: int = 0
+    next_contact_after: Optional[datetime] = None
+    priority: int = 0
+    owner_org_id: Optional[str] = None
+    is_test: bool = False
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    representative_value: Optional[str] = None
+    representative_type: Optional[str] = None
+    cluster_size: Optional[int] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "QueueItem":
+        """Create from API response dictionary."""
+        return cls(
+            id=data["id"],
+            queue_id=data["queue_id"],
+            cluster_id=data["cluster_id"],
+            representative_id=data["representative_id"],
+            state=data.get("state", ""),
+            funnel_id=data.get("funnel_id"),
+            funnel_entry_id=data.get("funnel_entry_id"),
+            funnel_stage_id=data.get("funnel_stage_id"),
+            persona_id=data.get("persona_id"),
+            actor_cluster_id=data.get("actor_cluster_id"),
+            selected_channel=data.get("selected_channel"),
+            journey_state=data.get("journey_state") or {},
+            provenance=data.get("provenance", "queue"),
+            claimed_by=data.get("claimed_by"),
+            claimed_at=Identifier._parse_datetime(data.get("claimed_at")),
+            last_contacted_at=Identifier._parse_datetime(data.get("last_contacted_at")),
+            last_contacted_by=data.get("last_contacted_by"),
+            contact_count=data.get("contact_count", 0),
+            next_contact_after=Identifier._parse_datetime(data.get("next_contact_after")),
+            priority=data.get("priority", 0),
+            owner_org_id=data.get("owner_org_id"),
+            is_test=data.get("is_test", False),
+            created_at=Identifier._parse_datetime(data.get("created_at")),
+            updated_at=Identifier._parse_datetime(data.get("updated_at")),
+            representative_value=data.get("representative_value"),
+            representative_type=data.get("representative_type"),
+            cluster_size=data.get("cluster_size"),
+        )
+
+
+@dataclass
+class QueueStats:
+    """Aggregate queue state counts."""
+
+    total_items: int = 0
+    pending: int = 0
+    claimed: int = 0
+    in_progress: int = 0
+    contacted: int = 0
+    cooldown: int = 0
+    ready: int = 0
+    completed: int = 0
+    dropped: int = 0
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "QueueStats":
+        """Create from API response dictionary."""
+        return cls(
+            total_items=data.get("total_items", 0),
+            pending=data.get("pending", 0),
+            claimed=data.get("claimed", 0),
+            in_progress=data.get("in_progress", 0),
+            contacted=data.get("contacted", 0),
+            cooldown=data.get("cooldown", 0),
+            ready=data.get("ready", 0),
+            completed=data.get("completed", 0),
+            dropped=data.get("dropped", 0),
+        )
+
+
+@dataclass
+class QueueStreamMessage:
+    """Queue Redis stream message."""
+
+    event: str
+    queue_id: str
+    queue_item_id: str
+    cluster_id: str
+    representative_id: str
+    state: str
+    contact_count: int
+    priority: int
+    stream_version: int
+    occurred_at: Optional[datetime]
+    is_test: bool
+    cursor: Optional[str] = None
+    previous_queue_id: Optional[str] = None
+    target_queue_id: Optional[str] = None
+    representative_type: Optional[str] = None
+    representative_value: Optional[str] = None
+    funnel_id: Optional[str] = None
+    funnel_entry_id: Optional[str] = None
+    funnel_stage_id: Optional[str] = None
+    persona_id: Optional[str] = None
+    actor_cluster_id: Optional[str] = None
+    selected_channel: Optional[str] = None
+    journey_state: Dict[str, Any] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "QueueStreamMessage":
+        """Create from API response dictionary."""
+        return cls(
+            cursor=data.get("cursor"),
+            event=data.get("event", ""),
+            queue_id=data.get("queue_id", ""),
+            previous_queue_id=data.get("previous_queue_id"),
+            target_queue_id=data.get("target_queue_id"),
+            queue_item_id=data.get("queue_item_id", ""),
+            cluster_id=data.get("cluster_id", ""),
+            representative_id=data.get("representative_id", ""),
+            representative_type=data.get("representative_type"),
+            representative_value=data.get("representative_value"),
+            state=data.get("state", ""),
+            funnel_id=data.get("funnel_id"),
+            funnel_entry_id=data.get("funnel_entry_id"),
+            funnel_stage_id=data.get("funnel_stage_id"),
+            persona_id=data.get("persona_id"),
+            actor_cluster_id=data.get("actor_cluster_id"),
+            selected_channel=data.get("selected_channel"),
+            contact_count=data.get("contact_count", 0),
+            priority=data.get("priority", 0),
+            stream_version=data.get("stream_version", 0),
+            occurred_at=Identifier._parse_datetime(data.get("occurred_at")),
+            is_test=data.get("is_test", False),
+            journey_state=data.get("journey_state") or {},
+            metadata=data.get("metadata") or {},
+        )
+
+
+@dataclass
+class QueueStreamResponse:
+    """Response from the queue Redis stream endpoint."""
+
+    stream_key: str
+    cursor: str
+    messages: List[QueueStreamMessage] = field(default_factory=list)
+    claim_endpoint: Optional[str] = None
+    source_of_truth: str = "postgres"
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "QueueStreamResponse":
+        """Create from API response dictionary."""
+        return cls(
+            stream_key=data.get("stream_key", ""),
+            cursor=data.get("cursor", ""),
+            messages=[QueueStreamMessage.from_dict(m) for m in data.get("messages", [])],
+            claim_endpoint=data.get("claim_endpoint"),
+            source_of_truth=data.get("source_of_truth", "postgres"),
+        )
+
+
+@dataclass
+class QueueContactLog:
+    """Queue item contact history record."""
+
+    id: str
+    queue_item_id: str
+    queue_id: str
+    cluster_id: str
+    contacted_by: str
+    outcome: str = "contacted"
+    contacted_at: Optional[datetime] = None
+    notes: str = ""
+    funnel_id: Optional[str] = None
+    funnel_entry_id: Optional[str] = None
+    funnel_stage_id: Optional[str] = None
+    persona_id: Optional[str] = None
+    actor_cluster_id: Optional[str] = None
+    contact_identifier_id: Optional[str] = None
+    journal_entry_id: Optional[str] = None
+    channel: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "QueueContactLog":
+        """Create from API response dictionary."""
+        return cls(
+            id=data["id"],
+            queue_item_id=data["queue_item_id"],
+            queue_id=data["queue_id"],
+            cluster_id=data["cluster_id"],
+            contacted_by=data["contacted_by"],
+            funnel_id=data.get("funnel_id"),
+            funnel_entry_id=data.get("funnel_entry_id"),
+            funnel_stage_id=data.get("funnel_stage_id"),
+            persona_id=data.get("persona_id"),
+            actor_cluster_id=data.get("actor_cluster_id"),
+            contact_identifier_id=data.get("contact_identifier_id"),
+            journal_entry_id=data.get("journal_entry_id"),
+            channel=data.get("channel"),
+            outcome=data.get("outcome", "contacted"),
+            contacted_at=Identifier._parse_datetime(data.get("contacted_at")),
+            notes=data.get("notes", ""),
+        )
+
+
+@dataclass
+class QueueItemEvent:
+    """Queue item lifecycle event."""
+
+    id: str
+    queue_item_id: str
+    queue_id: str
+    cluster_id: str
+    representative_id: str
+    event: str
+    state: str
+    contact_count: int = 0
+    priority: int = 0
+    stream_version: int = 0
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    is_test: bool = False
+    occurred_at: Optional[datetime] = None
+    previous_queue_id: Optional[str] = None
+    target_queue_id: Optional[str] = None
+    funnel_id: Optional[str] = None
+    funnel_entry_id: Optional[str] = None
+    funnel_stage_id: Optional[str] = None
+    persona_id: Optional[str] = None
+    actor_cluster_id: Optional[str] = None
+    selected_channel: Optional[str] = None
+    owner_org_id: Optional[str] = None
+    queue_name: Optional[str] = None
+    previous_queue_name: Optional[str] = None
+    target_queue_name: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "QueueItemEvent":
+        """Create from API response dictionary."""
+        return cls(
+            id=data["id"],
+            queue_item_id=data["queue_item_id"],
+            queue_id=data["queue_id"],
+            previous_queue_id=data.get("previous_queue_id"),
+            target_queue_id=data.get("target_queue_id"),
+            cluster_id=data["cluster_id"],
+            representative_id=data["representative_id"],
+            event=data.get("event", ""),
+            state=data.get("state", ""),
+            funnel_id=data.get("funnel_id"),
+            funnel_entry_id=data.get("funnel_entry_id"),
+            funnel_stage_id=data.get("funnel_stage_id"),
+            persona_id=data.get("persona_id"),
+            actor_cluster_id=data.get("actor_cluster_id"),
+            selected_channel=data.get("selected_channel"),
+            contact_count=data.get("contact_count", 0),
+            priority=data.get("priority", 0),
+            stream_version=data.get("stream_version", 0),
+            metadata=data.get("metadata") or {},
+            owner_org_id=data.get("owner_org_id"),
+            is_test=data.get("is_test", False),
+            occurred_at=Identifier._parse_datetime(data.get("occurred_at")),
+            queue_name=data.get("queue_name"),
+            previous_queue_name=data.get("previous_queue_name"),
+            target_queue_name=data.get("target_queue_name"),
+        )
+
+
+@dataclass
+class QueueClusterIdentifier:
+    """Identifier in a queue item's target or actor cluster."""
+
+    id: str
+    value: str
+    type: str
+    is_ours: bool = False
+    confidence: Optional[float] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "QueueClusterIdentifier":
+        """Create from API response dictionary."""
+        return cls(
+            id=data["id"],
+            value=data.get("value", ""),
+            type=data.get("type", ""),
+            is_ours=data.get("is_ours", False),
+            confidence=data.get("confidence"),
         )
 
 
@@ -2961,11 +3331,7 @@ class Tag:
     def from_dict(cls, data: Dict[str, Any]) -> "Tag":
         """Create from API response dictionary."""
         tag_values_data = data.get("tag_values")
-        tag_values = (
-            [TagValue.from_dict(tv) for tv in tag_values_data]
-            if tag_values_data
-            else None
-        )
+        tag_values = [TagValue.from_dict(tv) for tv in tag_values_data] if tag_values_data else None
         return cls(
             id=data["id"],
             title=data["title"],

@@ -1,7 +1,7 @@
 """Unit tests for AsyncScambusClient."""
 
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 import pytest_asyncio
@@ -11,9 +11,15 @@ from scambus_client import (
     ScambusAPIError,
     ScambusAuthenticationError,
     ScambusNotFoundError,
-    ScambusValidationError,
 )
-from scambus_client.models import Case, ExportStream, Identifier, JournalEntry
+from scambus_client.models import (
+    Case,
+    ExportStream,
+    Identifier,
+    JournalEntry,
+    QueueItem,
+    QueueStreamResponse,
+)
 
 
 @pytest_asyncio.fixture
@@ -207,6 +213,60 @@ class TestAsyncScambusClientJournalEntries:
         assert entry.id == "entry-456"
         assert entry.type == "phone_call"
 
+    @pytest.mark.asyncio
+    async def test_create_phone_call_with_transcript_enables_ai_extract(self, async_client):
+        """Test structured phone call transcripts are sent for extraction."""
+        phone_data = {
+            "id": "entry-456",
+            "type": "phone_call",
+            "description": "Scam call received",
+            "performed_at": "2025-01-15T11:00:00Z",
+            "start_time": "2025-01-15T11:00:00Z",
+            "end_time": "2025-01-15T11:10:00Z",
+            "details": {"direction": "inbound"},
+        }
+
+        post_response = Mock()
+        post_response.status_code = 201
+        post_response.json.return_value = {"id": "entry-456"}
+
+        get_response = Mock()
+        get_response.status_code = 200
+        get_response.json.return_value = {
+            "journal_entry": {"journal_entry": phone_data, "can_edit": True},
+            "cases": [],
+        }
+
+        async_client._client.request.side_effect = [post_response, get_response]
+
+        start_time = datetime(2025, 1, 15, 11, 0, 0, tzinfo=timezone.utc)
+        end_time = datetime(2025, 1, 15, 11, 10, 0, tzinfo=timezone.utc)
+
+        await async_client.create_phone_call(
+            description="Scam call",
+            direction="inbound",
+            start_time=start_time,
+            end_time=end_time,
+            transcript=[
+                {
+                    "index": 0,
+                    "message_id": "call-msg-1",
+                    "timestamp": "2025-01-15T11:01:00Z",
+                    "body": "Send the money today.",
+                    "is_outgoing": False,
+                    "platform_metadata": {"is_transcription": True},
+                }
+            ],
+        )
+
+        payload = async_client._client.request.call_args_list[0].kwargs["json"]
+
+        assert payload["ai_extract"] is True
+        assert payload["details"]["transcript"][0]["message_id"] == "call-msg-1"
+        assert payload["details"]["transcript"][0]["platform_metadata"] == {
+            "is_transcription": True
+        }
+
 
 class TestAsyncScambusClientSearch:
     """Test search methods."""
@@ -289,6 +349,73 @@ class TestAsyncScambusClientStreams:
         assert result["next_cursor"] == "new-cursor"
 
 
+class TestAsyncScambusClientQueues:
+    """Test async queue methods."""
+
+    @pytest.mark.asyncio
+    async def test_read_queue_stream(self, async_client):
+        """Test reading queue Redis stream events."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "stream_key": "queues:queue-123:events",
+            "cursor": "1714300000000-0",
+            "claim_endpoint": "/api/queues/queue-123/claim",
+            "source_of_truth": "postgres",
+            "messages": [
+                {
+                    "cursor": "1714300000000-0",
+                    "event": "claimed",
+                    "queue_id": "queue-123",
+                    "queue_item_id": "item-123",
+                    "cluster_id": "cluster-target",
+                    "representative_id": "identifier-123",
+                    "state": "claimed",
+                    "contact_count": 0,
+                    "priority": 42,
+                    "stream_version": 2,
+                    "occurred_at": "2026-04-28T10:00:00Z",
+                    "is_test": False,
+                }
+            ],
+        }
+        async_client._client.request.return_value = mock_response
+
+        result = await async_client.read_queue_stream(
+            "queue-123", cursor="$", limit=1, block_ms=1000
+        )
+
+        assert isinstance(result, QueueStreamResponse)
+        assert result.messages[0].event == "claimed"
+        assert async_client._client.request.call_args.kwargs["params"] == {
+            "cursor": "$",
+            "limit": 1,
+            "block_ms": 1000,
+        }
+
+    @pytest.mark.asyncio
+    async def test_claim_queue_item(self, async_client):
+        """Test claiming a queue item."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "id": "item-123",
+            "queue_id": "queue-123",
+            "cluster_id": "cluster-target",
+            "representative_id": "identifier-123",
+            "state": "claimed",
+        }
+        async_client._client.request.return_value = mock_response
+
+        item = await async_client.claim_queue_item("queue-123")
+
+        assert isinstance(item, QueueItem)
+        assert item.state == "claimed"
+        assert async_client._client.request.call_args.kwargs["url"].endswith(
+            "/queues/queue-123/claim"
+        )
+
+
 class TestAsyncScambusClientErrorHandling:
     """Test error handling."""
 
@@ -341,8 +468,6 @@ class TestAsyncContextManager:
     @pytest.mark.asyncio
     async def test_async_context_manager(self, mock_api_url, mock_api_key):
         """Test that AsyncScambusClient works as an async context manager."""
-        async with AsyncScambusClient(
-            api_url=mock_api_url, api_token=mock_api_key
-        ) as client:
+        async with AsyncScambusClient(api_url=mock_api_url, api_token=mock_api_key) as client:
             assert client is not None
             assert client.api_url == f"{mock_api_url}/api"

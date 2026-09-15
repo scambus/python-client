@@ -54,7 +54,7 @@ def basic_sse_example():
         "Accept": "text/event-stream",
     }
     params = {
-        "cursor": "$",             # "$" = new messages only; "0" = from beginning
+        "cursor": "$",  # "$" = new messages only; "0" = from beginning
         "include_test": "false",
     }
 

@@ -11,12 +11,12 @@ This library enables you to:
 - Manage your own cases, tags, and profile
 """
 
+from ._async_client import AsyncScambusClient
 from .client import (
     ScambusClient,
-    build_identifier_type_filter,
     build_combined_filter,
+    build_identifier_type_filter,
 )
-from ._async_client import AsyncScambusClient
 from .exceptions import (
     ScambusAPIError,
     ScambusAuthenticationError,
@@ -24,23 +24,13 @@ from .exceptions import (
     ScambusServerError,
     ScambusValidationError,
 )
-from .websocket_client import ScambusWebSocketClient
-from .types import (
-    FilterCriteria,
-    IdentifierType,
-    JournalEntryType,
-    PaymentService,
-    StreamDataType,
-    TagLookup,
-    StreamFilter,
-    ViewFilter,
-    ViewSortOrder,
-)
 from .models import (
     ActionDetails,
     ActivityCompleteDetails,
     AnalysisDetails,
     BankAccountDetails,
+    BatchCreateResult,
+    BatchEntryResult,
     Case,
     CaseComment,
     CaseIdentifierLinkDetails,
@@ -59,18 +49,16 @@ from .models import (
     ExternalIdentifierRecord,
     ExtractedIdentifier,
     ExtractedIdentifierOccurrence,
-    BatchCreateResult,
-    BatchEntryResult,
     FailedIdentifier,
     Identifier,
     IdentifierConfidenceUpdate,
     IdentifierEmailDetails,
+    IdentifierExclusion,
     IdentifierLookup,
     IdentifierStreamMessage,
     IdentifierSubtypeCount,
     IdentifierSummary,
     IdentifierTypeCount,
-    IdentifierExclusion,
     IdentifierURLReference,
     ImportDetails,
     JournalEntry,
@@ -92,6 +80,14 @@ from .models import (
     PersonaMediaLink,
     PhoneCallDetails,
     PhoneDetails,
+    Queue,
+    QueueClusterIdentifier,
+    QueueContactLog,
+    QueueItem,
+    QueueItemEvent,
+    QueueStats,
+    QueueStreamMessage,
+    QueueStreamResponse,
     RedactionDetails,
     ResearchDetails,
     Session,
@@ -106,13 +102,25 @@ from .models import (
     TagOperationDetails,
     TagValue,
     TextConversationDetails,
+    UpdateDetails,
     URLConsolidationStatus,
     URLDetails,
-    UpdateDetails,
     View,
     ZelleDetails,
     parse_identifier_details,
 )
+from .types import (
+    FilterCriteria,
+    IdentifierType,
+    JournalEntryType,
+    PaymentService,
+    StreamDataType,
+    StreamFilter,
+    TagLookup,
+    ViewFilter,
+    ViewSortOrder,
+)
+from .websocket_client import ScambusWebSocketClient
 
 __version__ = "0.1.0"
 __all__ = [
@@ -196,6 +204,14 @@ __all__ = [
     "Persona",
     "PersonaIdentifierLink",
     "PersonaMediaLink",
+    "Queue",
+    "QueueItem",
+    "QueueStats",
+    "QueueStreamMessage",
+    "QueueStreamResponse",
+    "QueueContactLog",
+    "QueueItemEvent",
+    "QueueClusterIdentifier",
     "View",
     # Identifier exclusions
     "IdentifierExclusion",

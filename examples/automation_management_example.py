@@ -13,6 +13,7 @@ Use automations for:
 """
 
 import os
+
 from scambus_client import ScambusClient
 
 # Configuration
@@ -64,10 +65,10 @@ def main():
     secret_key = key_data.get("secretAccessKey")
     api_key = f"{access_key_id}:{secret_key}"
 
-    print(f"   ✓ Created API key")
+    print("   ✓ Created API key")
     print(f"     Access Key ID: {access_key_id}")
     print(f"     Secret: {secret_key[:10]}...")
-    print(f"\n   ⚠ SAVE THIS KEY - it won't be shown again!")
+    print("\n   ⚠ SAVE THIS KEY - it won't be shown again!")
     print(f"   Full key: {api_key}")
 
     # =========================================================================
@@ -124,15 +125,16 @@ def main():
 
     # Create a new client with automation credentials
     new_api_key = f"{new_key_data.get('accessKeyId')}:{new_key_data.get('secretAccessKey')}"
+    print(f"   Combined key: {new_api_key[:8]}...")
 
     # Note: In practice, you would use the API key like this:
     # automation_client = ScambusClient(api_key_id=access_key_id, api_key_secret=secret_key)
 
     print("   To use automation credentials in scripts:")
-    print(f"   automation_client = ScambusClient(")
+    print("   automation_client = ScambusClient(")
     print(f"       api_key_id='{new_key_data.get('accessKeyId')[:8]}...',")
-    print(f"       api_key_secret='...'")
-    print(f"   )")
+    print("       api_key_secret='...'")
+    print("   )")
 
     # =========================================================================
     # Cleanup
@@ -141,13 +143,13 @@ def main():
 
     # Delete the remaining key
     client.delete_automation_api_key(automation_id, new_key_data.get("accessKeyId"))
-    print(f"   ✓ Deleted remaining key")
+    print("   ✓ Deleted remaining key")
 
     # Note: You may want to keep the automation for future use
     # To delete the automation itself:
     # client.delete_automation(automation_id)
     print(f"   Note: Automation '{automation.get('name')}' still exists")
-    print(f"         Delete manually if not needed")
+    print("         Delete manually if not needed")
 
     print("\n✓ Automation management example completed!")
 

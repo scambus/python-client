@@ -10,7 +10,8 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from scambus_client import ScambusClient, IdentifierLookup, DetectionDetails, Evidence
+
+from scambus_client import DetectionDetails, Evidence, IdentifierLookup, ScambusClient
 
 # Configuration
 API_URL = os.getenv("SCAMBUS_API_URL", "http://localhost:8080/api")
@@ -43,7 +44,7 @@ def create_detection_with_screenshot(screenshot_path: str, url: str, identifiers
     print(f"  MIME type: {media.mime_type}")
 
     # Step 2: Create detection with evidence
-    print(f"\n2. Creating detection with evidence...")
+    print("\n2. Creating detection with evidence...")
     entry = client.create_detection(
         description=f"Phishing website detected: {url}",
         details=DetectionDetails(

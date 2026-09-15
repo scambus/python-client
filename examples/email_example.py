@@ -8,7 +8,8 @@ properly typed details and optional media attachments.
 
 import os
 from datetime import datetime
-from scambus_client import ScambusClient, IdentifierLookup, TagLookup
+
+from scambus_client import IdentifierLookup, ScambusClient, TagLookup
 
 # Configuration
 API_URL = os.getenv("SCAMBUS_API_URL", "http://localhost:8080/api")
@@ -50,7 +51,7 @@ def main():
     )
 
     print(f"✓ Created email entry: {entry.id}")
-    print(f"  Direction: inbound")
+    print("  Direction: inbound")
     print(f"  Subject: {entry.details.get('subject')}")
     print(f"  Identifiers: {len(entry.identifiers)}")
 
@@ -68,7 +69,7 @@ def main():
     )
 
     print(f"✓ Created email entry: {entry.id}")
-    print(f"  Direction: outbound")
+    print("  Direction: outbound")
     print(f"  Subject: {entry.details.get('subject')}")
 
     # Example 3: Email with HTML body and attachments
@@ -92,7 +93,7 @@ def main():
     )
 
     print(f"✓ Created email entry: {entry.id}")
-    print(f"  Direction: inbound")
+    print("  Direction: inbound")
     print(f"  Subject: {entry.details.get('subject')}")
     print(f"  Attachments: {len(entry.details.get('attachments', []))}")
 

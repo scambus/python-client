@@ -36,9 +36,7 @@ async def main():
         # Create a detection
         entry = await client.create_detection(
             description="Async detection example",
-            identifiers=[
-                {"type": "email", "value": "test@example.com", "confidence": 0.9}
-            ],
+            identifiers=[{"type": "email", "value": "test@example.com", "confidence": 0.9}],
         )
         print(f"Created entry: {entry.id}")
 

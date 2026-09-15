@@ -1,7 +1,6 @@
 """Main CLI entry point for Scambus."""
 
 import sys
-from pathlib import Path
 
 import click
 from rich.console import Console
@@ -285,6 +284,7 @@ from .commands import (
     media,
     personas,
     profile,
+    queues,
     reports,
     search,
     streams,
@@ -305,6 +305,7 @@ cli.add_command(reports.reports)
 cli.add_command(exports.exports)
 cli.add_command(exclusions.exclusions)
 cli.add_command(personas.personas)
+cli.add_command(queues.queues)
 cli.add_command(admin.admin)
 
 

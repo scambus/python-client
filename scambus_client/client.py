@@ -20,15 +20,14 @@ from ._retry import (
 )
 from .exceptions import (
     ScambusAPIError,
-    ScambusAuthenticationError,
     ScambusNotFoundError,
-    ScambusServerError,
     ScambusValidationError,
 )
 from .models import (
     ActionDetails,
     ActivityCompleteDetails,
     AnalysisDetails,
+    BatchCreateResult,
     Case,
     CaseComment,
     ConfidenceOperationDetails,
@@ -43,10 +42,9 @@ from .models import (
     ExtractedIdentifier,
     FailedIdentifier,
     Identifier,
+    IdentifierExclusion,
     IdentifierLookup,
-    IdentifierSubtypeCount,
     IdentifierSummary,
-    IdentifierTypeCount,
     IdentifierURLReference,
     ImportDetails,
     JournalEntry,
@@ -56,9 +54,15 @@ from .models import (
     ObservationDetails,
     Passkey,
     Persona,
-    PersonaIdentifierLink,
     PersonaMediaLink,
     PhoneCallDetails,
+    Queue,
+    QueueClusterIdentifier,
+    QueueContactLog,
+    QueueItem,
+    QueueItemEvent,
+    QueueStats,
+    QueueStreamResponse,
     Report,
     ResearchDetails,
     Session,
@@ -74,7 +78,6 @@ from .models import (
 from .types import (
     FilterCriteriaInput,
     TagLookupInput,
-    StreamFilterInput,
     ViewFilterInput,
     ViewSortOrderInput,
     to_dict,
@@ -475,8 +478,13 @@ class ScambusClient(BaseScambusClient):
                         logger.warning(
                             "Retryable HTTP %d on %s %s (attempt %d/%d, "
                             "backoff %.1fs, %.0fs remaining)",
-                            response.status_code, method, endpoint,
-                            attempt, self.max_retries, delay, remaining,
+                            response.status_code,
+                            method,
+                            endpoint,
+                            attempt,
+                            self.max_retries,
+                            delay,
+                            remaining,
                         )
                         time.sleep(delay)
                         continue
@@ -501,8 +509,13 @@ class ScambusClient(BaseScambusClient):
                 logger.warning(
                     "Connection error on %s %s (attempt %d/%d, "
                     "backoff %.1fs, %.0fs remaining): %s",
-                    method, endpoint, attempt, self.max_retries,
-                    delay, remaining, exc,
+                    method,
+                    endpoint,
+                    attempt,
+                    self.max_retries,
+                    delay,
+                    remaining,
+                    exc,
                 )
                 time.sleep(delay)
 
@@ -878,8 +891,7 @@ class ScambusClient(BaseScambusClient):
         extracted_identifiers = None
         if "extracted_identifiers" in response:
             extracted_identifiers = [
-                ExtractedIdentifier.from_dict(ei)
-                for ei in response["extracted_identifiers"]
+                ExtractedIdentifier.from_dict(ei) for ei in response["extracted_identifiers"]
             ]
 
         # Backend only returns {"id": "..."}, so fetch the full entry
@@ -895,9 +907,7 @@ class ScambusClient(BaseScambusClient):
 
         return entry
 
-    def batch_create_journal_entries(
-        self, entries: List[Dict[str, Any]]
-    ) -> "BatchCreateResult":
+    def batch_create_journal_entries(self, entries: List[Dict[str, Any]]) -> "BatchCreateResult":
         """
         Create multiple journal entries in a single request.
 
@@ -947,9 +957,7 @@ class ScambusClient(BaseScambusClient):
         """
         from .models import BatchCreateResult
 
-        response = self._request(
-            "POST", "/journal-entries/batch", json_data={"entries": entries}
-        )
+        response = self._request("POST", "/journal-entries/batch", json_data={"entries": entries})
         return BatchCreateResult.from_dict(response)
 
     def create_detection(
@@ -1118,6 +1126,7 @@ class ScambusClient(BaseScambusClient):
         end_time: datetime,
         recording_url: Optional[str] = None,
         transcript_url: Optional[str] = None,
+        transcript: Optional[List[Union[ConversationMessage, Dict[str, Any]]]] = None,
         identifiers: Optional[List[Union[Dict[str, Any], IdentifierLookup]]] = None,
         our_identifier_lookups: Optional[List[Union[Dict[str, Any], IdentifierLookup]]] = None,
         evidence: Optional[Union[Dict[str, Any], Evidence]] = None,
@@ -1130,6 +1139,7 @@ class ScambusClient(BaseScambusClient):
         originator_identifier: Optional[str] = None,
         create_originator: bool = False,
         in_progress: bool = False,
+        ai_extract: bool = False,
         is_test: bool = False,
         external_identifiers: Optional[List[Dict[str, str]]] = None,
         extract_external_identifiers: bool = False,
@@ -1144,6 +1154,7 @@ class ScambusClient(BaseScambusClient):
             end_time: When the call ended
             recording_url: Optional URL to call recording
             transcript_url: Optional URL to call transcript
+            transcript: Structured transcript messages in ConversationMessage format
             identifiers: List of suspect/scammer identifiers (e.g., phone numbers)
             our_identifier_lookups: List of honeypot/bot identifiers (our side)
             evidence: Evidence (recordings, screenshots, etc.)
@@ -1207,10 +1218,18 @@ class ScambusClient(BaseScambusClient):
             # Complete later with: entry.complete()
             ```
         """
+        transcript_messages = None
+        if transcript:
+            transcript_messages = [
+                msg if isinstance(msg, ConversationMessage) else ConversationMessage.from_dict(msg)
+                for msg in transcript
+            ]
+
         details = PhoneCallDetails(
             direction=direction,
             recording_url=recording_url,
             transcript_url=transcript_url,
+            transcript=transcript_messages,
         )
 
         # Handle media parameter
@@ -1257,6 +1276,7 @@ class ScambusClient(BaseScambusClient):
             start_time=start_time,
             end_time=end_time,
             in_progress=in_progress,
+            ai_extract=ai_extract or bool(transcript_messages),
             is_test=is_test,
             external_identifiers=external_identifiers,
             extract_external_identifiers=extract_external_identifiers,
@@ -2439,8 +2459,9 @@ class ScambusClient(BaseScambusClient):
         Returns:
             ExportStream object with the new temporary stream details
         """
-        from .types import ViewFilter
         import json
+
+        from .types import ViewFilter
 
         # Build filter from query parameters
         filter_params = ViewFilter(
@@ -2842,9 +2863,7 @@ class ScambusClient(BaseScambusClient):
             data["identifier_type"] = identifier_type
             data["value"] = value
         else:
-            raise ValueError(
-                "Provide either identifier_id or both identifier_type and value"
-            )
+            raise ValueError("Provide either identifier_id or both identifier_type and value")
         if reason:
             data["reason"] = reason
 
@@ -2996,7 +3015,7 @@ class ScambusClient(BaseScambusClient):
         """
         import json
         import re
-        from urllib.parse import urlparse, parse_qs
+        from urllib.parse import parse_qs, urlparse
 
         identifier = identifier.strip()
         venmo_data: Dict[str, Any] = {"service": "venmo"}
@@ -3346,6 +3365,225 @@ class ScambusClient(BaseScambusClient):
             ```
         """
         self._request("DELETE", f"/cases/{case_id}")
+
+    # Queue Methods
+
+    def list_queues(self) -> List[Queue]:
+        """List queues visible to the authenticated user or automation."""
+        response = self._request("GET", "/queues")
+        return [Queue.from_dict(q) for q in response]
+
+    def create_queue(
+        self,
+        name: str,
+        description: Optional[str] = None,
+        filter_criteria: Optional[Dict[str, Any]] = None,
+        cadence_days: Optional[int] = None,
+        cooldown_hours: Optional[int] = None,
+        max_contacts_per_cluster: Optional[int] = None,
+        rotation_enabled: Optional[bool] = None,
+        priority_mode: Optional[str] = None,
+        auto_populate: Optional[bool] = None,
+        actor_cluster_id: Optional[str] = None,
+    ) -> Queue:
+        """Create a Postgres-backed queue with Redis stream notifications."""
+        data: Dict[str, Any] = {"name": name}
+        if description is not None:
+            data["description"] = description
+        if filter_criteria is not None:
+            data["filter_criteria"] = filter_criteria
+        if cadence_days is not None:
+            data["cadence_days"] = cadence_days
+        if cooldown_hours is not None:
+            data["cooldown_hours"] = cooldown_hours
+        if max_contacts_per_cluster is not None:
+            data["max_contacts_per_cluster"] = max_contacts_per_cluster
+        if rotation_enabled is not None:
+            data["rotation_enabled"] = rotation_enabled
+        if priority_mode is not None:
+            data["priority_mode"] = priority_mode
+        if auto_populate is not None:
+            data["auto_populate"] = auto_populate
+        if actor_cluster_id is not None:
+            data["actor_cluster_id"] = actor_cluster_id
+
+        response = self._request("POST", "/queues", json_data=data)
+        return Queue.from_dict(response)
+
+    def get_queue(self, queue_id: str) -> Queue:
+        """Get a queue by ID."""
+        response = self._request("GET", f"/queues/{queue_id}")
+        return Queue.from_dict(response)
+
+    def update_queue(self, queue_id: str, **updates: Any) -> Queue:
+        """Update queue fields."""
+        if not updates:
+            raise ScambusValidationError("At least one field must be provided for update")
+        response = self._request("PUT", f"/queues/{queue_id}", json_data=updates)
+        return Queue.from_dict(response)
+
+    def delete_queue(self, queue_id: str) -> None:
+        """Delete a queue and its items."""
+        self._request("DELETE", f"/queues/{queue_id}")
+
+    def get_queue_stats(self, queue_id: str) -> QueueStats:
+        """Get queue state counts."""
+        response = self._request("GET", f"/queues/{queue_id}/stats")
+        return QueueStats.from_dict(response)
+
+    def list_queue_items(
+        self,
+        queue_id: str,
+        state: Optional[str] = None,
+    ) -> List[QueueItem]:
+        """List queue items using the queue's claim ordering."""
+        params = {"state": state} if state else None
+        response = self._request("GET", f"/queues/{queue_id}/items", params=params)
+        return [QueueItem.from_dict(i) for i in response]
+
+    def read_queue_stream(
+        self,
+        queue_id: str,
+        cursor: Optional[str] = "0",
+        limit: Optional[int] = None,
+        block_ms: Optional[int] = None,
+    ) -> QueueStreamResponse:
+        """
+        Read queue lifecycle events from Redis.
+
+        Redis stream events wake bots; call ``claim_queue_item`` to claim the
+        actual work item from Postgres.
+        """
+        params: Dict[str, Any] = {}
+        if cursor is not None:
+            params["cursor"] = cursor
+        if limit is not None:
+            params["limit"] = limit
+        if block_ms is not None:
+            params["block_ms"] = block_ms
+        response = self._request("GET", f"/queues/{queue_id}/stream", params=params or None)
+        return QueueStreamResponse.from_dict(response)
+
+    def claim_queue_item(self, queue_id: str) -> Optional[QueueItem]:
+        """Claim the next available queue item, or return None when no work is available."""
+        try:
+            response = self._request("POST", f"/queues/{queue_id}/claim")
+        except ScambusNotFoundError:
+            return None
+        return QueueItem.from_dict(response)
+
+    def release_queue_item(self, queue_id: str, item_id: str) -> Dict[str, Any]:
+        """Release a claimed or in-progress queue item."""
+        return self._request("POST", f"/queues/{queue_id}/items/{item_id}/release")
+
+    def record_queue_contact(
+        self,
+        queue_id: str,
+        item_id: str,
+        contact_identifier_id: Optional[str] = None,
+        journal_entry_id: Optional[str] = None,
+        notes: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Record a contact attempt for a claimed queue item."""
+        data: Dict[str, Any] = {}
+        if contact_identifier_id is not None:
+            data["contact_identifier_id"] = contact_identifier_id
+        if journal_entry_id is not None:
+            data["journal_entry_id"] = journal_entry_id
+        if notes is not None:
+            data["notes"] = notes
+        return self._request(
+            "POST",
+            f"/queues/{queue_id}/items/{item_id}/contact",
+            json_data=data,
+        )
+
+    def complete_queue_item(
+        self,
+        queue_id: str,
+        item_id: str,
+        outcome: Optional[str] = None,
+        note: Optional[str] = None,
+        reason: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Mark a queue item complete."""
+        return self._queue_item_action(queue_id, item_id, "complete", reason, outcome, note)
+
+    def drop_queue_item(
+        self,
+        queue_id: str,
+        item_id: str,
+        reason: Optional[str] = None,
+        note: Optional[str] = None,
+        outcome: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Drop a queue item from active work while retaining audit history."""
+        return self._queue_item_action(queue_id, item_id, "drop", reason, outcome, note)
+
+    def move_queue_item(
+        self,
+        queue_id: str,
+        item_id: str,
+        target_queue_id: str,
+        reason: Optional[str] = None,
+        note: Optional[str] = None,
+        outcome: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Move a queue item to another queue."""
+        data = self._queue_action_payload(reason=reason, outcome=outcome, note=note)
+        data["target_queue_id"] = target_queue_id
+        return self._request("POST", f"/queues/{queue_id}/items/{item_id}/move", json_data=data)
+
+    def get_queue_item_history(self, queue_id: str, item_id: str) -> List[QueueContactLog]:
+        """Get queue item contact history."""
+        response = self._request("GET", f"/queues/{queue_id}/items/{item_id}/history")
+        return [QueueContactLog.from_dict(log) for log in response]
+
+    def get_queue_item_events(self, queue_id: str, item_id: str) -> List[QueueItemEvent]:
+        """Get queue item lifecycle events."""
+        response = self._request("GET", f"/queues/{queue_id}/items/{item_id}/events")
+        return [QueueItemEvent.from_dict(event) for event in response]
+
+    def get_queue_item_cluster_identifiers(
+        self,
+        queue_id: str,
+        item_id: str,
+        role: str = "target",
+    ) -> List[QueueClusterIdentifier]:
+        """Get identifiers in the target or actor cluster for a queue item."""
+        response = self._request(
+            "GET",
+            f"/queues/{queue_id}/items/{item_id}/cluster",
+            params={"role": role} if role else None,
+        )
+        return [QueueClusterIdentifier.from_dict(identifier) for identifier in response]
+
+    def _queue_item_action(
+        self,
+        queue_id: str,
+        item_id: str,
+        action: str,
+        reason: Optional[str],
+        outcome: Optional[str],
+        note: Optional[str],
+    ) -> Dict[str, Any]:
+        data = self._queue_action_payload(reason=reason, outcome=outcome, note=note)
+        return self._request("POST", f"/queues/{queue_id}/items/{item_id}/{action}", json_data=data)
+
+    @staticmethod
+    def _queue_action_payload(
+        reason: Optional[str] = None,
+        outcome: Optional[str] = None,
+        note: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        data: Dict[str, Any] = {}
+        if reason is not None:
+            data["reason"] = reason
+        if outcome is not None:
+            data["outcome"] = outcome
+        if note is not None:
+            data["note"] = note
+        return data
 
     # Automation Methods
 
@@ -3945,7 +4183,9 @@ class ScambusClient(BaseScambusClient):
             # Normalize response keys to snake_case for consistency.
             # The consumer poll endpoint returns snake_case, but we handle
             # both casings defensively in case the server format varies.
-            next_cursor = data.get("next_cursor") if "next_cursor" in data else data.get("nextCursor")
+            next_cursor = (
+                data.get("next_cursor") if "next_cursor" in data else data.get("nextCursor")
+            )
             has_more = data.get("has_more", data.get("hasMore", False))
             return {
                 "messages": data.get("messages", []),
@@ -5214,7 +5454,6 @@ class ScambusClient(BaseScambusClient):
         from .websocket_client import ScambusWebSocketClient
 
         # Extract authentication credentials
-        auth_header = None
         for key, value in self._auth_headers.items():
             if key == "X-API-Key":
                 # Parse API key format: "key_id:secret"
@@ -5714,8 +5953,7 @@ class ScambusClient(BaseScambusClient):
         )
         if response.get("url_references"):
             response["url_references"] = [
-                IdentifierURLReference.from_dict(r)
-                for r in response["url_references"]
+                IdentifierURLReference.from_dict(r) for r in response["url_references"]
             ]
         else:
             response["url_references"] = []
@@ -5849,9 +6087,7 @@ class ScambusClient(BaseScambusClient):
             data["strip_fragment"] = strip_fragment
         if is_active is not None:
             data["is_active"] = is_active
-        response = self._request(
-            "PUT", f"/admin/special-domain-rules/{rule_id}", json_data=data
-        )
+        response = self._request("PUT", f"/admin/special-domain-rules/{rule_id}", json_data=data)
         return SpecialDomainRule.from_dict(response)
 
     def delete_special_domain_rule(self, rule_id: str) -> None:

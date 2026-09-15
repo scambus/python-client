@@ -27,7 +27,7 @@ import uuid
 import requests
 import sseclient
 
-from scambus_client import ScambusClient, IdentifierLookup
+from scambus_client import IdentifierLookup, ScambusClient
 
 
 def main():
@@ -219,6 +219,7 @@ def main():
     except Exception as e:
         print(f"\nFATAL ERROR: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

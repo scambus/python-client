@@ -67,4 +67,4 @@ def print_detail(data, title=None):
 
 def print_json(data):
     """Print data as JSON to stdout."""
-    console_data.print_json(data=data)
+    console_data.print_json(data=data, highlight=False)

@@ -22,7 +22,7 @@ You will need:
 import os
 import time
 
-from scambus_client import ScambusClient, ScambusAPIError
+from scambus_client import ScambusAPIError, ScambusClient
 
 # --- Configuration ---
 # Set these via environment variables or replace with your values.
@@ -50,8 +50,8 @@ def basic_poll_example():
     # Fetch the first batch of messages (oldest first)
     result = client.consume_stream(
         CONSUMER_KEY,
-        cursor="0",     # Start from the beginning
-        order="asc",    # Oldest first
+        cursor="0",  # Start from the beginning
+        order="asc",  # Oldest first
         limit=100,
     )
 
@@ -181,17 +181,19 @@ def process_message(msg: dict):
         # Access triggering journal entry
         tje = msg.get("triggering_journal_entry")
         if tje:
-            print(f"    Triggered by: {tje.get('type', 'unknown')} at {tje.get('performed_at', 'N/A')}")
+            print(
+                f"    Triggered by: {tje.get('type', 'unknown')} at {tje.get('performed_at', 'N/A')}"
+            )
 
     else:
         # Journal entry stream message
-        print(
-            f"  Journal Entry: {msg.get('type', 'unknown')} — {msg.get('description', '')[:80]}"
-        )
+        print(f"  Journal Entry: {msg.get('type', 'unknown')} — {msg.get('description', '')[:80]}")
 
         # Access linked identifiers
         for ident in msg.get("identifiers", []):
-            print(f"    Identifier: {ident.get('type', 'unknown')} = {ident.get('display_value', 'N/A')}")
+            print(
+                f"    Identifier: {ident.get('type', 'unknown')} = {ident.get('display_value', 'N/A')}"
+            )
 
 
 # --- Cursor values reference ---

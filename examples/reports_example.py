@@ -11,6 +11,7 @@ This example demonstrates how to generate and download reports:
 
 import os
 import time
+
 from scambus_client import ScambusClient
 
 # Configuration

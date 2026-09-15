@@ -7,6 +7,7 @@ from typing import Any
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
+
 from scambus_client import ScambusClient
 
 from .config import get_api_key, get_api_url

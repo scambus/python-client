@@ -562,9 +562,8 @@ def query(
             import asyncio
             import time
 
-            from scambus_client.websocket_client import ScambusWebSocketClient
-
             from scambus_cli.config import get_api_url
+            from scambus_client.websocket_client import ScambusWebSocketClient
 
             print_info("\n==> Entering follow mode (press Ctrl+C to exit)")
             print_info("Creating stream for matching criteria...")

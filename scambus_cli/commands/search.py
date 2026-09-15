@@ -101,10 +101,9 @@ def identifiers(
 
         import asyncio
 
-        from scambus_client.websocket_client import ScambusWebSocketClient
-
         from scambus_cli.auth_device import DeviceAuthManager
         from scambus_cli.config import get_api_url
+        from scambus_client.websocket_client import ScambusWebSocketClient
 
         stream_id = None
 

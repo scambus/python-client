@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 import pytest_asyncio
+
 from scambus_client import (
     AsyncScambusClient,
     ScambusAPIError,

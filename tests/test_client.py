@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 
 import pytest
+
 from scambus_client import (
     ScambusAPIError,
     ScambusAuthenticationError,

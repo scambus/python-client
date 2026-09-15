@@ -26,6 +26,7 @@ import uuid
 
 import requests
 import sseclient
+
 from scambus_client import IdentifierLookup, ScambusClient
 
 

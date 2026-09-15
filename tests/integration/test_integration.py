@@ -12,6 +12,7 @@ import os
 from datetime import datetime, timezone
 
 import pytest
+
 from scambus_client import ScambusClient
 
 # Skip all integration tests if environment variables are not set

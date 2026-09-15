@@ -3,6 +3,7 @@
 import json
 
 import pytest
+
 from scambus_client import AsyncScambusClient
 from scambus_client._identifier_lookups import (
     deltachat_lookup,

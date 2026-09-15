@@ -1,7 +1,6 @@
 """Unit tests for queue CLI commands."""
 
 from click.testing import CliRunner
-
 from scambus_cli.cli import cli
 from scambus_cli.commands.queues import queues
 from scambus_client.models import Queue, QueueItem, QueueStreamMessage, QueueStreamResponse

@@ -148,9 +148,7 @@ class ExtractedIdentifier:
         occurrences = None
         raw_occurrences = data.get("occurrences")
         if raw_occurrences:
-            occurrences = [
-                ExtractedIdentifierOccurrence.from_dict(o) for o in raw_occurrences
-            ]
+            occurrences = [ExtractedIdentifierOccurrence.from_dict(o) for o in raw_occurrences]
 
         return cls(
             ref=data.get("ref", ""),
@@ -282,9 +280,11 @@ class ExternalIdentifierRecord:
             source=data.get("source", "manual"),
             raw_match=_get_value(data, "raw_match", "rawMatch"),
             link=data.get("link"),
-            created_at=Identifier._parse_datetime(
-                _get_value(data, "created_at", "createdAt")
-            ) if _get_value(data, "created_at", "createdAt") else None,
+            created_at=(
+                Identifier._parse_datetime(_get_value(data, "created_at", "createdAt"))
+                if _get_value(data, "created_at", "createdAt")
+                else None
+            ),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -583,8 +583,7 @@ class PhoneCallDetails:
             data["transcript_url"] = self.transcript_url
         if self.transcript:
             data["transcript"] = [
-                msg.to_dict() if hasattr(msg, "to_dict") else dict(msg)
-                for msg in self.transcript
+                msg.to_dict() if hasattr(msg, "to_dict") else dict(msg) for msg in self.transcript
             ]
         return data
 
@@ -878,16 +877,12 @@ class ConversationMessage:
 
         read_timestamp = None
         if data.get("read_timestamp"):
-            read_timestamp = datetime.fromisoformat(
-                data["read_timestamp"].replace("Z", "+00:00")
-            )
+            read_timestamp = datetime.fromisoformat(data["read_timestamp"].replace("Z", "+00:00"))
 
         return cls(
             index=data.get("index", 0),
             message_id=data.get("message_id", ""),
-            timestamp=datetime.fromisoformat(
-                data.get("timestamp", "").replace("Z", "+00:00")
-            ),
+            timestamp=datetime.fromisoformat(data.get("timestamp", "").replace("Z", "+00:00")),
             body=data.get("body", ""),
             is_outgoing=data.get("is_outgoing", False),
             message_type=data.get("message_type"),
@@ -1054,9 +1049,7 @@ class ConversationContinuationDetails:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ConversationContinuationDetails":
         """Create from API response dictionary."""
-        messages = [
-            ConversationMessage.from_dict(m) for m in data.get("messages", [])
-        ]
+        messages = [ConversationMessage.from_dict(m) for m in data.get("messages", [])]
         return cls(
             messages=messages,
             reason=data.get("reason"),
@@ -2031,7 +2024,9 @@ class JournalEntry:
         # Parse extracted identifiers if present (from create response)
         raw_extracted = data.get("extracted_identifiers")
         if raw_extracted:
-            entry.extracted_identifiers = [ExtractedIdentifier.from_dict(ei) for ei in raw_extracted]
+            entry.extracted_identifiers = [
+                ExtractedIdentifier.from_dict(ei) for ei in raw_extracted
+            ]
 
         # Parse external identifiers if present
         raw_external = _get_value(data, "external_identifiers", "externalIdentifiers")
@@ -3336,11 +3331,7 @@ class Tag:
     def from_dict(cls, data: Dict[str, Any]) -> "Tag":
         """Create from API response dictionary."""
         tag_values_data = data.get("tag_values")
-        tag_values = (
-            [TagValue.from_dict(tv) for tv in tag_values_data]
-            if tag_values_data
-            else None
-        )
+        tag_values = [TagValue.from_dict(tv) for tv in tag_values_data] if tag_values_data else None
         return cls(
             id=data["id"],
             title=data["title"],

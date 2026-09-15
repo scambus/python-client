@@ -7,21 +7,15 @@ import random
 import warnings
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Optional
 
-from .config import get_api_url, get_api_token, get_api_key_id, get_api_key_secret
+from .config import get_api_key_id, get_api_key_secret, get_api_token, get_api_url
 from .exceptions import (
     ScambusAPIError,
     ScambusAuthenticationError,
     ScambusNotFoundError,
     ScambusServerError,
     ScambusValidationError,
-)
-from ._retry import (
-    RETRY_BASE_DELAY,
-    RETRY_MAX_BACKOFF,
-    RETRY_THROTTLE_BASE,
-    RETRYABLE_STATUS_CODES,
 )
 
 logger = logging.getLogger(__name__)
@@ -102,7 +96,7 @@ class BaseScambusClient:
         Implements the "Full Jitter" algorithm recommended by AWS:
             sleep = random(0, min(max_backoff, base * 2^attempt))
         """
-        ceiling = min(max_backoff, base * (2 ** attempt))
+        ceiling = min(max_backoff, base * (2**attempt))
         return random.uniform(0, ceiling)
 
     @staticmethod
@@ -141,21 +135,31 @@ class BaseScambusClient:
 
         if response.status_code == 401:
             raise ScambusAuthenticationError(
-                error_message, response.status_code, error_data,
+                error_message,
+                response.status_code,
+                error_data,
             )
         elif response.status_code == 400:
             raise ScambusValidationError(
-                error_message, response.status_code, error_data,
+                error_message,
+                response.status_code,
+                error_data,
             )
         elif response.status_code == 404:
             raise ScambusNotFoundError(
-                error_message, response.status_code, error_data,
+                error_message,
+                response.status_code,
+                error_data,
             )
         elif response.status_code >= 500:
             raise ScambusServerError(
-                error_message, response.status_code, error_data,
+                error_message,
+                response.status_code,
+                error_data,
             )
         else:
             raise ScambusAPIError(
-                error_message, response.status_code, error_data,
+                error_message,
+                response.status_code,
+                error_data,
             )

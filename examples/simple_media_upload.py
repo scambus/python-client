@@ -9,7 +9,8 @@ with media using the new 'media' parameter.
 import os
 import sys
 from pathlib import Path
-from scambus_client import ScambusClient, IdentifierLookup, DetectionDetails
+
+from scambus_client import DetectionDetails, IdentifierLookup, ScambusClient
 
 # Configuration
 API_URL = os.getenv("SCAMBUS_API_URL", "http://localhost:8080/api")
@@ -77,7 +78,7 @@ def example_multiple_media():
         )
 
         print(f"✓ Created detection: {entry.id}")
-        print(f"  - Attached 2 media files")
+        print("  - Attached 2 media files")
     finally:
         # Clean up temp files
         os.unlink(file1)
@@ -99,7 +100,7 @@ def example_no_media():
     )
 
     print(f"✓ Created detection: {entry.id}")
-    print(f"  - No media attached")
+    print("  - No media attached")
 
 
 def main():

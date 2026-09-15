@@ -39,7 +39,7 @@ async def main():
 
     # Handler for stats updates
     async def handle_stats(data):
-        print(f"\n📊 Stats Update:")
+        print("\n📊 Stats Update:")
         print(f"   {data}")
 
     # Wildcard handler for notifications channel (receives all events)

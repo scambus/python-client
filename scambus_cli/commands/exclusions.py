@@ -113,9 +113,7 @@ def create(ctx, identifier_id, identifier_type, value, reason, output_json):
                 }
             )
         else:
-            print_success(
-                f"Excluded {exclusion.identifier_type}: {exclusion.display_value}"
-            )
+            print_success(f"Excluded {exclusion.identifier_type}: {exclusion.display_value}")
 
     except Exception as e:
         print_error(f"Failed to create exclusion: {e}")

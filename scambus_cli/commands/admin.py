@@ -58,19 +58,21 @@ def list_rules(ctx, category, active, output_json):
             return
 
         if output_json:
-            print_json([
-                {
-                    "id": r.id,
-                    "domain": r.domain,
-                    "category": r.category,
-                    "path_depth": r.path_depth,
-                    "strip_query": r.strip_query,
-                    "strip_fragment": r.strip_fragment,
-                    "is_active": r.is_active,
-                    "is_default": r.is_default,
-                }
-                for r in rules
-            ])
+            print_json(
+                [
+                    {
+                        "id": r.id,
+                        "domain": r.domain,
+                        "category": r.category,
+                        "path_depth": r.path_depth,
+                        "strip_query": r.strip_query,
+                        "strip_fragment": r.strip_fragment,
+                        "is_active": r.is_active,
+                        "is_default": r.is_default,
+                    }
+                    for r in rules
+                ]
+            )
         else:
             table_data = [
                 {
@@ -123,23 +125,28 @@ def create_rule(ctx, domain, category, path_depth, no_strip_query, no_strip_frag
         )
 
         if output_json:
-            print_json({
-                "id": rule.id,
-                "domain": rule.domain,
-                "category": rule.category,
-                "path_depth": rule.path_depth,
-                "is_active": rule.is_active,
-            })
+            print_json(
+                {
+                    "id": rule.id,
+                    "domain": rule.domain,
+                    "category": rule.category,
+                    "path_depth": rule.path_depth,
+                    "is_active": rule.is_active,
+                }
+            )
         else:
             print_success(f"Rule created for: {rule.domain}")
-            print_detail({
-                "ID": rule.id,
-                "Domain": rule.domain,
-                "Category": rule.category,
-                "Path Depth": str(rule.path_depth),
-                "Strip Query": "Yes" if rule.strip_query else "No",
-                "Strip Fragment": "Yes" if rule.strip_fragment else "No",
-            }, title="Created Rule")
+            print_detail(
+                {
+                    "ID": rule.id,
+                    "Domain": rule.domain,
+                    "Category": rule.category,
+                    "Path Depth": str(rule.path_depth),
+                    "Strip Query": "Yes" if rule.strip_query else "No",
+                    "Strip Fragment": "Yes" if rule.strip_fragment else "No",
+                },
+                title="Created Rule",
+            )
 
     except Exception as e:
         print_error(f"Failed to create rule: {e}")
@@ -160,7 +167,9 @@ def create_rule(ctx, domain, category, path_depth, no_strip_query, no_strip_frag
 @click.option("--active/--inactive", "is_active", default=None, help="Active status")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 @click.pass_context
-def update_rule(ctx, rule_id, domain, category, path_depth, strip_query, strip_fragment, is_active, output_json):
+def update_rule(
+    ctx, rule_id, domain, category, path_depth, strip_query, strip_fragment, is_active, output_json
+):
     """Update a special domain rule.
 
     Examples:
@@ -181,12 +190,14 @@ def update_rule(ctx, rule_id, domain, category, path_depth, strip_query, strip_f
         )
 
         if output_json:
-            print_json({
-                "id": rule.id,
-                "domain": rule.domain,
-                "category": rule.category,
-                "is_active": rule.is_active,
-            })
+            print_json(
+                {
+                    "id": rule.id,
+                    "domain": rule.domain,
+                    "category": rule.category,
+                    "is_active": rule.is_active,
+                }
+            )
         else:
             print_success(f"Rule updated: {rule.domain}")
 
@@ -231,7 +242,9 @@ def url_consolidation():
 
 @url_consolidation.command("start")
 @click.option("--wait", is_flag=True, help="Wait for consolidation to complete")
-@click.option("--poll-interval", type=float, default=5.0, help="Polling interval in seconds (with --wait)")
+@click.option(
+    "--poll-interval", type=float, default=5.0, help="Polling interval in seconds (with --wait)"
+)
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 @click.pass_context
 def start_consolidation(ctx, wait, poll_interval, output_json):
@@ -248,10 +261,12 @@ def start_consolidation(ctx, wait, poll_interval, output_json):
 
         if not wait:
             if output_json:
-                print_json({
-                    "status": status.status,
-                    "total_groups": status.total_groups,
-                })
+                print_json(
+                    {
+                        "status": status.status,
+                        "total_groups": status.total_groups,
+                    }
+                )
             else:
                 print_success(f"Consolidation started (status: {status.status})")
                 if status.total_groups:
@@ -263,7 +278,11 @@ def start_consolidation(ctx, wait, poll_interval, output_json):
         print_info("Waiting for consolidation to complete...")
         while status.is_running:
             if status.total_groups and status.processed_groups is not None:
-                pct = (status.processed_groups / status.total_groups * 100) if status.total_groups > 0 else 0
+                pct = (
+                    (status.processed_groups / status.total_groups * 100)
+                    if status.total_groups > 0
+                    else 0
+                )
                 print_info(
                     f"Progress: {status.processed_groups}/{status.total_groups} "
                     f"({pct:.0f}%) - merged: {status.merged}, skipped: {status.skipped}"
@@ -272,23 +291,28 @@ def start_consolidation(ctx, wait, poll_interval, output_json):
             status = client.get_url_consolidation_status()
 
         if output_json:
-            print_json({
-                "status": status.status,
-                "total_groups": status.total_groups,
-                "processed_groups": status.processed_groups,
-                "merged": status.merged,
-                "skipped": status.skipped,
-                "errors": status.errors,
-            })
+            print_json(
+                {
+                    "status": status.status,
+                    "total_groups": status.total_groups,
+                    "processed_groups": status.processed_groups,
+                    "merged": status.merged,
+                    "skipped": status.skipped,
+                    "errors": status.errors,
+                }
+            )
         elif status.is_completed:
             print_success("Consolidation completed")
-            print_detail({
-                "Groups": str(status.total_groups or 0),
-                "Processed": str(status.processed_groups or 0),
-                "Merged": str(status.merged or 0),
-                "Skipped": str(status.skipped or 0),
-                "Errors": str(status.errors or 0),
-            }, title="Results")
+            print_detail(
+                {
+                    "Groups": str(status.total_groups or 0),
+                    "Processed": str(status.processed_groups or 0),
+                    "Merged": str(status.merged or 0),
+                    "Skipped": str(status.skipped or 0),
+                    "Errors": str(status.errors or 0),
+                },
+                title="Results",
+            )
         elif status.is_failed:
             print_error(f"Consolidation failed: {status.last_error}")
         else:
@@ -314,17 +338,19 @@ def consolidation_status(ctx, output_json):
         status = client.get_url_consolidation_status()
 
         if output_json:
-            print_json({
-                "status": status.status,
-                "started_at": status.started_at,
-                "completed_at": status.completed_at,
-                "total_groups": status.total_groups,
-                "processed_groups": status.processed_groups,
-                "merged": status.merged,
-                "skipped": status.skipped,
-                "errors": status.errors,
-                "last_error": status.last_error,
-            })
+            print_json(
+                {
+                    "status": status.status,
+                    "started_at": status.started_at,
+                    "completed_at": status.completed_at,
+                    "total_groups": status.total_groups,
+                    "processed_groups": status.processed_groups,
+                    "merged": status.merged,
+                    "skipped": status.skipped,
+                    "errors": status.errors,
+                    "last_error": status.last_error,
+                }
+            )
         else:
             details = {"Status": status.status}
             if status.started_at:

@@ -6,6 +6,7 @@ Scambus Python client library.
 """
 
 import os
+
 from scambus_client import ScambusClient
 
 # Initialize the client
@@ -58,7 +59,7 @@ def get_case_details(case_id: str):
     """Get detailed information about a specific case."""
     case = client.get_case(case_id)
 
-    print(f"\n✓ Case Details:")
+    print("\n✓ Case Details:")
     print(f"  ID: {case.id}")
     print(f"  Title: {case.title}")
     print(f"  Description: {case.description}")

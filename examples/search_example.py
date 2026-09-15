@@ -9,6 +9,7 @@ This example demonstrates the search functionality:
 """
 
 import os
+
 from scambus_client import ScambusClient
 
 # Configuration

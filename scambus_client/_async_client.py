@@ -186,8 +186,13 @@ class AsyncScambusClient(BaseScambusClient):
                         logger.warning(
                             "Retryable HTTP %d on %s %s (attempt %d/%d, "
                             "backoff %.1fs, %.0fs remaining)",
-                            response.status_code, method, endpoint,
-                            attempt, self.max_retries, delay, remaining,
+                            response.status_code,
+                            method,
+                            endpoint,
+                            attempt,
+                            self.max_retries,
+                            delay,
+                            remaining,
                         )
                         await asyncio.sleep(delay)
                         continue
@@ -212,8 +217,13 @@ class AsyncScambusClient(BaseScambusClient):
                 logger.warning(
                     "Connection error on %s %s (attempt %d/%d, "
                     "backoff %.1fs, %.0fs remaining): %s",
-                    method, endpoint, attempt, self.max_retries,
-                    delay, remaining, exc,
+                    method,
+                    endpoint,
+                    attempt,
+                    self.max_retries,
+                    delay,
+                    remaining,
+                    exc,
                 )
                 await asyncio.sleep(delay)
 
@@ -262,6 +272,7 @@ class AsyncScambusClient(BaseScambusClient):
             data["journalEntryId"] = journal_entry_id
         if metadata:
             import json
+
             data["metadata"] = json.dumps(metadata)
 
         files = {"file": (filename, buffer)}
@@ -374,8 +385,7 @@ class AsyncScambusClient(BaseScambusClient):
         extracted_identifiers = None
         if "extracted_identifiers" in response:
             extracted_identifiers = [
-                ExtractedIdentifier.from_dict(ei)
-                for ei in response["extracted_identifiers"]
+                ExtractedIdentifier.from_dict(ei) for ei in response["extracted_identifiers"]
             ]
 
         entry_id = response["id"]
@@ -1837,6 +1847,7 @@ class AsyncScambusClient(BaseScambusClient):
     def build_stream_filter(*args, **kwargs) -> str:
         """Build a JSONPath filter expression for stream filtering. Delegates to sync client."""
         from .client import ScambusClient
+
         return ScambusClient.build_stream_filter(*args, **kwargs)
 
     async def create_stream(
@@ -2000,7 +2011,9 @@ class AsyncScambusClient(BaseScambusClient):
 
             data = response.json()
 
-            next_cursor = data.get("next_cursor") if "next_cursor" in data else data.get("nextCursor")
+            next_cursor = (
+                data.get("next_cursor") if "next_cursor" in data else data.get("nextCursor")
+            )
             has_more = data.get("has_more", data.get("hasMore", False))
             return {
                 "messages": data.get("messages", []),
@@ -2051,7 +2064,9 @@ class AsyncScambusClient(BaseScambusClient):
         if not clear_stream:
             params["clear_stream"] = "false"
 
-        response = await self._request("POST", f"/export-streams/{stream_id}/recover", params=params)
+        response = await self._request(
+            "POST", f"/export-streams/{stream_id}/recover", params=params
+        )
         return response
 
     async def get_recovery_status(
@@ -2164,7 +2179,9 @@ class AsyncScambusClient(BaseScambusClient):
 
     async def rename_file_export(self, export_id: str, name: str) -> Dict[str, Any]:
         """Rename a file export."""
-        return await self._request("PATCH", f"/file-exports/{export_id}/rename", json_data={"name": name})
+        return await self._request(
+            "PATCH", f"/file-exports/{export_id}/rename", json_data={"name": name}
+        )
 
     async def delete_file_export(self, export_id: str) -> None:
         """Delete a file export."""
@@ -2195,7 +2212,9 @@ class AsyncScambusClient(BaseScambusClient):
 
     async def update_case_comment(self, comment_id: str, content: str) -> CaseComment:
         """Update a case comment."""
-        response = await self._request("PUT", f"/comments/{comment_id}", json_data={"content": content})
+        response = await self._request(
+            "PUT", f"/comments/{comment_id}", json_data={"content": content}
+        )
         return CaseComment.from_dict(response)
 
     async def delete_case_comment(self, comment_id: str) -> None:
@@ -2783,8 +2802,7 @@ class AsyncScambusClient(BaseScambusClient):
         )
         if response.get("url_references"):
             response["url_references"] = [
-                IdentifierURLReference.from_dict(r)
-                for r in response["url_references"]
+                IdentifierURLReference.from_dict(r) for r in response["url_references"]
             ]
         else:
             response["url_references"] = []

@@ -8,7 +8,8 @@ for various platforms (SMS, WhatsApp, Telegram, Signal, etc.).
 
 import os
 from datetime import datetime, timedelta, timezone
-from scambus_client import ScambusClient, IdentifierLookup, TagLookup
+
+from scambus_client import IdentifierLookup, ScambusClient, TagLookup
 
 # Configuration
 API_URL = os.getenv("SCAMBUS_API_URL", "http://localhost:8080/api")
@@ -40,8 +41,8 @@ def main():
     )
 
     print(f"✓ Created SMS conversation entry: {entry.id}")
-    print(f"  Platform: SMS")
-    print(f"  Duration: 30 minutes")
+    print("  Platform: SMS")
+    print("  Duration: 30 minutes")
     print(f"  Identifiers: {len(entry.identifiers)}")
 
     # Example 2: WhatsApp conversation
@@ -59,8 +60,8 @@ def main():
     )
 
     print(f"✓ Created WhatsApp conversation entry: {entry.id}")
-    print(f"  Platform: WhatsApp")
-    print(f"  Duration: 2 hours")
+    print("  Platform: WhatsApp")
+    print("  Duration: 2 hours")
     print(f"  Identifiers: {len(entry.identifiers)}")
 
     # Example 3: Telegram conversation
@@ -82,8 +83,8 @@ def main():
     )
 
     print(f"✓ Created Telegram conversation entry: {entry.id}")
-    print(f"  Platform: Telegram")
-    print(f"  Duration: 3 hours")
+    print("  Platform: Telegram")
+    print("  Duration: 3 hours")
     print(f"  Identifiers: {len(entry.identifiers)}")
 
     # Example 4: Signal conversation
@@ -101,8 +102,8 @@ def main():
     )
 
     print(f"✓ Created Signal conversation entry: {entry.id}")
-    print(f"  Platform: Signal")
-    print(f"  Duration: 1 hour 15 minutes")
+    print("  Platform: Signal")
+    print("  Duration: 1 hour 15 minutes")
     print(f"  Identifiers: {len(entry.identifiers)}")
 
     print("\n✓ All text conversation entries created successfully!")

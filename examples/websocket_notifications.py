@@ -32,7 +32,7 @@ async def main():
     async def handle_notification(notification):
         """Handle incoming notification."""
         print("\n" + "=" * 80)
-        print(f"📬 New Notification")
+        print("📬 New Notification")
         print("=" * 80)
         print(f"Type: {notification.get('type', 'N/A')}")
         print(f"Title: {notification.get('title', 'N/A')}")

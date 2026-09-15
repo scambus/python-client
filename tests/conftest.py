@@ -3,7 +3,6 @@
 from unittest.mock import Mock
 
 import pytest
-
 from scambus_client import ScambusClient
 
 

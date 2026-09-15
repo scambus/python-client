@@ -7,7 +7,6 @@ from typing import Any
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
-
 from scambus_client import ScambusClient
 
 from .config import get_api_key, get_api_url
@@ -33,7 +32,11 @@ def _json_response(data: Any) -> list[TextContent]:
     if hasattr(data, "__dict__") and not isinstance(data, dict):
         text = json.dumps(data.__dict__, default=str, indent=2)
     elif isinstance(data, list) and data and hasattr(data[0], "__dict__"):
-        text = json.dumps([item.__dict__ if hasattr(item, "__dict__") else item for item in data], default=str, indent=2)
+        text = json.dumps(
+            [item.__dict__ if hasattr(item, "__dict__") else item for item in data],
+            default=str,
+            indent=2,
+        )
     else:
         text = json.dumps(data, default=str, indent=2)
     return [TextContent(type="text", text=text)]
@@ -56,23 +59,59 @@ TOOLS = [
         inputSchema={
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "Search query (matches redacted display values and enriched details)"},
-                "types": {"type": "array", "items": {"type": "string"}, "description": "Filter by identifier types: phone, email, bank_account, crypto_wallet, social_media, payment_token, url, company"},
-                "tags": {"type": "array", "items": {"type": "string"}, "description": "Filter by tag names"},
-                "min_confidence": {"type": "number", "description": "Minimum confidence score (0.0-1.0)"},
-                "max_confidence": {"type": "number", "description": "Maximum confidence score (0.0-1.0)"},
+                "query": {
+                    "type": "string",
+                    "description": "Search query (matches redacted display values and enriched details)",
+                },
+                "types": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Filter by identifier types: phone, email, bank_account, crypto_wallet, social_media, payment_token, url, company",
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Filter by tag names",
+                },
+                "min_confidence": {
+                    "type": "number",
+                    "description": "Minimum confidence score (0.0-1.0)",
+                },
+                "max_confidence": {
+                    "type": "number",
+                    "description": "Maximum confidence score (0.0-1.0)",
+                },
                 "country": {"type": "string", "description": "Filter by country code"},
                 "region": {"type": "string", "description": "Filter by geographic region"},
                 "area_code": {"type": "string", "description": "Filter by phone area code"},
                 "institution": {"type": "string", "description": "Filter by bank institution name"},
                 "platform": {"type": "string", "description": "Filter by social media platform"},
-                "service": {"type": "string", "description": "Filter by payment service (zelle, cashapp, venmo, etc.)"},
-                "domain_category": {"type": "string", "description": "Filter by URL domain category"},
+                "service": {
+                    "type": "string",
+                    "description": "Filter by payment service (zelle, cashapp, venmo, etc.)",
+                },
+                "domain_category": {
+                    "type": "string",
+                    "description": "Filter by URL domain category",
+                },
                 "is_ours": {"type": "boolean", "description": "Filter to our own identifiers only"},
-                "created_after": {"type": "string", "description": "Filter identifiers created after this ISO date"},
-                "created_before": {"type": "string", "description": "Filter identifiers created before this ISO date"},
-                "limit": {"type": "integer", "description": "Max results (1-500, default 50)", "default": 50},
-                "cursor": {"type": "string", "description": "Pagination cursor from previous response"},
+                "created_after": {
+                    "type": "string",
+                    "description": "Filter identifiers created after this ISO date",
+                },
+                "created_before": {
+                    "type": "string",
+                    "description": "Filter identifiers created before this ISO date",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max results (1-500, default 50)",
+                    "default": 50,
+                },
+                "cursor": {
+                    "type": "string",
+                    "description": "Pagination cursor from previous response",
+                },
             },
         },
     ),
@@ -87,15 +126,44 @@ TOOLS = [
         inputSchema={
             "type": "object",
             "properties": {
-                "search_query": {"type": "string", "description": "Full-text search in entry descriptions"},
-                "entry_type": {"type": "string", "description": "Filter by type: phone_call, email, text_conversation, scam_report, detection, note, import, export, action, analysis, activity_complete"},
-                "tags": {"type": "array", "items": {"type": "string"}, "description": "Filter by tag names"},
-                "min_confidence": {"type": "number", "description": "Minimum confidence score (0.0-1.0)"},
-                "max_confidence": {"type": "number", "description": "Maximum confidence score (0.0-1.0)"},
-                "performed_after": {"type": "string", "description": "Filter entries performed after this ISO date"},
-                "performed_before": {"type": "string", "description": "Filter entries performed before this ISO date"},
-                "include_identifiers": {"type": "boolean", "description": "Include linked identifiers in response (default false)", "default": False},
-                "cursor": {"type": "string", "description": "Pagination cursor from previous response"},
+                "search_query": {
+                    "type": "string",
+                    "description": "Full-text search in entry descriptions",
+                },
+                "entry_type": {
+                    "type": "string",
+                    "description": "Filter by type: phone_call, email, text_conversation, scam_report, detection, note, import, export, action, analysis, activity_complete",
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Filter by tag names",
+                },
+                "min_confidence": {
+                    "type": "number",
+                    "description": "Minimum confidence score (0.0-1.0)",
+                },
+                "max_confidence": {
+                    "type": "number",
+                    "description": "Maximum confidence score (0.0-1.0)",
+                },
+                "performed_after": {
+                    "type": "string",
+                    "description": "Filter entries performed after this ISO date",
+                },
+                "performed_before": {
+                    "type": "string",
+                    "description": "Filter entries performed before this ISO date",
+                },
+                "include_identifiers": {
+                    "type": "boolean",
+                    "description": "Include linked identifiers in response (default false)",
+                    "default": False,
+                },
+                "cursor": {
+                    "type": "string",
+                    "description": "Pagination cursor from previous response",
+                },
             },
         },
     ),
@@ -108,9 +176,19 @@ TOOLS = [
         inputSchema={
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "Search query for case titles/descriptions"},
-                "status": {"type": "string", "description": "Filter by status: open, in_progress, closed, archived"},
-                "limit": {"type": "integer", "description": "Max results (default 50)", "default": 50},
+                "query": {
+                    "type": "string",
+                    "description": "Search query for case titles/descriptions",
+                },
+                "status": {
+                    "type": "string",
+                    "description": "Filter by status: open, in_progress, closed, archived",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max results (default 50)",
+                    "default": 50,
+                },
             },
         },
     ),
@@ -167,9 +245,20 @@ TOOLS = [
         inputSchema={
             "type": "object",
             "properties": {
-                "identifier_id": {"type": "string", "description": "UUID of the identifier to get the network for"},
-                "depth": {"type": "integer", "description": "Graph traversal depth (1-5, default 2)", "default": 2},
-                "max_nodes": {"type": "integer", "description": "Maximum number of nodes to return (default 50)", "default": 50},
+                "identifier_id": {
+                    "type": "string",
+                    "description": "UUID of the identifier to get the network for",
+                },
+                "depth": {
+                    "type": "integer",
+                    "description": "Graph traversal depth (1-5, default 2)",
+                    "default": 2,
+                },
+                "max_nodes": {
+                    "type": "integer",
+                    "description": "Maximum number of nodes to return (default 50)",
+                    "default": 50,
+                },
             },
             "required": ["identifier_id"],
         },
@@ -185,7 +274,11 @@ TOOLS = [
             "properties": {
                 "identifier_id": {"type": "string", "description": "UUID of the identifier"},
                 "page": {"type": "integer", "description": "Page number (default 1)", "default": 1},
-                "page_size": {"type": "integer", "description": "Results per page (1-100, default 25)", "default": 25},
+                "page_size": {
+                    "type": "integer",
+                    "description": "Results per page (1-100, default 25)",
+                    "default": 25,
+                },
             },
             "required": ["identifier_id"],
         },
@@ -417,7 +510,9 @@ def _handle_get_case(client: ScambusClient, args: dict[str, Any]) -> list[TextCo
     return _json_response(result)
 
 
-def _handle_get_identifier_network(client: ScambusClient, args: dict[str, Any]) -> list[TextContent]:
+def _handle_get_identifier_network(
+    client: ScambusClient, args: dict[str, Any]
+) -> list[TextContent]:
     identifier_id = args["identifier_id"]
     depth = args.get("depth", 2)
     max_nodes = args.get("max_nodes", 50)
@@ -430,7 +525,9 @@ def _handle_get_identifier_network(client: ScambusClient, args: dict[str, Any]) 
     return [TextContent(type="text", text=json.dumps(response.json(), default=str, indent=2))]
 
 
-def _handle_get_identifier_journal_entries(client: ScambusClient, args: dict[str, Any]) -> list[TextContent]:
+def _handle_get_identifier_journal_entries(
+    client: ScambusClient, args: dict[str, Any]
+) -> list[TextContent]:
     identifier_id = args["identifier_id"]
     page = args.get("page", 1)
     page_size = args.get("page_size", 25)
@@ -453,7 +550,9 @@ def _handle_get_filter_options(client: ScambusClient) -> list[TextContent]:
     return [TextContent(type="text", text=json.dumps(response.json(), default=str, indent=2))]
 
 
-def _handle_get_confidence_history(client: ScambusClient, args: dict[str, Any]) -> list[TextContent]:
+def _handle_get_confidence_history(
+    client: ScambusClient, args: dict[str, Any]
+) -> list[TextContent]:
     identifier_id = args["identifier_id"]
     response = client.session.get(f"{client.api_url}/confidence/identifiers/{identifier_id}")
     response.raise_for_status()
@@ -474,10 +573,7 @@ def _handle_get_journal_entry_identifier_summary(
             {
                 "type": tc.type,
                 "count": tc.count,
-                "by_subtype": [
-                    {"subtype": sc.subtype, "count": sc.count}
-                    for sc in tc.by_subtype
-                ],
+                "by_subtype": [{"subtype": sc.subtype, "count": sc.count} for sc in tc.by_subtype],
             }
             for tc in summary.by_type
         ],

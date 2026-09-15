@@ -14,7 +14,8 @@ Run with: python scripts/test_is_test_stream_filtering.py
 import sys
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from typing import Any, Dict, List
 
 from scambus_client import ScambusClient

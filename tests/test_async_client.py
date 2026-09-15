@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 import pytest_asyncio
-
 from scambus_client import (
     AsyncScambusClient,
     ScambusAPIError,
@@ -468,8 +467,6 @@ class TestAsyncContextManager:
     @pytest.mark.asyncio
     async def test_async_context_manager(self, mock_api_url, mock_api_key):
         """Test that AsyncScambusClient works as an async context manager."""
-        async with AsyncScambusClient(
-            api_url=mock_api_url, api_token=mock_api_key
-        ) as client:
+        async with AsyncScambusClient(api_url=mock_api_url, api_token=mock_api_key) as client:
             assert client is not None
             assert client.api_url == f"{mock_api_url}/api"

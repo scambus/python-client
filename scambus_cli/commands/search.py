@@ -48,8 +48,20 @@ def search():
 )
 @click.pass_context
 def identifiers(
-    ctx, query, identifier_type, limit, min_confidence, follow, output_json,
-    cursor, status, tags, created_after, created_before, is_ours, filter_json,
+    ctx,
+    query,
+    identifier_type,
+    limit,
+    min_confidence,
+    follow,
+    output_json,
+    cursor,
+    status,
+    tags,
+    created_after,
+    created_before,
+    is_ours,
+    filter_json,
 ):
     """Search for identifiers or follow new ones in real-time.
 
@@ -88,9 +100,11 @@ def identifiers(
             sys.exit(1)
 
         import asyncio
+
         from scambus_client.websocket_client import ScambusWebSocketClient
-        from scambus_cli.config import get_api_url
+
         from scambus_cli.auth_device import DeviceAuthManager
+        from scambus_cli.config import get_api_url
 
         stream_id = None
 
@@ -106,7 +120,7 @@ def identifiers(
             stream_id = stream.id
 
             print_info(f"Temporary stream created: {stream_id}")
-            print_info(f"Stream will be cleaned up after 1 hour of inactivity")
+            print_info("Stream will be cleaned up after 1 hour of inactivity")
             print_info(f"Watching for new {identifier_type} identifiers (Ctrl+C to stop)...\n")
 
             # Get API URL and authentication
@@ -168,7 +182,9 @@ def identifiers(
 
     # Search mode: search existing identifiers
     if not query and not filter_json and not identifier_type and not status and not tags:
-        print_error("--query, --type, --status, --tag, or --filter-json is required when not using --follow")
+        print_error(
+            "--query, --type, --status, --tag, or --filter-json is required when not using --follow"
+        )
         sys.exit(1)
 
     try:
@@ -187,13 +203,13 @@ def identifiers(
         types = [identifier_type] if identifier_type else None
 
         # Build kwargs
-        kwargs = dict(
-            query=query,
-            types=types,
-            limit=limit,
-            cursor=cursor,
-            filter_criteria=fc,
-        )
+        kwargs = {
+            "query": query,
+            "types": types,
+            "limit": limit,
+            "cursor": cursor,
+            "filter_criteria": fc,
+        }
         if min_confidence > 0.0:
             kwargs["min_confidence"] = min_confidence
         if status:

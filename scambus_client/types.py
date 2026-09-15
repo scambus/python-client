@@ -3,7 +3,7 @@
 These types provide a typed interface for SDK operations, similar to AWS CDK.
 """
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
 
 

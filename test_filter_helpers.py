@@ -4,8 +4,8 @@ Test script for identifier type filter helpers.
 """
 
 from scambus_client import (
-    build_identifier_type_filter,
     build_combined_filter,
+    build_identifier_type_filter,
 )
 
 
@@ -46,7 +46,7 @@ def test_build_identifier_type_filter():
     # Test invalid type
     try:
         build_identifier_type_filter("invalid_type")
-        assert False, "Should have raised ValueError"
+        raise AssertionError("Should have raised ValueError")
     except ValueError as e:
         assert "Invalid identifier type" in str(e)
         print(f"  ✓ Invalid type rejected: {e}")
@@ -101,12 +101,12 @@ def test_build_combined_filter():
     # Test no parameters (should return None)
     result = build_combined_filter()
     assert result is None, f"Expected None, Got: {result}"
-    print(f"  ✓ No parameters returns None")
+    print("  ✓ No parameters returns None")
 
     # Test invalid confidence range
     try:
         build_combined_filter(min_confidence=1.5)
-        assert False, "Should have raised ValueError"
+        raise AssertionError("Should have raised ValueError")
     except ValueError as e:
         assert "must be between 0 and 1" in str(e)
         print(f"  ✓ Invalid confidence rejected: {e}")

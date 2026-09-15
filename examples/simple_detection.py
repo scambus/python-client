@@ -8,12 +8,12 @@ identifiers that fail validation.
 """
 
 import os
+
 from scambus_client import (
-    ScambusClient,
     DetectionDetails,
     IdentifierLookup,
+    ScambusClient,
     TagLookup,
-    FailedIdentifier,
 )
 
 # Configuration

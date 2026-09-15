@@ -14,7 +14,8 @@ Key differences from journal entry streams:
 
 import os
 import time
-from scambus_client import ScambusClient, FilterCriteria, IdentifierType, StreamDataType
+
+from scambus_client import FilterCriteria, IdentifierType, ScambusClient, StreamDataType
 
 # Initialize the client
 API_URL = os.getenv("SCAMBUS_API_URL", "http://localhost:8080/api")
@@ -60,7 +61,7 @@ def create_identifier_stream_with_backfill():
     )
 
     print(f"\nCreated identifier stream with backfill: {stream.id}")
-    print(f"  Backfill: Triggered from 2025-01-01")
+    print("  Backfill: Triggered from 2025-01-01")
 
     return stream
 
@@ -160,7 +161,8 @@ def comparison_example():
     print("COMPARISON: Journal Entry vs Identifier Streams")
     print("=" * 60)
 
-    print("""
+    print(
+        """
     | Feature     | Journal Entry Stream    | Identifier Stream         |
     |-------------|-------------------------|---------------------------|
     | Data Type   | journal_entry           | identifier                |
@@ -169,7 +171,8 @@ def comparison_example():
     | Contains    | JE + identifiers + evid | Identifier + triggering JE|
     | Backfill    | Not supported           | Supported                 |
     | Use Case    | Track all scam events   | Track identifier evolution|
-    """)
+    """
+    )
 
 
 if __name__ == "__main__":

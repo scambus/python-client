@@ -16,7 +16,8 @@ Breaking Changes (v2.0.0):
 
 import os
 from datetime import datetime, timedelta
-from scambus_client import ScambusClient, PhoneCallDetails
+
+from scambus_client import ScambusClient
 
 # Initialize client
 client = ScambusClient(
@@ -205,7 +206,7 @@ def example_8_get_in_progress_activities():
 
     # Complete one of them
     if activities:
-        print(f"\n  Completing first activity...")
+        print("\n  Completing first activity...")
         activities[0].complete()
         print(f"✓ Completed: {activities[0].id}")
 

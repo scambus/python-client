@@ -8,7 +8,8 @@ typed classes for identifiers and tags.
 
 import os
 from datetime import datetime, timedelta, timezone
-from scambus_client import ScambusClient, IdentifierLookup, TagLookup
+
+from scambus_client import IdentifierLookup, ScambusClient, TagLookup
 
 # Configuration
 API_URL = os.getenv("SCAMBUS_API_URL", "http://localhost:8080/api")
@@ -40,8 +41,8 @@ def main():
     )
 
     print(f"Created phone call entry: {entry.id}")
-    print(f"  Direction: outbound")
-    print(f"  Duration: 1 minute")
+    print("  Direction: outbound")
+    print("  Duration: 1 minute")
     print(f"  Identifiers: {len(entry.identifiers)}")
 
     # Example 2: Inbound call with recording
@@ -62,9 +63,9 @@ def main():
     )
 
     print(f"Created phone call entry: {entry.id}")
-    print(f"  Direction: inbound")
-    print(f"  Duration: 5 minutes")
-    print(f"  Recording: Available")
+    print("  Direction: inbound")
+    print("  Duration: 5 minutes")
+    print("  Recording: Available")
     print(f"  Identifiers: {len(entry.identifiers)}")
 
     # Example 3: Call with transcript
@@ -85,10 +86,10 @@ def main():
     )
 
     print(f"Created phone call entry: {entry.id}")
-    print(f"  Direction: outbound")
-    print(f"  Duration: 12 minutes")
-    print(f"  Recording: Available")
-    print(f"  Transcript: Available")
+    print("  Direction: outbound")
+    print("  Duration: 12 minutes")
+    print("  Recording: Available")
+    print("  Transcript: Available")
     print(f"  Identifiers: {len(entry.identifiers)}")
 
     print("\nAll phone call entries created successfully!")

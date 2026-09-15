@@ -155,9 +155,7 @@ def create_api_key(ctx, automation_name_or_id, name, assume_identity, output_jso
             if len(matching_automations) == 0:
                 print_error(f"Automation not found: {automation_name}")
                 print_info(
-                    'Create it first with: scambus automations create --name "{}"'.format(
-                        automation_name
-                    )
+                    f'Create it first with: scambus automations create --name "{automation_name}"'
                 )
                 sys.exit(1)
             elif len(matching_automations) > 1:

@@ -478,8 +478,13 @@ class ScambusClient(BaseScambusClient):
                         logger.warning(
                             "Retryable HTTP %d on %s %s (attempt %d/%d, "
                             "backoff %.1fs, %.0fs remaining)",
-                            response.status_code, method, endpoint,
-                            attempt, self.max_retries, delay, remaining,
+                            response.status_code,
+                            method,
+                            endpoint,
+                            attempt,
+                            self.max_retries,
+                            delay,
+                            remaining,
                         )
                         time.sleep(delay)
                         continue
@@ -504,8 +509,13 @@ class ScambusClient(BaseScambusClient):
                 logger.warning(
                     "Connection error on %s %s (attempt %d/%d, "
                     "backoff %.1fs, %.0fs remaining): %s",
-                    method, endpoint, attempt, self.max_retries,
-                    delay, remaining, exc,
+                    method,
+                    endpoint,
+                    attempt,
+                    self.max_retries,
+                    delay,
+                    remaining,
+                    exc,
                 )
                 time.sleep(delay)
 
@@ -881,8 +891,7 @@ class ScambusClient(BaseScambusClient):
         extracted_identifiers = None
         if "extracted_identifiers" in response:
             extracted_identifiers = [
-                ExtractedIdentifier.from_dict(ei)
-                for ei in response["extracted_identifiers"]
+                ExtractedIdentifier.from_dict(ei) for ei in response["extracted_identifiers"]
             ]
 
         # Backend only returns {"id": "..."}, so fetch the full entry
@@ -898,9 +907,7 @@ class ScambusClient(BaseScambusClient):
 
         return entry
 
-    def batch_create_journal_entries(
-        self, entries: List[Dict[str, Any]]
-    ) -> "BatchCreateResult":
+    def batch_create_journal_entries(self, entries: List[Dict[str, Any]]) -> "BatchCreateResult":
         """
         Create multiple journal entries in a single request.
 
@@ -950,9 +957,7 @@ class ScambusClient(BaseScambusClient):
         """
         from .models import BatchCreateResult
 
-        response = self._request(
-            "POST", "/journal-entries/batch", json_data={"entries": entries}
-        )
+        response = self._request("POST", "/journal-entries/batch", json_data={"entries": entries})
         return BatchCreateResult.from_dict(response)
 
     def create_detection(
@@ -2858,9 +2863,7 @@ class ScambusClient(BaseScambusClient):
             data["identifier_type"] = identifier_type
             data["value"] = value
         else:
-            raise ValueError(
-                "Provide either identifier_id or both identifier_type and value"
-            )
+            raise ValueError("Provide either identifier_id or both identifier_type and value")
         if reason:
             data["reason"] = reason
 
@@ -4180,7 +4183,9 @@ class ScambusClient(BaseScambusClient):
             # Normalize response keys to snake_case for consistency.
             # The consumer poll endpoint returns snake_case, but we handle
             # both casings defensively in case the server format varies.
-            next_cursor = data.get("next_cursor") if "next_cursor" in data else data.get("nextCursor")
+            next_cursor = (
+                data.get("next_cursor") if "next_cursor" in data else data.get("nextCursor")
+            )
             has_more = data.get("has_more", data.get("hasMore", False))
             return {
                 "messages": data.get("messages", []),
@@ -5948,8 +5953,7 @@ class ScambusClient(BaseScambusClient):
         )
         if response.get("url_references"):
             response["url_references"] = [
-                IdentifierURLReference.from_dict(r)
-                for r in response["url_references"]
+                IdentifierURLReference.from_dict(r) for r in response["url_references"]
             ]
         else:
             response["url_references"] = []
@@ -6083,9 +6087,7 @@ class ScambusClient(BaseScambusClient):
             data["strip_fragment"] = strip_fragment
         if is_active is not None:
             data["is_active"] = is_active
-        response = self._request(
-            "PUT", f"/admin/special-domain-rules/{rule_id}", json_data=data
-        )
+        response = self._request("PUT", f"/admin/special-domain-rules/{rule_id}", json_data=data)
         return SpecialDomainRule.from_dict(response)
 
     def delete_special_domain_rule(self, rule_id: str) -> None:

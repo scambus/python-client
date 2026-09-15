@@ -24,11 +24,9 @@ def main():
     errors = []
     last_request_time = 0.0
 
-    with (
-        open(INPUT_PATH, newline="") as infile,
-        open(OUTPUT_PATH, "w", newline="") as outfile,
-        open(UNMATCHED_PATH, "w", newline="") as unmatchedfile,
-    ):
+    with open(INPUT_PATH, newline="") as infile, open(
+        OUTPUT_PATH, "w", newline=""
+    ) as outfile, open(UNMATCHED_PATH, "w", newline="") as unmatchedfile:
         reader = csv.DictReader(infile)
         assert reader.fieldnames is not None, "CSV has no header row"
         orig_fieldnames = list(reader.fieldnames)

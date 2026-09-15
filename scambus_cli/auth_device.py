@@ -415,7 +415,7 @@ class DeviceAuthManager:
                     auto_response.raise_for_status()
                     auto_data = auto_response.json()
                     key_name = f"{auto_data.get('name', 'Automation')} CLI Key"
-                except:
+                except Exception:
                     key_name = "CLI Key"
 
             api_key_body = {"name": key_name}
@@ -433,7 +433,7 @@ class DeviceAuthManager:
             secret_access_key = api_key_data["secretAccessKey"]
             combined_key = f"{access_key_id}:{secret_access_key}"
 
-            console.print(f"[green]✓[/green] API key created")
+            console.print("[green]✓[/green] API key created")
             console.print(
                 f"\n[yellow]⚠ Save this API key - it won't be shown again:[/yellow]\n"
                 f"[bold]{combined_key}[/bold]\n"

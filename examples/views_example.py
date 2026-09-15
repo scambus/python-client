@@ -7,11 +7,12 @@ Views allow you to save common search criteria and execute them repeatedly.
 """
 
 import os
+
 from scambus_client import (
-    ScambusClient,
     FilterCriteria,
     IdentifierType,
     JournalEntryType,
+    ScambusClient,
     ViewSortOrder,
 )
 

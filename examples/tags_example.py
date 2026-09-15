@@ -10,7 +10,8 @@ This example demonstrates how to work with tags:
 """
 
 import os
-from scambus_client import ScambusClient, TagLookup, IdentifierLookup
+
+from scambus_client import IdentifierLookup, ScambusClient, TagLookup
 
 # Configuration
 API_URL = os.getenv("SCAMBUS_API_URL", "http://localhost:8080/api")
@@ -133,7 +134,7 @@ def main():
     updated_tag = client.update_tag(
         bool_tag.id, description="Updated description for high priority items"
     )
-    print(f"   ✓ Updated tag description")
+    print(f"   ✓ Updated tag description: {updated_tag.description}")
 
     # =========================================================================
     # Cleanup

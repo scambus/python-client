@@ -1986,7 +1986,18 @@ def in_progress(ctx, output_json):
     "--platform",
     required=True,
     type=click.Choice(
-        ["sms", "whatsapp", "telegram", "signal", "facebook", "imessage", "email", "other"]
+        [
+            "sms",
+            "whatsapp",
+            "telegram",
+            "signal",
+            "facebook",
+            "imessage",
+            "zangi",
+            "deltachat",
+            "email",
+            "other",
+        ]
     ),
     help="Messaging platform",
 )

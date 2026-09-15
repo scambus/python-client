@@ -919,6 +919,11 @@ def create_note(
 @click.option("--recording", type=click.Path(exists=True), help="Phone call recording file")
 @click.option("--transcript", type=click.Path(exists=True), help="Call transcript file")
 @click.option(
+    "--transcript-messages-file",
+    type=click.Path(exists=True),
+    help="JSON file containing structured transcript messages",
+)
+@click.option(
     "--attach", multiple=True, type=click.Path(exists=True), help="Additional attachments"
 )
 @click.option("--case-id", help="Case ID to link to")
@@ -951,6 +956,11 @@ def create_note(
     is_flag=True,
     help="Mark entry as NSFW (media thumbnails blurred until revealed)",
 )
+@click.option(
+    "--ai-extract",
+    is_flag=True,
+    help="Run AI identifier extraction for structured transcript messages",
+)
 @click.option("--json", "output_json", is_flag=True, help="Output JSON")
 @click.option(
     "--external-id",
@@ -977,6 +987,7 @@ def create_phone_call(
     confidence,
     recording,
     transcript,
+    transcript_messages_file,
     attach,
     case_id,
     originator_type,
@@ -985,6 +996,7 @@ def create_phone_call(
     tag,
     is_test,
     is_nsfw,
+    ai_extract,
     platform,
     output_json,
     external_id,
@@ -1025,6 +1037,19 @@ def create_phone_call(
                 )
                 media_ids.append(media["id"])
                 click.echo(click.style(f"✓ Uploaded: {media['filename']}", fg="green"), err=True)
+
+        transcript_messages = None
+        if transcript_messages_file:
+            try:
+                with open(transcript_messages_file, "r", encoding="utf-8") as f:
+                    transcript_messages = json.load(f)
+            except json.JSONDecodeError as e:
+                print_error(f"Invalid JSON in --transcript-messages-file: {e}")
+                sys.exit(1)
+
+            if not isinstance(transcript_messages, list):
+                print_error("--transcript-messages-file must contain a JSON array")
+                sys.exit(1)
 
         # Parse and validate time parameters
         from datetime import timedelta
@@ -1068,6 +1093,12 @@ def create_phone_call(
             "start_time": parsed_start.isoformat(),
             "details": {"direction": direction, "platform": platform},
         }
+
+        if transcript_messages:
+            data["details"]["transcript"] = transcript_messages
+            data["ai_extract"] = True
+        elif ai_extract:
+            data["ai_extract"] = True
 
         # Only add end_time if not in-progress
         if not in_progress and parsed_end:

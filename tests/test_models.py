@@ -1,7 +1,10 @@
 """Unit tests for Scambus models."""
 
+from datetime import datetime, timezone
+
 from scambus_client.models import (
     Case,
+    ConversationMessage,
     DetectionDetails,
     EmailDetails,
     ExportStream,
@@ -9,6 +12,12 @@ from scambus_client.models import (
     JournalEntry,
     Media,
     PhoneCallDetails,
+    Queue,
+    QueueClusterIdentifier,
+    QueueContactLog,
+    QueueItem,
+    QueueItemEvent,
+    QueueStreamResponse,
     Tag,
 )
 
@@ -155,6 +164,51 @@ class TestPhoneCallDetails:
         assert data["direction"] == "outbound"
         assert "recordingUrl" in data or "recording_url" in data or data.get("recordingUrl") is None
 
+    def test_phone_call_details_to_dict_with_structured_transcript(self):
+        """Test converting structured phone call transcript messages."""
+        details = PhoneCallDetails(
+            direction="inbound",
+            transcript=[
+                ConversationMessage(
+                    index=0,
+                    message_id="call-msg-1",
+                    timestamp=datetime(2025, 1, 15, 11, 1, tzinfo=timezone.utc),
+                    body="Send the money today.",
+                    is_outgoing=False,
+                    platform_metadata={"is_transcription": True},
+                )
+            ],
+        )
+
+        data = details.to_dict()
+
+        assert data["transcript"][0]["message_id"] == "call-msg-1"
+        assert data["transcript"][0]["platform_metadata"]["is_transcription"] is True
+
+
+class TestConversationMessage:
+    """Test ConversationMessage model."""
+
+    def test_conversation_message_phone_call_marker_round_trips(self):
+        """Test phone call marker fields are serialized and parsed."""
+        message = ConversationMessage(
+            index=3,
+            message_id="call-marker-entry-123",
+            timestamp=datetime(2025, 1, 15, 11, 2, tzinfo=timezone.utc),
+            body="Phone call",
+            is_outgoing=False,
+            message_type="phone_call_marker",
+            phone_call_journal_entry_id="entry-123",
+        )
+
+        data = message.to_dict()
+        parsed = ConversationMessage.from_dict(data)
+
+        assert data["message_type"] == "phone_call_marker"
+        assert data["phone_call_journal_entry_id"] == "entry-123"
+        assert parsed.message_type == "phone_call_marker"
+        assert parsed.phone_call_journal_entry_id == "entry-123"
+
 
 class TestEmailDetails:
     """Test EmailDetails model."""
@@ -237,6 +291,157 @@ class TestExportStream:
 
         assert stream.min_confidence == 0.8
         assert stream.max_confidence == 1.0
+
+
+class TestQueueModels:
+    """Test queue response models."""
+
+    def test_queue_creation(self):
+        """Test creating a queue from API data."""
+        queue = Queue.from_dict(
+            {
+                "id": "queue-123",
+                "name": "Initial contact",
+                "description": "First-pass contact queue",
+                "filter_criteria": {"identifier_type": "email"},
+                "cadence_days": 3,
+                "cooldown_hours": 12,
+                "max_contacts_per_cluster": 2,
+                "rotation_enabled": False,
+                "priority_mode": "oldest_contact",
+                "auto_populate": False,
+                "actor_cluster_id": "cluster-actor",
+                "actor_cluster_name": "Persona A",
+                "redis_stream_key": "queues:queue-123:events",
+                "stream_version": 7,
+                "is_active": True,
+                "is_test": False,
+                "created_at": "2026-04-28T10:00:00Z",
+                "updated_at": "2026-04-28T10:01:00Z",
+            }
+        )
+
+        assert queue.id == "queue-123"
+        assert queue.name == "Initial contact"
+        assert queue.filter_criteria == {"identifier_type": "email"}
+        assert queue.priority_mode == "oldest_contact"
+        assert queue.redis_stream_key == "queues:queue-123:events"
+        assert queue.created_at is not None
+
+    def test_queue_item_creation(self):
+        """Test creating a queue item from API data."""
+        item = QueueItem.from_dict(
+            {
+                "id": "item-123",
+                "queue_id": "queue-123",
+                "cluster_id": "cluster-target",
+                "representative_id": "identifier-123",
+                "state": "claimed",
+                "funnel_id": "funnel-123",
+                "funnel_entry_id": "entry-123",
+                "actor_cluster_id": "cluster-actor",
+                "selected_channel": "email",
+                "journey_state": {"queue_index": 0},
+                "claimed_by": "worker-123",
+                "claimed_at": "2026-04-28T10:02:00Z",
+                "contact_count": 1,
+                "next_contact_after": "2026-04-29T10:02:00Z",
+                "priority": 42,
+                "representative_value": "scammer@example.com",
+                "representative_type": "email",
+                "cluster_size": 3,
+            }
+        )
+
+        assert item.id == "item-123"
+        assert item.state == "claimed"
+        assert item.journey_state == {"queue_index": 0}
+        assert item.claimed_at is not None
+        assert item.representative_value == "scammer@example.com"
+
+    def test_queue_stream_response_creation(self):
+        """Test creating a queue stream response from Redis event data."""
+        response = QueueStreamResponse.from_dict(
+            {
+                "stream_key": "queues:queue-123:events",
+                "cursor": "1714300000000-0",
+                "claim_endpoint": "/api/queues/queue-123/claim",
+                "source_of_truth": "postgres",
+                "messages": [
+                    {
+                        "cursor": "1714300000000-0",
+                        "event": "added",
+                        "queue_id": "queue-123",
+                        "queue_item_id": "item-123",
+                        "cluster_id": "cluster-target",
+                        "representative_id": "identifier-123",
+                        "representative_type": "email",
+                        "representative_value": "scammer@example.com",
+                        "state": "pending",
+                        "contact_count": 0,
+                        "priority": 42,
+                        "stream_version": 1,
+                        "occurred_at": "2026-04-28T10:00:00Z",
+                        "is_test": False,
+                        "metadata": {"source": "queue"},
+                    }
+                ],
+            }
+        )
+
+        assert response.stream_key == "queues:queue-123:events"
+        assert response.cursor == "1714300000000-0"
+        assert response.messages[0].event == "added"
+        assert response.messages[0].occurred_at is not None
+        assert response.messages[0].metadata == {"source": "queue"}
+
+    def test_queue_history_event_and_identifier_models(self):
+        """Test queue audit and cluster identifier models."""
+        contact = QueueContactLog.from_dict(
+            {
+                "id": "contact-123",
+                "queue_item_id": "item-123",
+                "queue_id": "queue-123",
+                "cluster_id": "cluster-target",
+                "contacted_by": "worker-123",
+                "outcome": "contacted",
+                "contacted_at": "2026-04-28T10:05:00Z",
+                "notes": "Sent first email",
+            }
+        )
+        event = QueueItemEvent.from_dict(
+            {
+                "id": "event-123",
+                "queue_item_id": "item-123",
+                "queue_id": "queue-123",
+                "target_queue_id": "queue-456",
+                "cluster_id": "cluster-target",
+                "representative_id": "identifier-123",
+                "event": "moved_out",
+                "state": "pending",
+                "contact_count": 1,
+                "priority": 42,
+                "stream_version": 3,
+                "metadata": {"reason": "manual_triage"},
+                "occurred_at": "2026-04-28T10:06:00Z",
+            }
+        )
+        identifier = QueueClusterIdentifier.from_dict(
+            {
+                "id": "identifier-123",
+                "value": "scammer@example.com",
+                "type": "email",
+                "is_ours": False,
+                "confidence": 0.92,
+            }
+        )
+
+        assert contact.notes == "Sent first email"
+        assert contact.contacted_at is not None
+        assert event.event == "moved_out"
+        assert event.target_queue_id == "queue-456"
+        assert event.metadata == {"reason": "manual_triage"}
+        assert identifier.confidence == 0.92
 
 
 class TestMedia:

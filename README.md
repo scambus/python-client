@@ -14,6 +14,7 @@ Official Python client for SCAMBUS - submit scam reports and subscribe to data s
 - **Search**: Find identifiers, cases, and journal entries
 - **Views (Saved Queries)**: Create, execute, and manage saved query views
 - **In-Progress Activities**: Track and complete ongoing scam interactions
+- **Work Queues**: Claim, complete, move, and stream queue items backed by Postgres membership and Redis wake events
 - **Data Streams**: Subscribe to real-time scam data with export streams (journal entries and identifier state changes)
 - **Stream Consumption**: Poll for batches or connect via SSE for real-time delivery
 - **Real-time Updates**: WebSocket support for notifications and live updates
@@ -191,6 +192,40 @@ for msg in result['messages']:
 # Get stream info
 info = client.get_stream_info(stream.consumer_key)
 print(f"Messages in stream: {info.get('messages_in_stream')}")
+
+# Work queue items
+queues = client.list_queues()
+item = client.claim_queue_item(queues[0].id)
+if item:
+    client.record_queue_contact(
+        queues[0].id,
+        item.id,
+        notes="Sent initial email",
+    )
+    client.complete_queue_item(queues[0].id, item.id, outcome="contacted")
+
+# Bots can watch the queue Redis stream, then claim from Postgres
+events = client.read_queue_stream(queues[0].id, cursor="$", block_ms=30000)
+for event in events.messages:
+    print(f"{event.event}: {event.queue_item_id}")
+```
+
+### Queue CLI
+
+```bash
+# Inspect queues and claim the next available item
+scambus queues list
+scambus queues claim <queue-id>
+
+# Watch Redis queue events, then use claim/complete/drop/move for authoritative state changes
+scambus queues stream <queue-id> --cursor "$" --block-ms 30000
+scambus queues complete <queue-id> <item-id> --outcome contacted
+scambus queues move <queue-id> <item-id> --target-queue-id <other-queue-id>
+
+# Review queue activity
+scambus queues events <queue-id> <item-id>
+scambus queues history <queue-id> <item-id>
+scambus queues cluster <queue-id> <item-id> --role actor
 ```
 
 ### 4. Automation Setup

@@ -21,25 +21,19 @@ from ._retry import (
 )
 from .exceptions import (
     ScambusAPIError,
-    ScambusAuthenticationError,
     ScambusNotFoundError,
-    ScambusServerError,
     ScambusValidationError,
 )
 from .models import (
-    ActionDetails,
     ActivityCompleteDetails,
-    AnalysisDetails,
+    BatchCreateResult,
     Case,
     CaseComment,
-    ConfidenceOperationDetails,
-    ContactDetails,
     ConversationContinuationDetails,
     ConversationMessage,
     DetectionDetails,
     EmailDetails,
     Evidence,
-    ExportDetails,
     ExportStream,
     ExtractedIdentifier,
     FailedIdentifier,
@@ -47,36 +41,36 @@ from .models import (
     IdentifierLookup,
     IdentifierSummary,
     IdentifierURLReference,
-    ImportDetails,
     JournalEntry,
     Media,
     NoteDetails,
     Notification,
-    ObservationDetails,
     Passkey,
     PhoneCallDetails,
+    Queue,
+    QueueClusterIdentifier,
+    QueueContactLog,
+    QueueItem,
+    QueueItemEvent,
+    QueueStats,
+    QueueStreamResponse,
     Report,
-    ResearchDetails,
     Session,
     SpecialDomainRule,
     Tag,
-    TagOperationDetails,
     TagValue,
     TextConversationDetails,
-    UpdateDetails,
     URLConsolidationStatus,
     View,
 )
 from .types import (
     FilterCriteriaInput,
     TagLookupInput,
-    StreamFilterInput,
     ViewFilterInput,
     ViewSortOrderInput,
     to_dict,
     to_dict_list,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -486,6 +480,7 @@ class AsyncScambusClient(BaseScambusClient):
         end_time: datetime,
         recording_url: Optional[str] = None,
         transcript_url: Optional[str] = None,
+        transcript: Optional[List[Union[ConversationMessage, Dict[str, Any]]]] = None,
         identifiers: Optional[List[Union[Dict[str, Any], IdentifierLookup]]] = None,
         our_identifier_lookups: Optional[List[Union[Dict[str, Any], IdentifierLookup]]] = None,
         evidence: Optional[Union[Dict[str, Any], Evidence]] = None,
@@ -498,15 +493,24 @@ class AsyncScambusClient(BaseScambusClient):
         originator_identifier: Optional[str] = None,
         create_originator: bool = False,
         in_progress: bool = False,
+        ai_extract: bool = False,
         is_test: bool = False,
         external_identifiers: Optional[List[Dict[str, str]]] = None,
         extract_external_identifiers: bool = False,
     ) -> JournalEntry:
         """Create a 'phone_call' type journal entry."""
+        transcript_messages = None
+        if transcript:
+            transcript_messages = [
+                msg if isinstance(msg, ConversationMessage) else ConversationMessage.from_dict(msg)
+                for msg in transcript
+            ]
+
         details = PhoneCallDetails(
             direction=direction,
             recording_url=recording_url,
             transcript_url=transcript_url,
+            transcript=transcript_messages,
         )
 
         if media is not None:
@@ -552,6 +556,7 @@ class AsyncScambusClient(BaseScambusClient):
             start_time=start_time,
             end_time=end_time,
             in_progress=in_progress,
+            ai_extract=ai_extract or bool(transcript_messages),
             is_test=is_test,
             external_identifiers=external_identifiers,
             extract_external_identifiers=extract_external_identifiers,
@@ -1143,8 +1148,9 @@ class AsyncScambusClient(BaseScambusClient):
         search_query: Optional[str] = None,
     ) -> ExportStream:
         """Create a temporary export stream from query parameters."""
-        from .types import ViewFilter
         import json
+
+        from .types import ViewFilter
 
         filter_params = ViewFilter(
             entry_types=[entry_type] if entry_type else None,
@@ -1387,7 +1393,7 @@ class AsyncScambusClient(BaseScambusClient):
         """Helper to create a properly formatted Venmo payment_token identifier lookup."""
         import json
         import re
-        from urllib.parse import urlparse, parse_qs
+        from urllib.parse import parse_qs, urlparse
 
         identifier = identifier.strip()
         venmo_data: Dict[str, Any] = {"service": "venmo"}
@@ -1568,6 +1574,232 @@ class AsyncScambusClient(BaseScambusClient):
     async def delete_case(self, case_id: str) -> None:
         """Delete a case."""
         await self._request("DELETE", f"/cases/{case_id}")
+
+    # ── Queue Methods ────────────────────────────────────────────────
+
+    async def list_queues(self) -> List[Queue]:
+        """List queues visible to the authenticated user or automation."""
+        response = await self._request("GET", "/queues")
+        return [Queue.from_dict(q) for q in response]
+
+    async def create_queue(
+        self,
+        name: str,
+        description: Optional[str] = None,
+        filter_criteria: Optional[Dict[str, Any]] = None,
+        cadence_days: Optional[int] = None,
+        cooldown_hours: Optional[int] = None,
+        max_contacts_per_cluster: Optional[int] = None,
+        rotation_enabled: Optional[bool] = None,
+        priority_mode: Optional[str] = None,
+        auto_populate: Optional[bool] = None,
+        actor_cluster_id: Optional[str] = None,
+    ) -> Queue:
+        """Create a Postgres-backed queue with Redis stream notifications."""
+        data: Dict[str, Any] = {"name": name}
+        if description is not None:
+            data["description"] = description
+        if filter_criteria is not None:
+            data["filter_criteria"] = filter_criteria
+        if cadence_days is not None:
+            data["cadence_days"] = cadence_days
+        if cooldown_hours is not None:
+            data["cooldown_hours"] = cooldown_hours
+        if max_contacts_per_cluster is not None:
+            data["max_contacts_per_cluster"] = max_contacts_per_cluster
+        if rotation_enabled is not None:
+            data["rotation_enabled"] = rotation_enabled
+        if priority_mode is not None:
+            data["priority_mode"] = priority_mode
+        if auto_populate is not None:
+            data["auto_populate"] = auto_populate
+        if actor_cluster_id is not None:
+            data["actor_cluster_id"] = actor_cluster_id
+
+        response = await self._request("POST", "/queues", json_data=data)
+        return Queue.from_dict(response)
+
+    async def get_queue(self, queue_id: str) -> Queue:
+        """Get a queue by ID."""
+        response = await self._request("GET", f"/queues/{queue_id}")
+        return Queue.from_dict(response)
+
+    async def update_queue(self, queue_id: str, **updates: Any) -> Queue:
+        """Update queue fields."""
+        if not updates:
+            raise ScambusValidationError("At least one field must be provided for update")
+        response = await self._request("PUT", f"/queues/{queue_id}", json_data=updates)
+        return Queue.from_dict(response)
+
+    async def delete_queue(self, queue_id: str) -> None:
+        """Delete a queue and its items."""
+        await self._request("DELETE", f"/queues/{queue_id}")
+
+    async def get_queue_stats(self, queue_id: str) -> QueueStats:
+        """Get queue state counts."""
+        response = await self._request("GET", f"/queues/{queue_id}/stats")
+        return QueueStats.from_dict(response)
+
+    async def list_queue_items(
+        self,
+        queue_id: str,
+        state: Optional[str] = None,
+    ) -> List[QueueItem]:
+        """List queue items using the queue's claim ordering."""
+        params = {"state": state} if state else None
+        response = await self._request("GET", f"/queues/{queue_id}/items", params=params)
+        return [QueueItem.from_dict(i) for i in response]
+
+    async def read_queue_stream(
+        self,
+        queue_id: str,
+        cursor: Optional[str] = "0",
+        limit: Optional[int] = None,
+        block_ms: Optional[int] = None,
+    ) -> QueueStreamResponse:
+        """Read queue lifecycle events from Redis."""
+        params: Dict[str, Any] = {}
+        if cursor is not None:
+            params["cursor"] = cursor
+        if limit is not None:
+            params["limit"] = limit
+        if block_ms is not None:
+            params["block_ms"] = block_ms
+        response = await self._request("GET", f"/queues/{queue_id}/stream", params=params or None)
+        return QueueStreamResponse.from_dict(response)
+
+    async def claim_queue_item(self, queue_id: str) -> Optional[QueueItem]:
+        """Claim the next available queue item, or return None when no work is available."""
+        try:
+            response = await self._request("POST", f"/queues/{queue_id}/claim")
+        except ScambusNotFoundError:
+            return None
+        return QueueItem.from_dict(response)
+
+    async def release_queue_item(self, queue_id: str, item_id: str) -> Dict[str, Any]:
+        """Release a claimed or in-progress queue item."""
+        return await self._request("POST", f"/queues/{queue_id}/items/{item_id}/release")
+
+    async def record_queue_contact(
+        self,
+        queue_id: str,
+        item_id: str,
+        contact_identifier_id: Optional[str] = None,
+        journal_entry_id: Optional[str] = None,
+        notes: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Record a contact attempt for a claimed queue item."""
+        data: Dict[str, Any] = {}
+        if contact_identifier_id is not None:
+            data["contact_identifier_id"] = contact_identifier_id
+        if journal_entry_id is not None:
+            data["journal_entry_id"] = journal_entry_id
+        if notes is not None:
+            data["notes"] = notes
+        return await self._request(
+            "POST",
+            f"/queues/{queue_id}/items/{item_id}/contact",
+            json_data=data,
+        )
+
+    async def complete_queue_item(
+        self,
+        queue_id: str,
+        item_id: str,
+        outcome: Optional[str] = None,
+        note: Optional[str] = None,
+        reason: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Mark a queue item complete."""
+        return await self._queue_item_action(queue_id, item_id, "complete", reason, outcome, note)
+
+    async def drop_queue_item(
+        self,
+        queue_id: str,
+        item_id: str,
+        reason: Optional[str] = None,
+        note: Optional[str] = None,
+        outcome: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Drop a queue item from active work while retaining audit history."""
+        return await self._queue_item_action(queue_id, item_id, "drop", reason, outcome, note)
+
+    async def move_queue_item(
+        self,
+        queue_id: str,
+        item_id: str,
+        target_queue_id: str,
+        reason: Optional[str] = None,
+        note: Optional[str] = None,
+        outcome: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Move a queue item to another queue."""
+        data = self._queue_action_payload(reason=reason, outcome=outcome, note=note)
+        data["target_queue_id"] = target_queue_id
+        return await self._request(
+            "POST",
+            f"/queues/{queue_id}/items/{item_id}/move",
+            json_data=data,
+        )
+
+    async def get_queue_item_history(
+        self,
+        queue_id: str,
+        item_id: str,
+    ) -> List[QueueContactLog]:
+        """Get queue item contact history."""
+        response = await self._request("GET", f"/queues/{queue_id}/items/{item_id}/history")
+        return [QueueContactLog.from_dict(log) for log in response]
+
+    async def get_queue_item_events(self, queue_id: str, item_id: str) -> List[QueueItemEvent]:
+        """Get queue item lifecycle events."""
+        response = await self._request("GET", f"/queues/{queue_id}/items/{item_id}/events")
+        return [QueueItemEvent.from_dict(event) for event in response]
+
+    async def get_queue_item_cluster_identifiers(
+        self,
+        queue_id: str,
+        item_id: str,
+        role: str = "target",
+    ) -> List[QueueClusterIdentifier]:
+        """Get identifiers in the target or actor cluster for a queue item."""
+        response = await self._request(
+            "GET",
+            f"/queues/{queue_id}/items/{item_id}/cluster",
+            params={"role": role} if role else None,
+        )
+        return [QueueClusterIdentifier.from_dict(identifier) for identifier in response]
+
+    async def _queue_item_action(
+        self,
+        queue_id: str,
+        item_id: str,
+        action: str,
+        reason: Optional[str],
+        outcome: Optional[str],
+        note: Optional[str],
+    ) -> Dict[str, Any]:
+        data = self._queue_action_payload(reason=reason, outcome=outcome, note=note)
+        return await self._request(
+            "POST",
+            f"/queues/{queue_id}/items/{item_id}/{action}",
+            json_data=data,
+        )
+
+    @staticmethod
+    def _queue_action_payload(
+        reason: Optional[str] = None,
+        outcome: Optional[str] = None,
+        note: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        data: Dict[str, Any] = {}
+        if reason is not None:
+            data["reason"] = reason
+        if outcome is not None:
+            data["outcome"] = outcome
+        if note is not None:
+            data["note"] = note
+        return data
 
     # ── Stream Methods ────────────────────────────────────────────────
 
@@ -2311,7 +2543,6 @@ class AsyncScambusClient(BaseScambusClient):
         """Create a WebSocket client for real-time notifications and updates."""
         from .websocket_client import ScambusWebSocketClient
 
-        auth_header = None
         for key, value in self._auth_headers.items():
             if key == "X-API-Key":
                 parts = value.split(":", 1)

@@ -11,7 +11,15 @@ from scambus_client import (
     ScambusNotFoundError,
     ScambusValidationError,
 )
-from scambus_client.models import Case, ExportStream, Identifier, JournalEntry
+from scambus_client.models import (
+    Case,
+    ExportStream,
+    Identifier,
+    JournalEntry,
+    Queue,
+    QueueItem,
+    QueueStreamResponse,
+)
 
 
 class TestScambusClientInit:
@@ -105,6 +113,53 @@ class TestScambusClientJournalEntries:
         assert entry.id == "entry-456"
         assert entry.type == "phone_call"
         assert client.session.request.call_count == 2  # POST + GET
+
+    def test_create_phone_call_with_transcript_enables_ai_extract(
+        self, client, mock_phone_call_data
+    ):
+        """Test structured phone call transcripts are sent for extraction."""
+        from unittest.mock import Mock
+
+        post_response = Mock()
+        post_response.status_code = 201
+        post_response.json.return_value = {"id": "entry-456"}
+
+        get_response = Mock()
+        get_response.status_code = 200
+        get_response.json.return_value = {
+            "journal_entry": {"journal_entry": mock_phone_call_data, "can_edit": True},
+            "cases": [],
+        }
+
+        client.session.request.side_effect = [post_response, get_response]
+
+        start_time = datetime(2025, 1, 15, 11, 0, 0, tzinfo=timezone.utc)
+        end_time = datetime(2025, 1, 15, 11, 10, 0, tzinfo=timezone.utc)
+
+        client.create_phone_call(
+            description="Scam call",
+            direction="inbound",
+            start_time=start_time,
+            end_time=end_time,
+            transcript=[
+                {
+                    "index": 0,
+                    "message_id": "call-msg-1",
+                    "timestamp": "2025-01-15T11:01:00Z",
+                    "body": "Send the money today.",
+                    "is_outgoing": False,
+                    "platform_metadata": {"is_transcription": True},
+                }
+            ],
+        )
+
+        payload = client.session.request.call_args_list[0].kwargs["json"]
+
+        assert payload["ai_extract"] is True
+        assert payload["details"]["transcript"][0]["message_id"] == "call-msg-1"
+        assert payload["details"]["transcript"][0]["platform_metadata"] == {
+            "is_transcription": True
+        }
 
     def test_create_in_progress_activity(self, client):
         """Test creating an in-progress activity."""
@@ -276,6 +331,167 @@ class TestScambusClientStreams:
         assert "next_cursor" in result
         assert len(result["messages"]) == 1
         assert result["next_cursor"] == "new-cursor"
+
+
+class TestScambusClientQueues:
+    """Test queue methods."""
+
+    def test_list_queues(self, client):
+        """Test listing queues."""
+        from unittest.mock import Mock
+
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = [
+            {
+                "id": "queue-123",
+                "name": "Initial contact",
+                "description": "First-pass contact queue",
+                "priority_mode": "fifo",
+                "redis_stream_key": "queues:queue-123:events",
+                "stream_version": 1,
+                "is_active": True,
+            }
+        ]
+        client.session.request.return_value = mock_response
+
+        queues = client.list_queues()
+
+        assert len(queues) == 1
+        assert isinstance(queues[0], Queue)
+        assert queues[0].name == "Initial contact"
+        assert queues[0].redis_stream_key == "queues:queue-123:events"
+
+    def test_create_queue_payload(self, client):
+        """Test creating a queue sends queue settings."""
+        from unittest.mock import Mock
+
+        mock_response = Mock()
+        mock_response.status_code = 201
+        mock_response.json.return_value = {
+            "id": "queue-123",
+            "name": "Phone follow-up",
+            "filter_criteria": {"identifier_type": "phone"},
+            "priority_mode": "oldest_contact",
+            "auto_populate": False,
+        }
+        client.session.request.return_value = mock_response
+
+        queue = client.create_queue(
+            name="Phone follow-up",
+            filter_criteria={"identifier_type": "phone"},
+            cooldown_hours=18,
+            priority_mode="oldest_contact",
+            auto_populate=False,
+            actor_cluster_id="cluster-actor",
+        )
+
+        assert isinstance(queue, Queue)
+        assert queue.priority_mode == "oldest_contact"
+        call_args = client.session.request.call_args
+        assert call_args.kwargs["method"] == "POST"
+        assert call_args.kwargs["url"].endswith("/queues")
+        assert call_args.kwargs["json"]["filter_criteria"] == {"identifier_type": "phone"}
+        assert call_args.kwargs["json"]["cooldown_hours"] == 18
+        assert call_args.kwargs["json"]["auto_populate"] is False
+
+    def test_read_queue_stream(self, client):
+        """Test reading queue Redis stream events."""
+        from unittest.mock import Mock
+
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "stream_key": "queues:queue-123:events",
+            "cursor": "1714300000000-0",
+            "claim_endpoint": "/api/queues/queue-123/claim",
+            "source_of_truth": "postgres",
+            "messages": [
+                {
+                    "cursor": "1714300000000-0",
+                    "event": "added",
+                    "queue_id": "queue-123",
+                    "queue_item_id": "item-123",
+                    "cluster_id": "cluster-target",
+                    "representative_id": "identifier-123",
+                    "state": "pending",
+                    "contact_count": 0,
+                    "priority": 42,
+                    "stream_version": 1,
+                    "occurred_at": "2026-04-28T10:00:00Z",
+                    "is_test": False,
+                }
+            ],
+        }
+        client.session.request.return_value = mock_response
+
+        result = client.read_queue_stream("queue-123", cursor="$", limit=5, block_ms=1000)
+
+        assert isinstance(result, QueueStreamResponse)
+        assert result.source_of_truth == "postgres"
+        assert result.messages[0].queue_item_id == "item-123"
+        call_args = client.session.request.call_args
+        assert call_args.kwargs["params"] == {"cursor": "$", "limit": 5, "block_ms": 1000}
+
+    def test_claim_queue_item(self, client):
+        """Test claiming a queue item."""
+        from unittest.mock import Mock
+
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "id": "item-123",
+            "queue_id": "queue-123",
+            "cluster_id": "cluster-target",
+            "representative_id": "identifier-123",
+            "state": "claimed",
+            "claimed_by": "worker-123",
+        }
+        client.session.request.return_value = mock_response
+
+        item = client.claim_queue_item("queue-123")
+
+        assert isinstance(item, QueueItem)
+        assert item.state == "claimed"
+        assert client.session.request.call_args.kwargs["url"].endswith("/queues/queue-123/claim")
+
+    def test_claim_queue_item_returns_none_when_empty(self, client):
+        """Test claiming an empty queue returns None."""
+        from unittest.mock import Mock
+
+        mock_response = Mock()
+        mock_response.status_code = 404
+        mock_response.text = "No available queue items"
+        mock_response.json.return_value = {"error": "No available queue items"}
+        client.session.request.return_value = mock_response
+
+        assert client.claim_queue_item("queue-123") is None
+
+    def test_move_queue_item_payload(self, client):
+        """Test moving a queue item to another queue."""
+        from unittest.mock import Mock
+
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"state": "pending", "queue_id": "queue-456"}
+        client.session.request.return_value = mock_response
+
+        result = client.move_queue_item(
+            "queue-123",
+            "item-123",
+            "queue-456",
+            reason="manual_triage",
+            note="Escalated to phone queue",
+        )
+
+        assert result == {"state": "pending", "queue_id": "queue-456"}
+        call_args = client.session.request.call_args
+        assert call_args.kwargs["url"].endswith("/queues/queue-123/items/item-123/move")
+        assert call_args.kwargs["json"] == {
+            "reason": "manual_triage",
+            "note": "Escalated to phone queue",
+            "target_queue_id": "queue-456",
+        }
 
 
 class TestScambusClientErrorHandling:
@@ -479,6 +695,8 @@ class TestIsTestFiltering:
             description="Test detection", identifiers=["email:test@example.com"], is_test=True
         )
 
+        assert entry.is_test is True
+
         # Verify the POST request included is_test
         post_call = client.session.request.call_args_list[0]
         json_data = post_call.kwargs.get("json")
@@ -497,6 +715,8 @@ class TestIsTestFiltering:
         client.session.request.return_value = mock_response
 
         case = client.create_case(title="Test Case", is_test=True)
+
+        assert case.is_test is True
 
         # Verify the POST request included is_test
         call_args = client.session.request.call_args

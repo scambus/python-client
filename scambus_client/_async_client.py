@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Union
 import httpx
 
 from ._base_client import BaseScambusClient, _to_rfc3339
+from ._identifier_lookups import deltachat_lookup
 from ._retry import (
     RETRY_BASE_DELAY,
     RETRY_MAX_BACKOFF,
@@ -1464,6 +1465,16 @@ class AsyncScambusClient(BaseScambusClient):
             result["confidence"] = confidence
 
         return result
+
+    def create_deltachat_identifier(
+        self,
+        fingerprint: str,
+        display_name: Optional[str] = None,
+        confidence: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """Helper to create a Delta Chat social_media identifier lookup from an
+        OpenPGP key fingerprint, an i.delta.chat invite link or an OPENPGP4FPR QR payload."""
+        return deltachat_lookup(fingerprint, display_name, confidence)
 
     # ── Case Methods ──────────────────────────────────────────────────
 

@@ -902,7 +902,7 @@ class TextConversationDetails:
     full metadata. Messages can be added via child conversation_continuation entries.
 
     Attributes:
-        platform: Messaging platform (e.g., "sms", "whatsapp", "telegram", "signal", "email")
+        platform: Messaging platform (e.g., "sms", "whatsapp", "telegram", "signal", "zangi", "deltachat", "email")
         conversation_type: Type of conversation ("individual" or "group") (optional)
         conversation_id: Platform-specific thread/conversation ID (optional)
         first_message_at: Timestamp of the first message (optional)

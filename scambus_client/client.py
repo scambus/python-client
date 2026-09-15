@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Union
 import httpx
 
 from ._base_client import BaseScambusClient, _to_rfc3339
+from ._identifier_lookups import deltachat_lookup
 from ._retry import (
     RETRY_BASE_DELAY,
     RETRY_MAX_BACKOFF,
@@ -1444,7 +1445,7 @@ class ScambusClient(BaseScambusClient):
 
         Args:
             description: Description of the conversation
-            platform: Messaging platform (e.g., "SMS", "WhatsApp", "Telegram", "Signal")
+            platform: Messaging platform (e.g., "sms", "whatsapp", "telegram", "signal", "zangi", "deltachat")
             start_time: When the conversation began
             end_time: When the conversation ended
             identifiers: List of suspect/scammer identifiers (e.g., phone numbers, social media handles)
@@ -3103,6 +3104,44 @@ class ScambusClient(BaseScambusClient):
             result["confidence"] = confidence
 
         return result
+
+    def create_deltachat_identifier(
+        self,
+        fingerprint: str,
+        display_name: Optional[str] = None,
+        confidence: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """
+        Helper to create a Delta Chat social_media identifier lookup.
+
+        A Delta Chat account is identified by its OpenPGP key fingerprint.
+        Accepts the bare or grouped 40-hex fingerprint, an
+        ``https://i.delta.chat/#...`` invite link, or an ``OPENPGP4FPR:`` QR
+        payload; the fingerprint is stored bare and uppercase.
+
+        Args:
+            fingerprint: Fingerprint, invite link or QR payload
+            display_name: Optional profile name shown in the app
+            confidence: Optional confidence score (0.0-1.0)
+
+        Returns:
+            Dictionary ready for use in ``identifier_lookups``
+
+        Example:
+            ```python
+            dc_id = client.create_deltachat_identifier(
+                "https://i.delta.chat/#8D2A4F1C0B3E5A7D9C1F2E3B4A5C6D7E8F9A0B1C&a=x%40nine.testrun.org&n=Support&i=AbCdEf&s=GhIjKl",
+                display_name="Support",
+                confidence=0.85,
+            )
+
+            entry = client.create_detection(
+                description="Delta Chat scam detected",
+                identifiers=[dc_id],
+            )
+            ```
+        """
+        return deltachat_lookup(fingerprint, display_name, confidence)
 
     # Case Methods
 

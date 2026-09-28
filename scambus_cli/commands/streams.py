@@ -632,7 +632,8 @@ def listen_stream(ctx, consumer_key, output_json, from_beginning, cursor, test):
     token = manager.get_token()
 
     if not token:
-        print_error("Not authenticated. Run 'scambus auth login' first.")
+        if manager.get_token_info() is None:
+            print_error("Not authenticated. Run 'scambus auth login' first.")
         sys.exit(1)
 
     # Build SSE URL

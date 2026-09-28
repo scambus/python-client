@@ -28,9 +28,10 @@ class Context:
             manager = DeviceAuthManager(self.api_url)
             self.token = manager.get_token()
             if not self.token:
-                console.print(
-                    "[red]Error:[/red] Not authenticated. Run: [cyan]scambus auth login[/cyan]"
-                )
+                if manager.get_token_info() is None:
+                    console.print(
+                        "[red]Error:[/red] Not authenticated. Run: [cyan]scambus auth login[/cyan]"
+                    )
                 sys.exit(1)
 
     def get_client(self):

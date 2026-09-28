@@ -366,9 +366,10 @@ class DeviceAuthManager:
         # Get current token for creating the automation
         current_token = self.get_token()
         if not current_token:
-            console.print(
-                "[red]✗[/red] Not authenticated. Run: [cyan]scambus auth login[/cyan] first"
-            )
+            if self.get_token_info() is None:
+                console.print(
+                    "[red]✗[/red] Not authenticated. Run: [cyan]scambus auth login[/cyan] first"
+                )
             return None
 
         try:

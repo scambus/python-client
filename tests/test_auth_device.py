@@ -7,7 +7,7 @@ from unittest.mock import Mock
 import httpx
 import pytest
 
-from scambus_cli import auth_device
+from scambus_cli import auth_device, cli
 
 API_URL = "https://scambus.example/api"
 REFRESH_URL = "https://scambus.example/api/auth/refresh"
@@ -168,3 +168,32 @@ def test_unexpired_token_does_not_refresh(manager, monkeypatch):
 
     assert manager.get_token() == "old-access"
     assert calls == []
+
+
+def ensure_authenticated(monkeypatch):
+    monkeypatch.setenv("SCAMBUS_URL", API_URL)
+    monkeypatch.setattr(cli, "console", Mock())
+    with pytest.raises(SystemExit):
+        cli.Context().ensure_authenticated()
+    return " ".join(str(c.args[0]) for c in cli.console.print.call_args_list)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"status": 503, "body": {"error": "Authentication service temporarily unavailable"}},
+        {"status": 429, "body": None},
+        {"status": 200, "body": {"token": "wrong-field"}},
+    ],
+)
+def test_temporary_refresh_failure_prints_only_refresh_message(manager, monkeypatch, kwargs):
+    respond(monkeypatch, **kwargs)
+
+    assert "Not authenticated" not in ensure_authenticated(monkeypatch)
+    assert "Your login is kept" in printed(manager)
+
+
+def test_missing_credentials_prints_not_authenticated(manager, monkeypatch):
+    manager._save_config({"api_url": API_URL})
+
+    assert "Not authenticated" in ensure_authenticated(monkeypatch)

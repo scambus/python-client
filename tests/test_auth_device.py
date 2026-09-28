@@ -145,6 +145,21 @@ def test_refresh_without_refresh_token_asks_for_login(manager, monkeypatch):
     assert "scambus auth login" in printed(manager)
 
 
+@pytest.mark.parametrize(
+    "api_url,base",
+    [
+        ("https://scambus.app/api", "https://scambus.app"),
+        ("https://scambus.app/api/", "https://scambus.app"),
+        ("https://scambus.app", "https://scambus.app"),
+        ("https://scambus.wiki/", "https://scambus.wiki"),
+        ("https://scambus.net/api", "https://scambus.net"),
+        ("http://localhost:8080/api", "http://localhost:8080"),
+    ],
+)
+def test_api_url_removes_only_exact_api_suffix(manager, api_url, base):
+    assert auth_device.DeviceAuthManager(api_url).api_url == base
+
+
 def test_unexpired_token_does_not_refresh(manager, monkeypatch):
     config = stored(manager)
     config["auth"]["expires_at"] = time.time() + 3600

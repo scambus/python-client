@@ -38,11 +38,16 @@ def _error_text(response: httpx.Response) -> str:
     return error if isinstance(error, str) and error else f"HTTP {response.status_code}"
 
 
+def _base_url(api_url: str) -> str:
+    url = api_url.rstrip("/")
+    return url[: -len("/api")] if url.endswith("/api") else url
+
+
 class DeviceAuthManager:
     """Manages device authorization flow authentication."""
 
     def __init__(self, api_url: str):
-        self.api_url = api_url.rstrip("/api").rstrip("/")
+        self.api_url = _base_url(api_url)
         self.config_dir = CONFIG_DIR
         self.config_dir.mkdir(parents=True, exist_ok=True)
         self.config_file = CONFIG_FILE

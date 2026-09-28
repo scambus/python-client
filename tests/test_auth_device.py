@@ -175,25 +175,49 @@ def ensure_authenticated(monkeypatch):
     monkeypatch.setattr(cli, "console", Mock())
     with pytest.raises(SystemExit):
         cli.Context().ensure_authenticated()
-    return " ".join(str(c.args[0]) for c in cli.console.print.call_args_list)
+    return [str(c.args[0]) for c in cli.console.print.call_args_list]
+
+
+def refresh_messages():
+    return [str(c.args[0]) for c in auth_device.console.print.call_args_list]
 
 
 @pytest.mark.parametrize(
-    "kwargs",
+    "kwargs,expected",
     [
-        {"status": 503, "body": {"error": "Authentication service temporarily unavailable"}},
-        {"status": 429, "body": None},
-        {"status": 200, "body": {"token": "wrong-field"}},
+        (
+            {"status": 503, "body": {"error": "Authentication service temporarily unavailable"}},
+            "Your login is kept",
+        ),
+        ({"status": 429, "body": None}, "Your login is kept"),
+        ({"status": 200, "body": {"token": "wrong-field"}}, "Your login is kept"),
+        ({"status": 500, "body": {"error": "boom"}}, "HTTP 500: boom"),
+        ({"status": 401, "body": {"error": "Invalid token"}}, "scambus auth login"),
     ],
 )
-def test_temporary_refresh_failure_prints_only_refresh_message(manager, monkeypatch, kwargs):
+def test_failed_refresh_prints_exactly_one_message(manager, monkeypatch, kwargs, expected):
     respond(monkeypatch, **kwargs)
 
-    assert "Not authenticated" not in ensure_authenticated(monkeypatch)
-    assert "Your login is kept" in printed(manager)
+    cli_messages = ensure_authenticated(monkeypatch)
+
+    assert cli_messages == []
+    assert len(refresh_messages()) == 1
+    assert expected in refresh_messages()[0]
+
+
+def test_refresh_500_keeps_credentials(manager, monkeypatch):
+    before = stored(manager)
+    respond(monkeypatch, 500, {"error": "boom"})
+
+    assert manager.get_token() is None
+    assert stored(manager) == before
 
 
 def test_missing_credentials_prints_not_authenticated(manager, monkeypatch):
     manager._save_config({"api_url": API_URL})
 
-    assert "Not authenticated" in ensure_authenticated(monkeypatch)
+    cli_messages = ensure_authenticated(monkeypatch)
+
+    assert len(cli_messages) == 1
+    assert "Not authenticated" in cli_messages[0]
+    assert refresh_messages() == []

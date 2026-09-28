@@ -629,10 +629,11 @@ def listen_stream(ctx, consumer_key, output_json, from_beginning, cursor, test):
     # Get API URL and authentication
     api_url = get_api_url()
     manager = DeviceAuthManager(api_url)
+    had_login = manager.get_token_info() is not None
     token = manager.get_token()
 
     if not token:
-        if manager.get_token_info() is None:
+        if not had_login:
             print_error("Not authenticated. Run 'scambus auth login' first.")
         sys.exit(1)
 

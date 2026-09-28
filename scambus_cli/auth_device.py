@@ -364,9 +364,10 @@ class DeviceAuthManager:
             JWT token if successful, None otherwise
         """
         # Get current token for creating the automation
+        had_login = self.get_token_info() is not None
         current_token = self.get_token()
         if not current_token:
-            if self.get_token_info() is None:
+            if not had_login:
                 console.print(
                     "[red]✗[/red] Not authenticated. Run: [cyan]scambus auth login[/cyan] first"
                 )

@@ -20,6 +20,23 @@ console = Console()
 CONFIG_DIR = Path.home() / ".scambus"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
+_LOGIN_AGAIN = (
+    "[red]✗[/red] Your session has ended: {reason}. "
+    "Run [cyan]scambus auth login[/cyan] to log in again."
+)
+_TRY_LATER = (
+    "[yellow]⚠[/yellow] Session refresh is temporarily unavailable: {reason}. "
+    "Your login is kept. Try again shortly."
+)
+
+
+def _error_text(response: httpx.Response) -> str:
+    try:
+        error = response.json().get("error")
+    except (ValueError, AttributeError):
+        error = None
+    return error if isinstance(error, str) and error else f"HTTP {response.status_code}"
+
 
 class DeviceAuthManager:
     """Manages device authorization flow authentication."""
@@ -182,7 +199,9 @@ class DeviceAuthManager:
 
     def refresh_access_token(self) -> Optional[str]:
         """
-        Refresh the access token using the refresh token.
+        Exchange the stored refresh token for a new access token.
+
+        The refresh token stays in the config. A 401 removes the stored credentials.
 
         Returns:
             New access token if successful, None otherwise
@@ -192,6 +211,7 @@ class DeviceAuthManager:
         refresh_token = auth.get("refresh_token")
 
         if not refresh_token:
+            console.print(_LOGIN_AGAIN.format(reason="No refresh token is stored"))
             return None
 
         try:
@@ -200,24 +220,53 @@ class DeviceAuthManager:
                 json={"refresh_token": refresh_token},
                 timeout=10,
             )
-
-            if response.status_code == 200:
-                token_data = response.json()
-                new_access_token = token_data["access_token"]
-
-                # Update stored access token and expiry
-                auth["token"] = new_access_token
-                auth["expires_at"] = time.time() + token_data["expires_in"]
-                config["auth"] = auth
-                self._save_config(config)
-
-                return new_access_token
-            else:
-                # Refresh failed (invalid or expired refresh token)
-                return None
-
-        except httpx.HTTPError:
+        except httpx.HTTPError as e:
+            console.print(_TRY_LATER.format(reason=f"Could not reach Scambus ({e})"))
             return None
+
+        if response.status_code == 401:
+            self._save_config({k: v for k, v in config.items() if k != "auth"})
+            console.print(_LOGIN_AGAIN.format(reason=_error_text(response)))
+            return None
+
+        if response.status_code in (429, 503):
+            console.print(_TRY_LATER.format(reason=_error_text(response)))
+            return None
+
+        if response.status_code != 200:
+            console.print(
+                f"[red]✗[/red] Session refresh failed with HTTP {response.status_code}: "
+                f"{_error_text(response)}"
+            )
+            return None
+
+        try:
+            token_data = response.json()
+            access_token = token_data["access_token"]
+            expires_in = token_data["expires_in"]
+        except (ValueError, KeyError, TypeError):
+            access_token, expires_in = None, None
+
+        if (
+            not isinstance(access_token, str)
+            or not access_token
+            or isinstance(expires_in, bool)
+            or not isinstance(expires_in, int)
+            or expires_in <= 0
+        ):
+            console.print(
+                "[red]✗[/red] Session refresh returned an unexpected response. "
+                "Your login is kept. Try again later."
+            )
+            return None
+
+        config["auth"] = {
+            **auth,
+            "token": access_token,
+            "expires_at": time.time() + expires_in,
+        }
+        self._save_config(config)
+        return access_token
 
     def get_token(self) -> Optional[str]:
         """Get saved token from config, refreshing if needed."""
@@ -228,20 +277,8 @@ class DeviceAuthManager:
         if not token:
             return None
 
-        # Check expiration for device flow tokens
-        if auth.get("type") == "device":
-            expires_at = auth.get("expires_at", 0)
-
-            # If token expired, try to refresh
-            if time.time() > expires_at:
-                new_token = self.refresh_access_token()
-                if new_token:
-                    return new_token
-                else:
-                    console.print(
-                        "[yellow]⚠[/yellow] Token expired and refresh failed. Please login again."
-                    )
-                    return None
+        if auth.get("type") == "device" and time.time() > auth.get("expires_at", 0):
+            return self.refresh_access_token()
 
         return token
 

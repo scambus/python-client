@@ -4,9 +4,7 @@ Implements OAuth 2.0 Device Authorization Grant (RFC 8628).
 More secure than local callback server - no client secrets needed.
 """
 
-import json
 import time
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 import httpx
@@ -14,11 +12,9 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-console = Console()
+from .config import CONFIG_DIR, CONFIG_FILE, load_config, save_config
 
-# Default config directory
-CONFIG_DIR = Path.home() / ".scambus"
-CONFIG_FILE = CONFIG_DIR / "config.json"
+console = Console()
 
 _LOGIN_AGAIN = (
     "[red]✗[/red] Your session has ended: {reason}. "
@@ -53,20 +49,10 @@ class DeviceAuthManager:
         self.config_file = CONFIG_FILE
 
     def _load_config(self) -> Dict[str, Any]:
-        """Load configuration from file."""
-        if self.config_file.exists():
-            try:
-                with open(self.config_file) as f:
-                    return json.load(f)
-            except Exception:
-                pass
-        return {}
+        return load_config(self.config_file)
 
     def _save_config(self, config: Dict[str, Any]):
-        """Save configuration to file."""
-        with open(self.config_file, "w") as f:
-            json.dump(config, f, indent=2)
-        self.config_file.chmod(0o600)
+        save_config(config, self.config_file)
 
     def device_login(self) -> Optional[str]:
         """

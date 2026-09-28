@@ -8,6 +8,8 @@ from typing import Optional
 
 import click
 
+from scambus_client.config import ConfigError, load_cli_config
+
 # Config directory
 CONFIG_DIR = Path.home() / ".scambus"
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -21,20 +23,9 @@ def load_config(path: Path) -> dict:
         click.ClickException: If the file cannot be read or is not a JSON object.
     """
     try:
-        with open(path) as f:
-            config = json.load(f)
-    except FileNotFoundError:
-        return {}
-    except (OSError, ValueError) as e:
-        raise click.ClickException(
-            f"Cannot read config file {path}: {e}. Fix or remove the file, then try again."
-        )
-    if not isinstance(config, dict):
-        raise click.ClickException(
-            f"Config file {path} does not contain a JSON object. "
-            "Fix or remove the file, then try again."
-        )
-    return config
+        return load_cli_config(path)
+    except ConfigError as e:
+        raise click.ClickException(str(e))
 
 
 def save_config(config: dict, path: Path) -> None:

@@ -17,6 +17,7 @@ from .client import (
     build_combined_filter,
     build_identifier_type_filter,
 )
+from .config import ConfigError
 from .exceptions import (
     ScambusAPIError,
     ScambusAuthenticationError,
@@ -134,6 +135,7 @@ __all__ = [
     "ScambusValidationError",
     "ScambusNotFoundError",
     "ScambusServerError",
+    "ConfigError",
     "FilterCriteria",
     "IdentifierType",
     "JournalEntryType",

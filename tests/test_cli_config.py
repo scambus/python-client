@@ -10,6 +10,8 @@ from click.testing import CliRunner
 
 from scambus_cli import auth_device, config
 from scambus_cli.cli import cli
+from scambus_client import ConfigError
+from scambus_client.config import get_api_token, load_cli_config
 
 
 @pytest.fixture
@@ -58,6 +60,33 @@ def test_load_config_corrupt_file_names_file(config_file, content):
         config.load_config(config_file)
 
     assert str(config_file) in excinfo.value.message
+
+
+def test_library_corrupt_config_raises_config_error_naming_file(config_file):
+    config_file.write_text('{"auth": ')
+
+    with pytest.raises(ConfigError) as excinfo:
+        load_cli_config(config_file)
+
+    assert isinstance(excinfo.value, ValueError)
+    assert str(config_file) in str(excinfo.value)
+
+
+def test_library_default_path_corrupt_config_raises(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("SCAMBUS_API_TOKEN", raising=False)
+    path = tmp_path / ".scambus" / "config.json"
+    path.parent.mkdir()
+    path.write_text("[1, 2]")
+
+    with pytest.raises(ConfigError) as excinfo:
+        get_api_token()
+
+    assert str(path) in str(excinfo.value)
+
+
+def test_library_missing_config_is_empty(tmp_path):
+    assert load_cli_config(tmp_path / "missing.json") == {}
 
 
 def test_corrupt_config_stops_cli_and_keeps_file(config_file):

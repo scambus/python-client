@@ -8,23 +8,36 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 
-def load_cli_config() -> Dict[str, Any]:
+class ConfigError(ValueError):
+    """The CLI config file exists but cannot be read as a JSON object."""
+
+
+def load_cli_config(path: Optional[Path] = None) -> Dict[str, Any]:
     """
     Load configuration from CLI config file.
 
-    Returns:
-        Dictionary containing config values (empty dict if file not found or invalid)
-    """
-    config_path = Path.home() / ".scambus" / "config.json"
+    Args:
+        path: Config file to read. Defaults to ~/.scambus/config.json.
 
-    if not config_path.exists():
-        return {}
+    Returns:
+        Dictionary containing config values (empty dict if the file does not exist)
+
+    Raises:
+        ConfigError: If the file cannot be read or does not contain a JSON object.
+    """
+    config_path = Path(path) if path else Path.home() / ".scambus" / "config.json"
+    fix = "Fix or remove the file, then try again."
 
     try:
         with open(config_path) as f:
-            return json.load(f)
-    except (OSError, json.JSONDecodeError):
+            config = json.load(f)
+    except FileNotFoundError:
         return {}
+    except (OSError, ValueError) as e:
+        raise ConfigError(f"Cannot read config file {config_path}: {e}. {fix}")
+    if not isinstance(config, dict):
+        raise ConfigError(f"Config file {config_path} does not contain a JSON object. {fix}")
+    return config
 
 
 def get_api_url(api_url: Optional[str] = None) -> str:

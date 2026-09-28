@@ -26,11 +26,13 @@ class Context:
         """Ensure user is authenticated."""
         if not self.token:
             manager = DeviceAuthManager(self.api_url)
+            had_login = manager.get_token_info() is not None
             self.token = manager.get_token()
             if not self.token:
-                console.print(
-                    "[red]Error:[/red] Not authenticated. Run: [cyan]scambus auth login[/cyan]"
-                )
+                if not had_login:
+                    console.print(
+                        "[red]Error:[/red] Not authenticated. Run: [cyan]scambus auth login[/cyan]"
+                    )
                 sys.exit(1)
 
     def get_client(self):

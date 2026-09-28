@@ -37,8 +37,10 @@ def test_save_config_writes_owner_only_file_without_leftovers(config_file):
 def test_save_config_failure_keeps_previous_file(config_file):
     config_file.write_text('{"auth": {"refresh_token": "keep"}}')
 
+    manager = auth_device.DeviceAuthManager("https://scambus.net")
+
     with pytest.raises(TypeError):
-        config.save_config({"bad": object()}, config_file)
+        manager._save_config({"bad": object()})
 
     assert json.loads(config_file.read_text()) == {"auth": {"refresh_token": "keep"}}
     assert os.listdir(config_file.parent) == ["config.json"]

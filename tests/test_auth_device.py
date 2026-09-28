@@ -6,8 +6,11 @@ from unittest.mock import Mock
 
 import httpx
 import pytest
+from click.testing import CliRunner
 
 from scambus_cli import auth_device, cli
+from scambus_cli.commands.search import search
+from scambus_client import websocket_client
 
 API_URL = "https://scambus.example/api"
 REFRESH_URL = "https://scambus.example/api/auth/refresh"
@@ -221,3 +224,33 @@ def test_missing_credentials_prints_not_authenticated(manager, monkeypatch):
     assert len(cli_messages) == 1
     assert "Not authenticated" in cli_messages[0]
     assert refresh_messages() == []
+
+
+class FollowClient:
+    def __init__(self):
+        self.deleted = []
+
+    def create_temporary_stream(self, **kwargs):
+        return Mock(id="stream-1")
+
+    def delete_stream(self, stream_id):
+        self.deleted.append(stream_id)
+
+
+@pytest.mark.parametrize("has_login", [True, False])
+def test_search_follow_without_token_exits_before_websocket(manager, monkeypatch, has_login):
+    if not has_login:
+        manager._save_config({"api_url": API_URL})
+    respond(monkeypatch, 503, {"error": "Authentication service temporarily unavailable"})
+    monkeypatch.setenv("SCAMBUS_URL", API_URL)
+    websocket = Mock()
+    monkeypatch.setattr(websocket_client, "ScambusWebSocketClient", websocket)
+    client = FollowClient()
+    obj = Mock(get_client=Mock(return_value=client))
+
+    result = CliRunner().invoke(search, ["identifiers", "--type", "phone", "--follow"], obj=obj)
+
+    assert result.exit_code == 1
+    websocket.assert_not_called()
+    assert client.deleted == ["stream-1"]
+    assert ("Not authenticated" in result.output) is not has_login

@@ -238,6 +238,25 @@ def test_failed_api_key_renewal_keeps_login_and_prints_one_message(
     assert expected in refresh_messages()[0]
 
 
+@pytest.mark.parametrize("login", ["device", "apikey"])
+@pytest.mark.parametrize(
+    "kwargs,expected",
+    [
+        ({"status": 500, "content": b"Internal Server Error"}, "HTTP 500"),
+        ({"status": 500, "body": {"error": "boom"}}, "HTTP 500: boom"),
+    ],
+)
+def test_failed_login_renewal_names_status_once(manager, monkeypatch, login, kwargs, expected):
+    if login == "apikey":
+        save_expired_api_key_login(manager)
+    respond(monkeypatch, **kwargs)
+
+    assert manager.get_token() is None
+
+    assert len(refresh_messages()) == 1
+    assert refresh_messages()[0].endswith(f"failed with {expected}")
+
+
 def test_api_key_token_with_unreadable_expiry_is_not_exchanged(manager, monkeypatch):
     respond(monkeypatch, 200, {"token": "not-a-jwt"})
     manager.api_key_login("key-id:secret")

@@ -29,12 +29,22 @@ _TRY_LATER = (
 _UNAVAILABLE = "[yellow]⚠[/yellow] Scambus is temporarily unavailable: {reason}. Try again shortly."
 
 
-def _error_text(response: httpx.Response) -> str:
+def _json_error(response: httpx.Response) -> Optional[str]:
     try:
         error = response.json().get("error")
     except (ValueError, AttributeError):
-        error = None
-    return error if isinstance(error, str) and error else f"HTTP {response.status_code}"
+        return None
+    return error if isinstance(error, str) and error else None
+
+
+def _error_text(response: httpx.Response) -> str:
+    return _json_error(response) or f"HTTP {response.status_code}"
+
+
+def _failure_text(response: httpx.Response) -> str:
+    """Return "HTTP <status>", followed by the server's error message when it sends one."""
+    error = _json_error(response)
+    return f"HTTP {response.status_code}: {error}" if error else f"HTTP {response.status_code}"
 
 
 def _token_expiry(token: str) -> Optional[float]:
@@ -206,8 +216,7 @@ class DeviceAuthManager:
 
         if response.status_code != 200:
             console.print(
-                f"[red]✗[/red] API key authentication failed with HTTP {response.status_code}: "
-                f"{_error_text(response)}"
+                f"[red]✗[/red] API key authentication failed with {_failure_text(response)}"
             )
             return None
 
@@ -266,10 +275,7 @@ class DeviceAuthManager:
             return None
 
         if response.status_code != 200:
-            console.print(
-                f"[red]✗[/red] Session refresh failed with HTTP {response.status_code}: "
-                f"{_error_text(response)}"
-            )
+            console.print(f"[red]✗[/red] Session refresh failed with {_failure_text(response)}")
             return None
 
         try:

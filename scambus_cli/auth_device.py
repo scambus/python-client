@@ -26,6 +26,7 @@ _TRY_LATER = (
     "[yellow]⚠[/yellow] Session refresh is temporarily unavailable: {reason}. "
     "Your login is kept. Try again shortly."
 )
+_UNAVAILABLE = "[yellow]⚠[/yellow] Scambus is temporarily unavailable: {reason}. Try again shortly."
 
 
 def _error_text(response: httpx.Response) -> str:
@@ -36,16 +37,16 @@ def _error_text(response: httpx.Response) -> str:
     return error if isinstance(error, str) and error else f"HTTP {response.status_code}"
 
 
-def _token_expiry(token: str) -> float:
-    """Return the exp claim of a JWT, or 0 when it cannot be read."""
+def _token_expiry(token: str) -> Optional[float]:
+    """Return the exp claim of a JWT, or None when it cannot be read."""
     try:
         payload = token.split(".")[1]
         claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
         exp = claims["exp"]
     except (IndexError, KeyError, TypeError, ValueError):
-        return 0.0
+        return None
     if isinstance(exp, bool) or not isinstance(exp, (int, float)):
-        return 0.0
+        return None
     return float(exp)
 
 
@@ -195,24 +196,38 @@ class DeviceAuthManager:
                 json={"accessKeyId": access_key_id, "secretAccessKey": secret_access_key},
                 timeout=10,
             )
-            response.raise_for_status()
-            token_data = response.json()
-            jwt_token = token_data["token"]
-
-            # Save token
-            config = self._load_config()
-            config["auth"] = {
-                "type": "apikey",
-                "token": jwt_token,
-                "api_key": api_key,
-                "expires_at": _token_expiry(jwt_token),
-            }
-            self._save_config(config)
-            return jwt_token
-
         except httpx.HTTPError as e:
-            console.print(f"[red]✗[/red] API key authentication failed: {e}")
+            console.print(_UNAVAILABLE.format(reason=f"Could not reach Scambus ({e})"))
             return None
+
+        if response.status_code in (429, 503):
+            console.print(_UNAVAILABLE.format(reason=_error_text(response)))
+            return None
+
+        if response.status_code != 200:
+            console.print(
+                f"[red]✗[/red] API key authentication failed with HTTP {response.status_code}: "
+                f"{_error_text(response)}"
+            )
+            return None
+
+        try:
+            jwt_token = response.json()["token"]
+        except (ValueError, KeyError, TypeError):
+            jwt_token = None
+        if not isinstance(jwt_token, str) or not jwt_token:
+            console.print("[red]✗[/red] API key authentication returned an unexpected response.")
+            return None
+
+        config = self._load_config()
+        config["auth"] = {
+            "type": "apikey",
+            "token": jwt_token,
+            "api_key": api_key,
+            "expires_at": _token_expiry(jwt_token),
+        }
+        self._save_config(config)
+        return jwt_token
 
     def refresh_access_token(self) -> Optional[str]:
         """
@@ -297,7 +312,8 @@ class DeviceAuthManager:
         if auth.get("type") == "device" and time.time() > auth.get("expires_at", 0):
             return self.refresh_access_token()
 
-        if auth.get("type") == "apikey" and time.time() > (auth.get("expires_at") or 0):
+        expires_at = auth.get("expires_at")
+        if auth.get("type") == "apikey" and expires_at is not None and time.time() > expires_at:
             if not auth.get("api_key"):
                 console.print(_LOGIN_AGAIN.format(reason="The API key token expired"))
                 return None

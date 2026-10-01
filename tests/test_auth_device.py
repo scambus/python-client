@@ -200,6 +200,53 @@ def test_expired_api_key_token_is_exchanged_again(manager, monkeypatch):
     assert stored(manager)["auth"]["api_key"] == "key-id:secret"
 
 
+def save_expired_api_key_login(manager):
+    manager._save_config(
+        {
+            "api_url": API_URL,
+            "auth": {
+                "type": "apikey",
+                "token": "expired-jwt",
+                "api_key": "key-id:secret",
+                "expires_at": time.time() - 10,
+            },
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "kwargs,expected",
+    [
+        ({"status": 200, "body": {"not_token": "x"}}, "unexpected response"),
+        ({"status": 200, "content": b"<html>gateway</html>"}, "unexpected response"),
+        ({"status": 503, "body": {"error": "Service unavailable"}}, "temporarily unavailable"),
+        ({"status": 401, "content": b"Invalid credentials"}, "HTTP 401"),
+    ],
+)
+def test_failed_api_key_renewal_keeps_login_and_prints_one_message(
+    manager, monkeypatch, kwargs, expected
+):
+    save_expired_api_key_login(manager)
+    before = stored(manager)
+    respond(monkeypatch, **kwargs)
+
+    cli_messages = ensure_authenticated(monkeypatch)
+
+    assert stored(manager) == before
+    assert cli_messages == []
+    assert len(refresh_messages()) == 1
+    assert expected in refresh_messages()[0]
+
+
+def test_api_key_token_with_unreadable_expiry_is_not_exchanged(manager, monkeypatch):
+    respond(monkeypatch, 200, {"token": "not-a-jwt"})
+    manager.api_key_login("key-id:secret")
+    calls = respond(monkeypatch, 500, {})
+
+    assert manager.get_token() == "not-a-jwt"
+    assert calls == []
+
+
 def test_unexpired_api_key_token_is_not_exchanged(manager, monkeypatch):
     manager._save_config(
         {

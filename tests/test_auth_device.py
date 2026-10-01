@@ -148,6 +148,28 @@ def test_refresh_without_refresh_token_asks_for_login(manager, monkeypatch):
     assert "scambus auth login" in printed(manager)
 
 
+def test_api_key_login_posts_access_key_id_and_secret(manager, monkeypatch):
+    calls = respond(monkeypatch, 200, {"token": "api-key-jwt"})
+
+    assert manager.api_key_login("key-id:se:cret") == "api-key-jwt"
+
+    assert calls == [
+        (
+            "https://scambus.example/api/auth/apikey",
+            {"json": {"accessKeyId": "key-id", "secretAccessKey": "se:cret"}, "timeout": 10},
+        )
+    ]
+    assert stored(manager)["auth"]["token"] == "api-key-jwt"
+
+
+@pytest.mark.parametrize("api_key", ["no-separator", ":secret", "key-id:"])
+def test_api_key_login_refuses_key_without_id_and_secret(manager, monkeypatch, api_key):
+    calls = respond(monkeypatch, 200, {"token": "api-key-jwt"})
+
+    assert manager.api_key_login(api_key) is None
+    assert calls == []
+
+
 @pytest.mark.parametrize(
     "api_url,base",
     [

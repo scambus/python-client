@@ -159,14 +159,20 @@ class DeviceAuthManager:
         Authenticate using API key.
 
         Args:
-            api_key: API key from web UI
+            api_key: API key from web UI, as "accessKeyId:secretAccessKey"
 
         Returns:
             JWT token if successful, None otherwise
         """
+        access_key_id, _, secret_access_key = api_key.partition(":")
+        if not access_key_id or not secret_access_key:
+            console.print("[red]✗[/red] API key must have the form accessKeyId:secretAccessKey")
+            return None
         try:
             response = httpx.post(
-                f"{self.api_url}/api/auth/apikey", json={"apiKey": api_key}, timeout=10
+                f"{self.api_url}/api/auth/apikey",
+                json={"accessKeyId": access_key_id, "secretAccessKey": secret_access_key},
+                timeout=10,
             )
             response.raise_for_status()
             token_data = response.json()

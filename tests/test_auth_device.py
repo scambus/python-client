@@ -1,5 +1,6 @@
 """Unit tests for device login token refresh."""
 
+import base64
 import json
 import time
 from unittest.mock import Mock
@@ -160,6 +161,61 @@ def test_api_key_login_posts_access_key_id_and_secret(manager, monkeypatch):
         )
     ]
     assert stored(manager)["auth"]["token"] == "api-key-jwt"
+
+
+def jwt_with_exp(exp):
+    payload = base64.urlsafe_b64encode(json.dumps({"exp": exp}).encode()).rstrip(b"=")
+    return f"header.{payload.decode()}.signature"
+
+
+def test_api_key_login_stores_token_expiry(manager, monkeypatch):
+    exp = int(time.time()) + 86400
+    respond(monkeypatch, 200, {"token": jwt_with_exp(exp)})
+
+    manager.api_key_login("key-id:secret")
+
+    assert stored(manager)["auth"]["expires_at"] == exp
+
+
+def test_expired_api_key_token_is_exchanged_again(manager, monkeypatch):
+    renewed = jwt_with_exp(int(time.time()) + 86400)
+    manager._save_config(
+        {
+            "api_url": API_URL,
+            "auth": {
+                "type": "apikey",
+                "token": "expired-jwt",
+                "api_key": "key-id:secret",
+                "expires_at": time.time() - 10,
+            },
+        }
+    )
+    calls = respond(monkeypatch, 200, {"token": renewed})
+
+    assert manager.get_token() == renewed
+
+    assert len(calls) == 1
+    assert calls[0][1]["json"] == {"accessKeyId": "key-id", "secretAccessKey": "secret"}
+    assert stored(manager)["auth"]["token"] == renewed
+    assert stored(manager)["auth"]["api_key"] == "key-id:secret"
+
+
+def test_unexpired_api_key_token_is_not_exchanged(manager, monkeypatch):
+    manager._save_config(
+        {
+            "api_url": API_URL,
+            "auth": {
+                "type": "apikey",
+                "token": "current-jwt",
+                "api_key": "key-id:secret",
+                "expires_at": time.time() + 3600,
+            },
+        }
+    )
+    calls = respond(monkeypatch, 500, {})
+
+    assert manager.get_token() == "current-jwt"
+    assert calls == []
 
 
 @pytest.mark.parametrize("api_key", ["no-separator", ":secret", "key-id:"])

@@ -1,5 +1,6 @@
 """Unit tests for device login token refresh."""
 
+import base64
 import json
 import time
 from unittest.mock import Mock
@@ -146,6 +147,149 @@ def test_refresh_without_refresh_token_asks_for_login(manager, monkeypatch):
     assert manager.get_token() is None
     assert calls == []
     assert "scambus auth login" in printed(manager)
+
+
+def test_api_key_login_posts_access_key_id_and_secret(manager, monkeypatch):
+    calls = respond(monkeypatch, 200, {"token": "api-key-jwt"})
+
+    assert manager.api_key_login("key-id:se:cret") == "api-key-jwt"
+
+    assert calls == [
+        (
+            "https://scambus.example/api/auth/apikey",
+            {"json": {"accessKeyId": "key-id", "secretAccessKey": "se:cret"}, "timeout": 10},
+        )
+    ]
+    assert stored(manager)["auth"]["token"] == "api-key-jwt"
+
+
+def jwt_with_exp(exp):
+    payload = base64.urlsafe_b64encode(json.dumps({"exp": exp}).encode()).rstrip(b"=")
+    return f"header.{payload.decode()}.signature"
+
+
+def test_api_key_login_stores_token_expiry(manager, monkeypatch):
+    exp = int(time.time()) + 86400
+    respond(monkeypatch, 200, {"token": jwt_with_exp(exp)})
+
+    manager.api_key_login("key-id:secret")
+
+    assert stored(manager)["auth"]["expires_at"] == exp
+
+
+def test_expired_api_key_token_is_exchanged_again(manager, monkeypatch):
+    renewed = jwt_with_exp(int(time.time()) + 86400)
+    manager._save_config(
+        {
+            "api_url": API_URL,
+            "auth": {
+                "type": "apikey",
+                "token": "expired-jwt",
+                "api_key": "key-id:secret",
+                "expires_at": time.time() - 10,
+            },
+        }
+    )
+    calls = respond(monkeypatch, 200, {"token": renewed})
+
+    assert manager.get_token() == renewed
+
+    assert len(calls) == 1
+    assert calls[0][1]["json"] == {"accessKeyId": "key-id", "secretAccessKey": "secret"}
+    assert stored(manager)["auth"]["token"] == renewed
+    assert stored(manager)["auth"]["api_key"] == "key-id:secret"
+
+
+def save_expired_api_key_login(manager):
+    manager._save_config(
+        {
+            "api_url": API_URL,
+            "auth": {
+                "type": "apikey",
+                "token": "expired-jwt",
+                "api_key": "key-id:secret",
+                "expires_at": time.time() - 10,
+            },
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "kwargs,expected",
+    [
+        ({"status": 200, "body": {"not_token": "x"}}, "unexpected response"),
+        ({"status": 200, "content": b"<html>gateway</html>"}, "unexpected response"),
+        ({"status": 503, "body": {"error": "Service unavailable"}}, "temporarily unavailable"),
+        ({"status": 401, "content": b"Invalid credentials"}, "HTTP 401"),
+    ],
+)
+def test_failed_api_key_renewal_keeps_login_and_prints_one_message(
+    manager, monkeypatch, kwargs, expected
+):
+    save_expired_api_key_login(manager)
+    before = stored(manager)
+    respond(monkeypatch, **kwargs)
+
+    cli_messages = ensure_authenticated(monkeypatch)
+
+    assert stored(manager) == before
+    assert cli_messages == []
+    assert len(refresh_messages()) == 1
+    assert expected in refresh_messages()[0]
+
+
+@pytest.mark.parametrize("login", ["device", "apikey"])
+@pytest.mark.parametrize(
+    "kwargs,expected",
+    [
+        ({"status": 500, "content": b"Internal Server Error"}, "HTTP 500"),
+        ({"status": 500, "body": {"error": "boom"}}, "HTTP 500: boom"),
+    ],
+)
+def test_failed_login_renewal_names_status_once(manager, monkeypatch, login, kwargs, expected):
+    if login == "apikey":
+        save_expired_api_key_login(manager)
+    respond(monkeypatch, **kwargs)
+
+    assert manager.get_token() is None
+
+    assert len(refresh_messages()) == 1
+    assert refresh_messages()[0].endswith(f"failed with {expected}")
+
+
+def test_api_key_token_with_unreadable_expiry_is_not_exchanged(manager, monkeypatch):
+    respond(monkeypatch, 200, {"token": "not-a-jwt"})
+    manager.api_key_login("key-id:secret")
+    calls = respond(monkeypatch, 500, {})
+
+    assert manager.get_token() == "not-a-jwt"
+    assert calls == []
+
+
+def test_unexpired_api_key_token_is_not_exchanged(manager, monkeypatch):
+    manager._save_config(
+        {
+            "api_url": API_URL,
+            "auth": {
+                "type": "apikey",
+                "token": "current-jwt",
+                "api_key": "key-id:secret",
+                "expires_at": time.time() + 3600,
+            },
+        }
+    )
+    calls = respond(monkeypatch, 500, {})
+
+    assert manager.get_token() == "current-jwt"
+    assert calls == []
+
+
+@pytest.mark.parametrize("api_key", ["no-separator", ":secret", "key-id:"])
+def test_api_key_login_refuses_key_without_id_and_secret(manager, monkeypatch, api_key):
+    calls = respond(monkeypatch, 200, {"token": "api-key-jwt"})
+
+    assert manager.api_key_login(api_key) is None
+    assert calls == []
 
 
 @pytest.mark.parametrize(

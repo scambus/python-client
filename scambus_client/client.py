@@ -732,9 +732,9 @@ class ScambusClient(BaseScambusClient):
                 Example: [{"external_system": "mycoin", "external_id": "user123"}]
             extract_external_identifiers: If True, runs registered external system plugins
                 to automatically extract external identifiers from the entry content.
-            unrelated_identifiers: If True, the identifiers of this entry get no graph edges
-                to each other or to the identifiers of its parent and child entries. A case_id
-                still links them to the other identifiers in the case.
+            unrelated_identifiers: If True, this entry creates no graph edges between its
+                identifiers, or between its identifiers and the identifiers of its parent
+                and child entries. The identifiers stay linked to the entry.
             allow_confidence_decrease: If True, confidence can decrease. If False (default),
                 only confidence increases are recorded. Human actions should set this to True.
 

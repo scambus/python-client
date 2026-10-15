@@ -676,6 +676,7 @@ class ScambusClient(BaseScambusClient):
         retracted_identifier_ids: Optional[List[str]] = None,
         external_identifiers: Optional[List[Dict[str, str]]] = None,
         extract_external_identifiers: bool = False,
+        unrelated_identifiers: bool = False,
         allow_confidence_decrease: bool = False,
     ) -> JournalEntry:
         """
@@ -731,6 +732,9 @@ class ScambusClient(BaseScambusClient):
                 Example: [{"external_system": "mycoin", "external_id": "user123"}]
             extract_external_identifiers: If True, runs registered external system plugins
                 to automatically extract external identifiers from the entry content.
+            unrelated_identifiers: If True, the identifiers of this entry get no graph edges
+                to each other or to the identifiers of its parent and child entries. A case_id
+                still links them to the other identifiers in the case.
             allow_confidence_decrease: If True, confidence can decrease. If False (default),
                 only confidence increases are recorded. Human actions should set this to True.
 
@@ -857,6 +861,8 @@ class ScambusClient(BaseScambusClient):
         # Add extract_external_identifiers flag if set
         if extract_external_identifiers:
             data["extract_external_identifiers"] = True
+        if unrelated_identifiers:
+            data["unrelated_identifiers"] = True
 
         # Add allow_confidence_decrease flag if set
         if allow_confidence_decrease:
@@ -982,6 +988,7 @@ class ScambusClient(BaseScambusClient):
         performed_at: Optional[datetime] = None,
         external_identifiers: Optional[List[Dict[str, str]]] = None,
         extract_external_identifiers: bool = False,
+        unrelated_identifiers: bool = False,
     ) -> JournalEntry:
         """
         Convenience method to create a 'detection' type journal entry.
@@ -1116,6 +1123,7 @@ class ScambusClient(BaseScambusClient):
             is_test=is_test,
             external_identifiers=external_identifiers,
             extract_external_identifiers=extract_external_identifiers,
+            unrelated_identifiers=unrelated_identifiers,
         )
 
     def create_phone_call(
@@ -1143,6 +1151,7 @@ class ScambusClient(BaseScambusClient):
         is_test: bool = False,
         external_identifiers: Optional[List[Dict[str, str]]] = None,
         extract_external_identifiers: bool = False,
+        unrelated_identifiers: bool = False,
     ) -> JournalEntry:
         """
         Convenience method to create a 'phone_call' type journal entry.
@@ -1280,6 +1289,7 @@ class ScambusClient(BaseScambusClient):
             is_test=is_test,
             external_identifiers=external_identifiers,
             extract_external_identifiers=extract_external_identifiers,
+            unrelated_identifiers=unrelated_identifiers,
         )
 
     def create_email(
@@ -1310,6 +1320,7 @@ class ScambusClient(BaseScambusClient):
         is_test: bool = False,
         external_identifiers: Optional[List[Dict[str, str]]] = None,
         extract_external_identifiers: bool = False,
+        unrelated_identifiers: bool = False,
     ) -> JournalEntry:
         """
         Convenience method to create an 'email' type journal entry.
@@ -1435,6 +1446,7 @@ class ScambusClient(BaseScambusClient):
             is_test=is_test,
             external_identifiers=external_identifiers,
             extract_external_identifiers=extract_external_identifiers,
+            unrelated_identifiers=unrelated_identifiers,
         )
 
     def create_text_conversation(
@@ -1459,6 +1471,7 @@ class ScambusClient(BaseScambusClient):
         is_test: bool = False,
         external_identifiers: Optional[List[Dict[str, str]]] = None,
         extract_external_identifiers: bool = False,
+        unrelated_identifiers: bool = False,
     ) -> JournalEntry:
         """
         Convenience method to create a 'text_conversation' type journal entry.
@@ -1580,6 +1593,7 @@ class ScambusClient(BaseScambusClient):
             is_test=is_test,
             external_identifiers=external_identifiers,
             extract_external_identifiers=extract_external_identifiers,
+            unrelated_identifiers=unrelated_identifiers,
         )
 
     def create_conversation_continuation(
@@ -1603,6 +1617,7 @@ class ScambusClient(BaseScambusClient):
         is_test: bool = False,
         external_identifiers: Optional[List[Dict[str, str]]] = None,
         extract_external_identifiers: bool = False,
+        unrelated_identifiers: bool = False,
     ) -> JournalEntry:
         """
         Convenience method to create a 'conversation_continuation' journal entry.
@@ -1759,6 +1774,7 @@ class ScambusClient(BaseScambusClient):
             is_test=is_test,
             external_identifiers=external_identifiers,
             extract_external_identifiers=extract_external_identifiers,
+            unrelated_identifiers=unrelated_identifiers,
         )
 
     def create_note(
@@ -1783,6 +1799,7 @@ class ScambusClient(BaseScambusClient):
         is_test: bool = False,
         external_identifiers: Optional[List[Dict[str, str]]] = None,
         extract_external_identifiers: bool = False,
+        unrelated_identifiers: bool = False,
     ) -> JournalEntry:
         """
         Convenience method to create a 'note' type journal entry.
@@ -1893,6 +1910,7 @@ class ScambusClient(BaseScambusClient):
             is_test=is_test,
             external_identifiers=external_identifiers,
             extract_external_identifiers=extract_external_identifiers,
+            unrelated_identifiers=unrelated_identifiers,
         )
 
     def create_import(
@@ -1908,6 +1926,7 @@ class ScambusClient(BaseScambusClient):
         is_test: bool = False,
         external_identifiers: Optional[List[Dict[str, str]]] = None,
         extract_external_identifiers: bool = False,
+        unrelated_identifiers: bool = False,
     ) -> JournalEntry:
         """
         Convenience method to create an 'import' type journal entry.
@@ -1957,6 +1976,7 @@ class ScambusClient(BaseScambusClient):
             is_test=is_test,
             external_identifiers=external_identifiers,
             extract_external_identifiers=extract_external_identifiers,
+            unrelated_identifiers=unrelated_identifiers,
         )
 
     def create_export(
@@ -1972,6 +1992,7 @@ class ScambusClient(BaseScambusClient):
         is_test: bool = False,
         external_identifiers: Optional[List[Dict[str, str]]] = None,
         extract_external_identifiers: bool = False,
+        unrelated_identifiers: bool = False,
     ) -> JournalEntry:
         """
         Convenience method to create an 'export' type journal entry.
@@ -2021,6 +2042,7 @@ class ScambusClient(BaseScambusClient):
             is_test=is_test,
             external_identifiers=external_identifiers,
             extract_external_identifiers=extract_external_identifiers,
+            unrelated_identifiers=unrelated_identifiers,
         )
 
     def get_journal_entry(self, entry_id: str) -> JournalEntry:

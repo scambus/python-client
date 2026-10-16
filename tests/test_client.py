@@ -165,6 +165,44 @@ class TestScambusClientJournalEntries:
             "is_transcription": True
         }
 
+    @pytest.mark.parametrize("unrelated", [True, False])
+    def test_create_import_sends_unrelated_identifiers(self, client, unrelated):
+        """Test the unrelated_identifiers flag reaches the request and the parsed entry."""
+        from unittest.mock import Mock
+
+        post_response = Mock()
+        post_response.status_code = 201
+        post_response.json.return_value = {"id": "entry-789"}
+
+        get_response = Mock()
+        get_response.status_code = 200
+        get_response.json.return_value = {
+            "journal_entry": {
+                "journal_entry": {
+                    "id": "entry-789",
+                    "type": "import",
+                    "description": "Partner feed",
+                    "unrelated_identifiers": unrelated,
+                },
+                "can_edit": True,
+            },
+            "cases": [],
+        }
+
+        client.session.request.side_effect = [post_response, get_response]
+
+        entry = client.create_import(
+            description="Partner feed",
+            identifiers=[{"type": "email", "value": "scammer@example.com"}],
+            unrelated_identifiers=unrelated,
+        )
+
+        payload = client.session.request.call_args_list[0].kwargs["json"]
+
+        assert ("unrelated_identifiers" in payload) is unrelated
+        assert payload.get("unrelated_identifiers", False) is unrelated
+        assert entry.unrelated_identifiers is unrelated
+
     def test_create_in_progress_activity(self, client):
         """Test creating an in-progress activity."""
         from unittest.mock import Mock

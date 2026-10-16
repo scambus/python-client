@@ -307,10 +307,12 @@ class AsyncScambusClient(BaseScambusClient):
         in_progress: bool = False,
         metadata: Optional[Dict[str, Any]] = None,
         is_test: bool = False,
+        is_nsfw: bool = False,
         ai_extract: bool = False,
         retracted_identifier_ids: Optional[List[str]] = None,
         external_identifiers: Optional[List[Dict[str, str]]] = None,
         extract_external_identifiers: bool = False,
+        unrelated_identifiers: bool = False,
         allow_confidence_decrease: bool = False,
     ) -> JournalEntry:
         """Create a journal entry with automatic identifier resolution."""
@@ -351,6 +353,8 @@ class AsyncScambusClient(BaseScambusClient):
             data["metadata"] = metadata
         if is_test:
             data["is_test"] = is_test
+        if is_nsfw:
+            data["is_nsfw"] = is_nsfw
         if ai_extract:
             data["ai_extract"] = True
         if retracted_identifier_ids:
@@ -359,6 +363,8 @@ class AsyncScambusClient(BaseScambusClient):
             data["external_identifiers"] = external_identifiers
         if extract_external_identifiers:
             data["extract_external_identifiers"] = True
+        if unrelated_identifiers:
+            data["unrelated_identifiers"] = True
         if allow_confidence_decrease:
             data["allow_confidence_decrease"] = True
 
@@ -430,6 +436,7 @@ class AsyncScambusClient(BaseScambusClient):
         performed_at: Optional[datetime] = None,
         external_identifiers: Optional[List[Dict[str, str]]] = None,
         extract_external_identifiers: bool = False,
+        unrelated_identifiers: bool = False,
     ) -> JournalEntry:
         """Create a 'detection' type journal entry."""
         if media is not None:
@@ -480,6 +487,7 @@ class AsyncScambusClient(BaseScambusClient):
             is_test=is_test,
             external_identifiers=external_identifiers,
             extract_external_identifiers=extract_external_identifiers,
+            unrelated_identifiers=unrelated_identifiers,
         )
 
     async def create_phone_call(
@@ -507,6 +515,7 @@ class AsyncScambusClient(BaseScambusClient):
         is_test: bool = False,
         external_identifiers: Optional[List[Dict[str, str]]] = None,
         extract_external_identifiers: bool = False,
+        unrelated_identifiers: bool = False,
     ) -> JournalEntry:
         """Create a 'phone_call' type journal entry."""
         transcript_messages = None
@@ -570,6 +579,7 @@ class AsyncScambusClient(BaseScambusClient):
             is_test=is_test,
             external_identifiers=external_identifiers,
             extract_external_identifiers=extract_external_identifiers,
+            unrelated_identifiers=unrelated_identifiers,
         )
 
     async def create_email(
@@ -600,6 +610,7 @@ class AsyncScambusClient(BaseScambusClient):
         is_test: bool = False,
         external_identifiers: Optional[List[Dict[str, str]]] = None,
         extract_external_identifiers: bool = False,
+        unrelated_identifiers: bool = False,
     ) -> JournalEntry:
         """Create an 'email' type journal entry."""
         details_obj = EmailDetails(
@@ -655,6 +666,7 @@ class AsyncScambusClient(BaseScambusClient):
             is_test=is_test,
             external_identifiers=external_identifiers,
             extract_external_identifiers=extract_external_identifiers,
+            unrelated_identifiers=unrelated_identifiers,
         )
 
     async def create_text_conversation(
@@ -679,6 +691,7 @@ class AsyncScambusClient(BaseScambusClient):
         is_test: bool = False,
         external_identifiers: Optional[List[Dict[str, str]]] = None,
         extract_external_identifiers: bool = False,
+        unrelated_identifiers: bool = False,
     ) -> JournalEntry:
         """Create a 'text_conversation' type journal entry."""
         details_obj = TextConversationDetails(
@@ -728,6 +741,7 @@ class AsyncScambusClient(BaseScambusClient):
             is_test=is_test,
             external_identifiers=external_identifiers,
             extract_external_identifiers=extract_external_identifiers,
+            unrelated_identifiers=unrelated_identifiers,
         )
 
     async def create_conversation_continuation(
@@ -751,6 +765,7 @@ class AsyncScambusClient(BaseScambusClient):
         is_test: bool = False,
         external_identifiers: Optional[List[Dict[str, str]]] = None,
         extract_external_identifiers: bool = False,
+        unrelated_identifiers: bool = False,
     ) -> JournalEntry:
         """Create a 'conversation_continuation' journal entry."""
         if not messages:
@@ -818,6 +833,7 @@ class AsyncScambusClient(BaseScambusClient):
             is_test=is_test,
             external_identifiers=external_identifiers,
             extract_external_identifiers=extract_external_identifiers,
+            unrelated_identifiers=unrelated_identifiers,
         )
 
     async def create_note(
@@ -842,6 +858,7 @@ class AsyncScambusClient(BaseScambusClient):
         is_test: bool = False,
         external_identifiers: Optional[List[Dict[str, str]]] = None,
         extract_external_identifiers: bool = False,
+        unrelated_identifiers: bool = False,
     ) -> JournalEntry:
         """Create a 'note' type journal entry."""
         details_dict = details
@@ -890,6 +907,7 @@ class AsyncScambusClient(BaseScambusClient):
             is_test=is_test,
             external_identifiers=external_identifiers,
             extract_external_identifiers=extract_external_identifiers,
+            unrelated_identifiers=unrelated_identifiers,
         )
 
     async def create_import(
@@ -905,6 +923,7 @@ class AsyncScambusClient(BaseScambusClient):
         is_test: bool = False,
         external_identifiers: Optional[List[Dict[str, str]]] = None,
         extract_external_identifiers: bool = False,
+        unrelated_identifiers: bool = False,
     ) -> JournalEntry:
         """Create an 'import' type journal entry."""
         return await self.create_journal_entry(
@@ -920,6 +939,7 @@ class AsyncScambusClient(BaseScambusClient):
             is_test=is_test,
             external_identifiers=external_identifiers,
             extract_external_identifiers=extract_external_identifiers,
+            unrelated_identifiers=unrelated_identifiers,
         )
 
     async def create_export(
@@ -935,6 +955,7 @@ class AsyncScambusClient(BaseScambusClient):
         is_test: bool = False,
         external_identifiers: Optional[List[Dict[str, str]]] = None,
         extract_external_identifiers: bool = False,
+        unrelated_identifiers: bool = False,
     ) -> JournalEntry:
         """Create an 'export' type journal entry."""
         return await self.create_journal_entry(
@@ -950,6 +971,7 @@ class AsyncScambusClient(BaseScambusClient):
             is_test=is_test,
             external_identifiers=external_identifiers,
             extract_external_identifiers=extract_external_identifiers,
+            unrelated_identifiers=unrelated_identifiers,
         )
 
     async def get_journal_entry(self, entry_id: str) -> JournalEntry:

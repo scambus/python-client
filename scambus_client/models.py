@@ -1894,6 +1894,7 @@ class JournalEntry:
     karma_breakdown: Optional[Dict[str, Any]] = None
     is_draft: bool = False
     is_test: bool = False  # Whether this is test/demo data (excluded from normal queries)
+    unrelated_identifiers: bool = False
     draft_metadata: Optional[Dict[str, Any]] = None
     signature: Optional[str] = None
     signed_by: Optional[str] = None
@@ -1967,6 +1968,8 @@ class JournalEntry:
             data["end_time"] = self.end_time.isoformat()
         if self.is_test:
             data["is_test"] = self.is_test
+        if self.unrelated_identifiers:
+            data["unrelated_identifiers"] = self.unrelated_identifiers
         return data
 
     @classmethod
@@ -2013,6 +2016,7 @@ class JournalEntry:
             karma_breakdown=_get_value(data, "karma_breakdown", "karmaBreakdown"),
             is_draft=_get_value(data, "is_draft", "isDraft", False),
             is_test=_get_value(data, "is_test", "isTest", False),
+            unrelated_identifiers=data.get("unrelated_identifiers", False),
             draft_metadata=_get_value(data, "draft_metadata", "draftMetadata"),
             signature=data.get("signature"),
             signed_by=_get_value(data, "signed_by", "signedBy"),

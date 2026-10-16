@@ -267,6 +267,62 @@ class TestAsyncScambusClientJournalEntries:
             "is_transcription": True
         }
 
+    @staticmethod
+    def _mock_create_responses(async_client, entry_data):
+        post_response = Mock()
+        post_response.status_code = 201
+        post_response.json.return_value = {"id": entry_data["id"]}
+
+        get_response = Mock()
+        get_response.status_code = 200
+        get_response.json.return_value = {
+            "journal_entry": {"journal_entry": entry_data, "can_edit": True},
+            "cases": [],
+        }
+
+        async_client._client.request.side_effect = [post_response, get_response]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("unrelated", [True, False])
+    async def test_create_import_sends_unrelated_identifiers(self, async_client, unrelated):
+        """Test the unrelated_identifiers flag reaches the request and the parsed entry."""
+        self._mock_create_responses(
+            async_client,
+            {
+                "id": "entry-789",
+                "type": "import",
+                "description": "Partner feed",
+                "unrelated_identifiers": unrelated,
+            },
+        )
+
+        entry = await async_client.create_import(
+            description="Partner feed",
+            identifiers=[{"type": "email", "value": "scammer@example.com"}],
+            unrelated_identifiers=unrelated,
+        )
+
+        payload = async_client._client.request.call_args_list[0].kwargs["json"]
+
+        assert ("unrelated_identifiers" in payload) is unrelated
+        assert payload.get("unrelated_identifiers", False) is unrelated
+        assert entry.unrelated_identifiers is unrelated
+
+    @pytest.mark.asyncio
+    async def test_create_journal_entry_sends_is_nsfw(self, async_client):
+        """Test is_nsfw reaches the request."""
+        self._mock_create_responses(
+            async_client, {"id": "entry-790", "type": "note", "description": "Sensitive media"}
+        )
+
+        await async_client.create_journal_entry(
+            entry_type="note", description="Sensitive media", is_nsfw=True
+        )
+
+        payload = async_client._client.request.call_args_list[0].kwargs["json"]
+
+        assert payload["is_nsfw"] is True
+
 
 class TestAsyncScambusClientSearch:
     """Test search methods."""

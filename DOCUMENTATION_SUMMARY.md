@@ -1005,8 +1005,8 @@ media = client.upload_media_from_buffer(
 # Attach to journal entry
 client.create_detection(
     description="Phishing site",
-    identifiers=["url:https://scam-site.com"],
-    evidence={"media_ids": [media.id]}
+    identifiers=[{"type": "url", "value": "https://scam-site.com"}],
+    media=media
 )
 ```
 
@@ -1054,7 +1054,7 @@ key_data = client.create_automation_api_key(
     automation_id=automation["id"],
     name="Production Key"
 )
-api_key = f"{key_data['accessKeyId']}:{key_data['secretAccessKey']}"
+api_key = f"{key_data['secret_id']}:{key_data['key']}"
 
 # Manage keys
 keys = client.list_automation_api_keys(automation["id"])

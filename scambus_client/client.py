@@ -79,6 +79,7 @@ from .models import (
     UpdateDetails,
     URLConsolidationStatus,
     View,
+    _evidence_for_media,
 )
 from .types import (
     FilterCriteriaInput,
@@ -290,10 +291,9 @@ class ScambusClient(
             ],
             evidence={
                 "type": "screenshot",
-                "title": "Phishing Website",
                 "description": "Screenshot of fraudulent site",
                 "source": "Automated Scanner",
-                "mediaIds": [media.id]
+                "media_id": media.id
             }
         )
         ```
@@ -667,7 +667,7 @@ class ScambusClient(
         case_id: Optional[str] = None,
         identifier_lookups: Optional[List[Union[Dict[str, Any], IdentifierLookup]]] = None,
         our_identifier_lookups: Optional[List[Union[Dict[str, Any], IdentifierLookup]]] = None,
-        evidence: Optional[Union[Dict[str, Any], Evidence]] = None,
+        evidence: Optional[Union[Dict[str, Any], Evidence, List[Dict[str, Any]]]] = None,
         originator_type: Optional[str] = None,
         originator_identifier: Optional[str] = None,
         create_originator: bool = False,
@@ -713,7 +713,7 @@ class ScambusClient(
             case_id: Optional case ID to link to
             identifier_lookups: List of identifiers to lookup/create (for scammer/suspect identifiers)
             our_identifier_lookups: List of "our" identifiers to lookup/create (for honeypot/bot identifiers)
-            evidence: Optional evidence with media
+            evidence: Optional evidence, or a list of evidence items. Each item holds one media_id.
             parent_journal_entry_id: Optional parent journal entry ID (for linking related entries)
             tags: Optional list of tags to apply. Can be TagLookup objects or dictionaries.
                 TagLookup objects: TagLookup(tag_name="Phishing", tag_value="Email")
@@ -761,8 +761,8 @@ class ScambusClient(
                 ],
                 evidence={
                     "type": "screenshot",
-                    "title": "Phishing Website",
-                    "mediaIds": [media_id]
+                    "description": "Phishing Website",
+                    "media_id": media_id
                 }
             )
 
@@ -1080,29 +1080,16 @@ class ScambusClient(
         if media is not None:
             # Convert single media to list
             media_list = media if isinstance(media, list) else [media]
-            media_ids = [m.id for m in media_list]
-
-            # Create or update evidence with media IDs
             if evidence is None:
-                # Auto-create evidence from media
                 evidence = {
                     "type": (
                         "screenshot" if media_list[0].mime_type.startswith("image/") else "file"
                     ),
-                    "title": "Detection Evidence",
                     "description": f"Evidence for detection: {description}",
                     "source": "Automated Detection",
                     "collected_at": _to_rfc3339(datetime.now(timezone.utc)),
-                    "media_ids": media_ids,
                 }
-            else:
-                # Add media IDs to existing evidence
-                if isinstance(evidence, Evidence):
-                    evidence.media_ids.extend(media_ids)
-                elif isinstance(evidence, dict):
-                    if "media_ids" not in evidence:
-                        evidence["media_ids"] = []
-                    evidence["media_ids"].extend(media_ids)
+            evidence = _evidence_for_media(evidence, [m.id for m in media_list])
 
         # Handle details - convert DetectionDetails to dict if needed
         details_dict = details
@@ -1251,8 +1238,6 @@ class ScambusClient(
         # Handle media parameter
         if media is not None:
             media_list = media if isinstance(media, list) else [media]
-            media_ids = [m.id for m in media_list]
-
             if evidence is None:
                 evidence = {
                     "type": (
@@ -1260,19 +1245,11 @@ class ScambusClient(
                         if any(m.mime_type.startswith("audio/") for m in media_list)
                         else "file"
                     ),
-                    "title": "Phone Call Evidence",
                     "description": f"Evidence for phone call: {description}",
                     "source": "Phone Call Recording",
                     "collected_at": _to_rfc3339(start_time),
-                    "media_ids": media_ids,
                 }
-            else:
-                if isinstance(evidence, Evidence):
-                    evidence.media_ids.extend(media_ids)
-                elif isinstance(evidence, dict):
-                    if "media_ids" not in evidence:
-                        evidence["media_ids"] = []
-                    evidence["media_ids"].extend(media_ids)
+            evidence = _evidence_for_media(evidence, [m.id for m in media_list])
 
         return self.create_journal_entry(
             entry_type="phone_call",
@@ -1413,24 +1390,14 @@ class ScambusClient(
         # Handle media parameter similar to create_detection
         if media is not None:
             media_list = media if isinstance(media, list) else [media]
-            media_ids = [m.id for m in media_list]
-
             if evidence is None:
                 evidence = {
                     "type": "screenshot",
-                    "title": "Email Evidence",
                     "description": f"Evidence for email: {subject}",
                     "source": "Email Communication",
-                    "collectedAt": _to_rfc3339(sent_at),
-                    "media_ids": media_ids,
+                    "collected_at": _to_rfc3339(sent_at),
                 }
-            else:
-                if isinstance(evidence, Evidence):
-                    evidence.media_ids.extend(media_ids)
-                elif isinstance(evidence, dict):
-                    if "media_ids" not in evidence:
-                        evidence["media_ids"] = []
-                    evidence["media_ids"].extend(media_ids)
+            evidence = _evidence_for_media(evidence, [m.id for m in media_list])
 
         return self.create_journal_entry(
             entry_type="email",
@@ -1559,24 +1526,14 @@ class ScambusClient(
         # Handle media parameter
         if media is not None:
             media_list = media if isinstance(media, list) else [media]
-            media_ids = [m.id for m in media_list]
-
             if evidence is None:
                 evidence = {
                     "type": "screenshot",
-                    "title": f"{platform} Conversation Evidence",
                     "description": f"Evidence for {platform} conversation: {description}",
                     "source": f"{platform} Communication",
-                    "collectedAt": _to_rfc3339(start_time),
-                    "media_ids": media_ids,
+                    "collected_at": _to_rfc3339(start_time),
                 }
-            else:
-                if isinstance(evidence, Evidence):
-                    evidence.media_ids.extend(media_ids)
-                elif isinstance(evidence, dict):
-                    if "media_ids" not in evidence:
-                        evidence["media_ids"] = []
-                    evidence["media_ids"].extend(media_ids)
+            evidence = _evidence_for_media(evidence, [m.id for m in media_list])
 
         return self.create_journal_entry(
             entry_type="text_conversation",
@@ -1740,25 +1697,15 @@ class ScambusClient(
         # Handle media parameter
         if media is not None:
             media_list = media if isinstance(media, list) else [media]
-            media_ids = [m.id for m in media_list]
-
             if evidence is None:
                 evidence = {
                     "type": "screenshot",
-                    "title": "Conversation Continuation Evidence",
                     "description": f"Evidence for continuation: {description}",
                     "source": "Conversation Messages",
-                    "media_ids": media_ids,
                 }
                 if start_time:
-                    evidence["collectedAt"] = _to_rfc3339(start_time)
-            else:
-                if isinstance(evidence, Evidence):
-                    evidence.media_ids.extend(media_ids)
-                elif isinstance(evidence, dict):
-                    if "media_ids" not in evidence:
-                        evidence["media_ids"] = []
-                    evidence["media_ids"].extend(media_ids)
+                    evidence["collected_at"] = _to_rfc3339(start_time)
+            evidence = _evidence_for_media(evidence, [m.id for m in media_list])
 
         return self.create_journal_entry(
             entry_type="conversation_continuation",
@@ -1877,24 +1824,14 @@ class ScambusClient(
         # Handle media parameter
         if media is not None:
             media_list = media if isinstance(media, list) else [media]
-            media_ids = [m.id for m in media_list]
-
             if evidence is None:
                 evidence = {
                     "type": "document",
-                    "title": "Note Evidence",
                     "description": f"Evidence for note: {description}",
                     "source": "Note Attachment",
                     "collected_at": _to_rfc3339(performed_at or datetime.now(timezone.utc)),
-                    "media_ids": media_ids,
                 }
-            else:
-                if isinstance(evidence, Evidence):
-                    evidence.media_ids.extend(media_ids)
-                elif isinstance(evidence, dict):
-                    if "media_ids" not in evidence:
-                        evidence["media_ids"] = []
-                    evidence["media_ids"].extend(media_ids)
+            evidence = _evidence_for_media(evidence, [m.id for m in media_list])
 
         return self.create_journal_entry(
             entry_type="note",
@@ -2303,7 +2240,7 @@ class ScambusClient(
         response = self._request("GET", "/journal-entries", params=params)
         return [
             JournalEntry.from_dict(item["journal_entry"])
-            for item in _page_data(response, "/journal-entries")
+            for item in _page_data(response, "GET", "/journal-entries")
         ]
 
     def query_journal_entries(
@@ -2809,7 +2746,7 @@ class ScambusClient(
             params["type"] = identifier_type
 
         response = self._request("GET", "/identifiers", params=params)
-        return [Identifier.from_dict(item) for item in _page_data(response, "/identifiers")]
+        return [Identifier.from_dict(item) for item in _page_data(response, "GET", "/identifiers")]
 
     def get_identifier(self, identifier_id: str) -> Identifier:
         """
@@ -3210,8 +3147,8 @@ class ScambusClient(
 
         Example:
             ```python
-            # List all active cases
-            cases = client.list_cases(status="active")
+            # List all open cases
+            cases = client.list_cases(status="open")
             for case in cases:
                 print(f"{case.title}: {case.status}")
 
@@ -3220,7 +3157,7 @@ class ScambusClient(
             page2 = client.list_cases(page=2, limit=10)
 
             # Filter by priority and status
-            high_priority = client.list_cases(status="active", priority="high")
+            high_priority = client.list_cases(status="open", priority="high")
 
             # Include test data
             all_cases = client.list_cases(include_test=True)
@@ -3237,7 +3174,7 @@ class ScambusClient(
             params["category"] = category
 
         response = self._request("GET", "/cases", params=params)
-        return [Case.from_dict(item) for item in _page_data(response, "/cases")]
+        return [Case.from_dict(item) for item in _page_data(response, "GET", "/cases")]
 
     def get_case(self, case_id: str) -> Case:
         """
@@ -3254,7 +3191,7 @@ class ScambusClient(
             case = client.get_case("abc-123-def-456")
             print(f"Case: {case.title}")
             print(f"Status: {case.status}")
-            print(f"Description: {case.description}")
+            print(f"Notes: {case.notes}")
             ```
         """
         response = self._request("GET", f"/cases/{case_id}")
@@ -5022,33 +4959,30 @@ class ScambusClient(
                 print(f"Tag: {tag['tag']['title']}")
             ```
         """
-        response = self._request("GET", f"/tags/effective/{entity_type}/{entity_id}")
-        if isinstance(response, list):
-            return response
-        return []
+        endpoint = f"/tags/effective/{entity_type}/{entity_id}"
+        response = self._request("GET", endpoint)
+        return [] if response is None else _page_data(response, "GET", endpoint, None)
 
-    def get_tag_history(self, entity_type: str, entity_id: str) -> List[JournalEntry]:
+    def get_identifier_tag_history(self, identifier_id: str) -> List[JournalEntry]:
         """
-        Get tag operation history for an entity.
+        Get the tag_operation journal entries for an identifier, newest first.
 
         Args:
-            entity_type: Entity type (identifier, evidence, case)
-            entity_id: Entity UUID
+            identifier_id: Identifier UUID
 
         Returns:
             List of JournalEntry objects
 
         Example:
             ```python
-            history = client.get_tag_history("identifier", "id-123")
+            history = client.get_identifier_tag_history("id-123")
             for entry in history:
                 print(f"Operation at {entry.performed_at}")
             ```
         """
-        response = self._request("GET", f"/tags/history/{entity_type}/{entity_id}")
-        if isinstance(response, list):
-            return [JournalEntry.from_dict(e) for e in response]
-        return []
+        endpoint = f"/identifiers/{identifier_id}/tag-history"
+        response = self._request("GET", endpoint)
+        return [JournalEntry.from_dict(e) for e in _page_data(response, "GET", endpoint, "entries")]
 
     # Search Methods
 
@@ -5096,7 +5030,7 @@ class ScambusClient(
                 min_confidence=0.8
             )
             for identifier in result['data']:
-                print(identifier.value)
+                print(identifier.display_value)
 
             # Using FilterCriteria
             from scambus_client.types import FilterCriteria
@@ -5166,7 +5100,7 @@ class ScambusClient(
     def search_cases(
         self,
         query: Optional[str] = None,
-        status: Optional[str] = None,
+        status: Optional[Union[str, List[str]]] = None,
         limit: int = 50,
     ) -> List[Case]:
         """
@@ -5174,7 +5108,7 @@ class ScambusClient(
 
         Args:
             query: Search query
-            status: Case status filter
+            status: Case status filter (open, investigating, closed), or a list of statuses
             limit: Maximum number of results
 
         Returns:
@@ -5184,20 +5118,18 @@ class ScambusClient(
             ```python
             cases = client.search_cases(
                 query="fraud",
-                status="active"
+                status="open"
             )
             ```
         """
-        data = {"limit": limit}
+        data: Dict[str, Any] = {"limit": limit}
         if query:
-            data["query"] = query
+            data["searchQuery"] = query
         if status:
-            data["status"] = status
+            data["status"] = [status] if isinstance(status, str) else status
 
         response = self._request("POST", "/search/cases", json_data=data)
-        if isinstance(response, list):
-            return [Case.from_dict(c) for c in response]
-        return []
+        return [Case.from_dict(c) for c in _page_data(response, "POST", "/search/cases")]
 
     # Notification Methods
 
@@ -5344,7 +5276,7 @@ class ScambusClient(
             ```
         """
         response = self._request("GET", "/sessions")
-        return [Session.from_dict(s) for s in _page_data(response, "/sessions", "sessions")]
+        return [Session.from_dict(s) for s in _page_data(response, "GET", "/sessions", "sessions")]
 
     def revoke_session(self, session_id: str) -> None:
         """
@@ -5375,7 +5307,7 @@ class ScambusClient(
             ```
         """
         response = self._request("GET", "/passkeys")
-        return [Passkey.from_dict(p) for p in _page_data(response, "/passkeys", None)]
+        return [Passkey.from_dict(p) for p in _page_data(response, "GET", "/passkeys", None)]
 
     def delete_passkey(self, passkey_id: str) -> None:
         """
@@ -5499,20 +5431,18 @@ class ScambusClient(
         self,
         name: str,
         description: Optional[str] = None,
-        active: bool = True,
     ) -> Dict[str, Any]:
         """
-        Create a new automation identity.
+        Create a new automation identity. The server creates it active.
 
         Args:
             name: Automation name
             description: Optional description
-            active: Whether the automation is active (default: True)
 
         Returns:
-            Automation object with id, name, description, etc.
+            Automation object with id, name, description, is_active, etc.
         """
-        body = {"name": name, "active": active}
+        body = {"name": name}
         if description:
             body["description"] = description
 
@@ -5533,12 +5463,13 @@ class ScambusClient(
             expires_at: Optional expiration date (ISO 8601 format)
 
         Returns:
-            Dict with 'apiKey', 'accessKeyId', and 'secretAccessKey'.
-            NOTE: accessKeyId and secretAccessKey are only returned once!
+            API key object with 'id', 'name', 'secret_id' and 'key'.
+            The API key for authentication is f"{secret_id}:{key}".
+            NOTE: 'key' is only returned once!
         """
         body = {"name": name}
         if expires_at:
-            body["expiresAt"] = expires_at
+            body["expires_at"] = expires_at
 
         return self._request("POST", f"/automations/{automation_id}/api-keys", json_data=body)
 
@@ -5549,7 +5480,15 @@ class ScambusClient(
         Returns:
             List of automation objects
         """
-        return self._request("GET", "/automations")
+        automations: List[Dict[str, Any]] = []
+        page = 1
+        while True:
+            # The backend caps page_size at 100.
+            response = self._request("GET", "/automations", params={"page": page, "page_size": 100})
+            automations.extend(_page_data(response, "GET", "/automations"))
+            if page >= response.get("pagination", {}).get("total_pages", 0):
+                return automations
+            page += 1
 
     def get_automation(self, automation_id: str) -> Dict[str, Any]:
         """

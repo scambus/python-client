@@ -843,7 +843,7 @@ key_data = client.create_automation_api_key(
     automation_id=automation["id"],
     name="Production Key"
 )
-api_key = f"{key_data['accessKeyId']}:{key_data['secretAccessKey']}"
+api_key = f"{key_data['secret_id']}:{key_data['key']}"
 
 # List automations
 automations = client.list_automations()

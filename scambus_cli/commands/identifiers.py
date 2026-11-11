@@ -27,7 +27,9 @@ def identifiers():
 @identifiers.command("list")
 @click.option("--type", "identifier_type", help="Filter by type (phone, email, ...)")
 @click.option("--page", default=1, show_default=True, help="Page number")
-@click.option("--limit", default=20, show_default=True, help="Items per page (max 100)")
+@click.option(
+    "--limit", default=20, show_default=True, type=click.IntRange(1, 100), help="Items per page"
+)
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 @click.pass_context
 def list_identifiers(ctx, identifier_type, page, limit, output_json):

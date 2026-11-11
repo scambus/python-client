@@ -5,10 +5,37 @@ from unittest.mock import Mock
 import pytest
 
 from scambus_client._admin_jobs import (
+    MAINTENANCE_FORCE_JOBS,
     MAINTENANCE_JOBS,
+    MAINTENANCE_MISSING_COUNT_JOBS,
     MAINTENANCE_PROGRESS_JOBS,
+    MAINTENANCE_RESET_JOBS,
     REPROCESS_JOBS,
 )
+
+PROGRESS_JOBS = [
+    "rebuild-identifier-tags",
+    "rebuild-graph-edges",
+    "rebuild-network-sizes",
+    "backfill-embeddings",
+    "backfill-conversation-chunks",
+    "backfill-cluster-member-contexts",
+    "backfill-media-vision",
+    "backfill-identifier-source-media",
+    "backfill-tranco-checks",
+]
+RESET_JOBS = [name for name in PROGRESS_JOBS if name != "rebuild-network-sizes"]
+MISSING_COUNT_JOBS = [
+    "backfill-embeddings",
+    "backfill-conversation-chunks",
+    "backfill-cluster-member-contexts",
+    "backfill-media-vision",
+    "backfill-identifier-source-media",
+    "backfill-media-thumbnails",
+    "backfill-media-transcripts",
+    "backfill-tranco-checks",
+]
+START_ONLY_JOBS = ["backfill-scam-confidence-scope"]
 
 API = "https://api.test.scambus.net/api"
 QUEUE = f"{API}/admin/task-queue/queues/maintenance"
@@ -28,7 +55,17 @@ def sent(client):
 
 
 class TestMaintenance:
-    @pytest.mark.parametrize("name", MAINTENANCE_JOBS)
+    def test_job_tuples_match_backend_routes(self):
+        assert set(MAINTENANCE_JOBS) == set(PROGRESS_JOBS + MISSING_COUNT_JOBS + START_ONLY_JOBS)
+        assert list(MAINTENANCE_PROGRESS_JOBS) == PROGRESS_JOBS
+        assert list(MAINTENANCE_RESET_JOBS) == RESET_JOBS
+        assert list(MAINTENANCE_FORCE_JOBS) == ["backfill-cluster-member-contexts"]
+        assert list(MAINTENANCE_MISSING_COUNT_JOBS) == MISSING_COUNT_JOBS
+        assert list(REPROCESS_JOBS) == ["enrichment-reprocess", "extraction-reprocess", "nsfw-scan"]
+
+    @pytest.mark.parametrize(
+        "name", sorted(set(PROGRESS_JOBS + MISSING_COUNT_JOBS + START_ONLY_JOBS))
+    )
     def test_start_posts_to_job_route(self, api, name):
         assert api.start_maintenance_job(name) == {"status": "ok"}
 
@@ -54,7 +91,13 @@ class TestMaintenance:
             api.start_maintenance_job("backfill-embeddings", force=True)
         api.session.request.assert_not_called()
 
-    @pytest.mark.parametrize("name", MAINTENANCE_PROGRESS_JOBS)
+    @pytest.mark.parametrize("name", RESET_JOBS)
+    def test_start_with_reset(self, api, name):
+        api.start_maintenance_job(name, reset=True)
+
+        assert sent(api) == ("POST", f"{API}/admin/maintenance/{name}", None, {"reset": "true"})
+
+    @pytest.mark.parametrize("name", PROGRESS_JOBS)
     def test_progress(self, api, name):
         api.get_maintenance_progress(name)
 
@@ -191,7 +234,7 @@ class TestReprocess:
 
         assert sent(api) == ("POST", f"{API}/admin/nsfw-scan", {"rescan_all": True}, None)
 
-    @pytest.mark.parametrize("job", REPROCESS_JOBS)
+    @pytest.mark.parametrize("job", ["enrichment-reprocess", "extraction-reprocess", "nsfw-scan"])
     def test_status_and_cancel(self, api, job):
         api.get_reprocess_status(job)
         assert sent(api) == ("GET", f"{API}/admin/{job}", None, None)

@@ -4,6 +4,7 @@ Main Scambus API client.
 
 import logging
 import time
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -14,7 +15,7 @@ from ._admin_access import AdminAccessMixin
 from ._admin_audit import AdminAuditMixin
 from ._admin_infra import AdminInfraMixin
 from ._admin_jobs import AdminJobsMixin
-from ._base_client import BaseScambusClient, _to_rfc3339
+from ._base_client import _INCLUDE_TEST_IGNORED, BaseScambusClient, _page_data, _to_rfc3339
 from ._identifier_lookups import deltachat_lookup
 from ._retry import (
     RETRY_BASE_DELAY,
@@ -2295,18 +2296,15 @@ class ScambusClient(
         Returns:
             List of JournalEntry objects
         """
-        params = {"page": page, "limit": limit}
+        params = {"page": page, "page_size": limit}
         if entry_type:
             params["type"] = entry_type
 
         response = self._request("GET", "/journal-entries", params=params)
-
-        # Handle paginated response
-        # Backend returns: {"data": [{"journal_entry": {...}, "can_edit": bool}, ...]}
-        if isinstance(response, dict) and "data" in response:
-            return [JournalEntry.from_dict(item["journal_entry"]) for item in response["data"]]
-        else:
-            return []
+        return [
+            JournalEntry.from_dict(item["journal_entry"])
+            for item in _page_data(response, "/journal-entries")
+        ]
 
     def query_journal_entries(
         self,
@@ -2806,17 +2804,12 @@ class ScambusClient(
         Returns:
             List of Identifier objects
         """
-        params = {"page": page, "limit": limit}
+        params = {"page": page, "page_size": limit}
         if identifier_type:
             params["type"] = identifier_type
 
         response = self._request("GET", "/identifiers", params=params)
-
-        # Handle paginated response
-        if isinstance(response, dict) and "data" in response:
-            return [Identifier.from_dict(identifier) for identifier in response["data"]]
-        else:
-            return []
+        return [Identifier.from_dict(item) for item in _page_data(response, "/identifiers")]
 
     def get_identifier(self, identifier_id: str) -> Identifier:
         """
@@ -3233,23 +3226,18 @@ class ScambusClient(
             all_cases = client.list_cases(include_test=True)
             ```
         """
-        params = {"page": page, "limit": limit}
+        if include_test:
+            warnings.warn(_INCLUDE_TEST_IGNORED, DeprecationWarning, stacklevel=2)
+        params = {"page": page, "page_size": limit}
         if status:
             params["status"] = status
         if priority:
             params["priority"] = priority
         if category:
             params["category"] = category
-        if include_test:
-            params["includeTest"] = "true"
 
         response = self._request("GET", "/cases", params=params)
-
-        # Handle paginated response
-        if isinstance(response, dict) and "data" in response:
-            return [Case.from_dict(case) for case in response["data"]]
-        else:
-            return []
+        return [Case.from_dict(item) for item in _page_data(response, "/cases")]
 
     def get_case(self, case_id: str) -> Case:
         """

@@ -7,7 +7,7 @@ import random
 import warnings
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
-from typing import Optional
+from typing import Any, List, Optional
 
 from .config import get_api_key_id, get_api_key_secret, get_api_token, get_api_url
 from .exceptions import (
@@ -19,6 +19,18 @@ from .exceptions import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+_INCLUDE_TEST_IGNORED = (
+    "include_test is ignored: the server shows test data only to a client in test mode"
+)
+
+
+def _page_data(response: Any, endpoint: str) -> List[Any]:
+    """Return the data list of a paginated response, or raise when the response has none."""
+    if isinstance(response, dict) and isinstance(response.get("data"), list):
+        return response["data"]
+    raise ScambusAPIError(f"Unexpected response from GET {endpoint}: {str(response)[:200]}")
 
 
 def _to_rfc3339(dt: datetime) -> str:

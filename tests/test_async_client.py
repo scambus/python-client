@@ -472,6 +472,63 @@ class TestAsyncScambusClientQueues:
         )
 
 
+class TestAsyncPaginatedLists:
+    """Test the page-numbered list methods against the server's pagination contract."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("method", "path", "item"),
+        [
+            ("list_cases", "/cases", {"id": "case-1", "title": "T"}),
+            ("list_identifiers", "/identifiers", {"id": "i-1", "type": "email"}),
+            (
+                "list_journal_entries",
+                "/journal-entries",
+                {"journal_entry": {"id": "e-1", "type": "note"}, "can_edit": True},
+            ),
+        ],
+    )
+    async def test_sends_page_size(self, async_client, method, path, item):
+        """Test that the page size goes in page_size, the key the server reads."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"data": [item], "pagination": {}}
+        async_client._client.request.return_value = mock_response
+
+        result = await getattr(async_client, method)(page=2, limit=50)
+
+        call = async_client._client.request.call_args.kwargs
+        assert call["url"].endswith(path)
+        assert call["params"]["page_size"] == 50
+        assert "limit" not in call["params"]
+        assert len(result) == 1
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("method", ["list_cases", "list_identifiers", "list_journal_entries"])
+    async def test_unexpected_response_raises(self, async_client, method):
+        """Test that a response without a data list raises instead of returning nothing."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"items": []}
+        async_client._client.request.return_value = mock_response
+
+        with pytest.raises(ScambusAPIError, match="Unexpected response"):
+            await getattr(async_client, method)()
+
+    @pytest.mark.asyncio
+    async def test_list_cases_warns_that_include_test_is_ignored(self, async_client):
+        """Test that list_cases warns instead of sending a parameter the server ignores."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"data": []}
+        async_client._client.request.return_value = mock_response
+
+        with pytest.warns(DeprecationWarning, match="include_test is ignored"):
+            await async_client.list_cases(include_test=True)
+
+        assert "includeTest" not in async_client._client.request.call_args.kwargs["params"]
+
+
 class TestAsyncScambusClientErrorHandling:
     """Test error handling."""
 

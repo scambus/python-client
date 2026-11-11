@@ -7,7 +7,7 @@ import random
 import warnings
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from .config import get_api_key_id, get_api_key_secret, get_api_token, get_api_url
 from .exceptions import (
@@ -34,6 +34,24 @@ def _page_data(response: Any, method: str, endpoint: str, key: Optional[str] = "
     if isinstance(items, list):
         return items
     raise ScambusAPIError(f"Unexpected response from {method} {endpoint}: {str(response)[:200]}")
+
+
+MAX_PAGE_SIZE = 100
+
+
+def _page_params(page: int, limit: int) -> Dict[str, int]:
+    """Return page query parameters; the server replaces a page size above MAX_PAGE_SIZE with its default."""
+    if not 1 <= limit <= MAX_PAGE_SIZE:
+        raise ValueError(f"limit must be between 1 and {MAX_PAGE_SIZE}, got {limit}")
+    return {"page": page, "page_size": limit}
+
+
+def _total_pages(response: Any, endpoint: str) -> int:
+    """Return pagination.total_pages of a paginated response, or raise when it is missing."""
+    pagination = response.get("pagination") if isinstance(response, dict) else None
+    if not isinstance(pagination, dict) or not isinstance(pagination.get("total_pages"), int):
+        raise ScambusAPIError(f"Response from GET {endpoint} has no pagination.total_pages")
+    return pagination["total_pages"]
 
 
 def _to_rfc3339(dt: datetime) -> str:

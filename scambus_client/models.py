@@ -526,13 +526,13 @@ class Evidence:
 def _evidence_for_media(
     evidence: Union[Dict[str, Any], Evidence], media_ids: List[str]
 ) -> List[Dict[str, Any]]:
-    """Return one copy of EVIDENCE per media ID, after the media EVIDENCE already holds."""
+    """Return one copy of EVIDENCE per distinct media ID, after the media EVIDENCE already holds."""
     base = evidence.to_dict() if isinstance(evidence, Evidence) else dict(evidence)
     held = base.pop("media_ids", None) or []
     own = base.pop("media_id", None)
     if own:
         held = [own, *held]
-    return [{**base, "media_id": media_id} for media_id in [*held, *media_ids]]
+    return [{**base, "media_id": media_id} for media_id in dict.fromkeys([*held, *media_ids])]
 
 
 @dataclass

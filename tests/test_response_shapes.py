@@ -46,6 +46,29 @@ def test_list_passkeys_raises_on_malformed_response(client):
         client.list_passkeys()
 
 
+@pytest.mark.parametrize("method", ["list_cases", "list_identifiers", "list_journal_entries"])
+@pytest.mark.parametrize("limit", [0, 101])
+def test_list_refuses_page_size_the_server_would_replace(client, method, limit):
+    with pytest.raises(ValueError, match="limit must be between 1 and 100"):
+        getattr(client, method)(limit=limit)
+    client.session.request.assert_not_called()
+
+
+def test_list_automations_raises_without_pagination(client):
+    _respond(client, 200, {"data": [{"id": "a-1"}]})
+
+    with pytest.raises(ScambusAPIError, match="no pagination.total_pages"):
+        client.list_automations()
+
+
+def test_evidence_for_media_sends_each_media_once():
+    from scambus_client.models import _evidence_for_media
+
+    items = _evidence_for_media({"type": "image", "media_id": "m-1"}, ["m-1", "m-2", "m-2"])
+
+    assert [item["media_id"] for item in items] == ["m-1", "m-2"]
+
+
 def test_error_message_includes_server_detail(client):
     _respond(client, 409, {"error": "leased", "detail": "The profile is leased by another user."})
 

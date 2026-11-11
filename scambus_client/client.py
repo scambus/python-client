@@ -15,7 +15,15 @@ from ._admin_access import AdminAccessMixin
 from ._admin_audit import AdminAuditMixin
 from ._admin_infra import AdminInfraMixin
 from ._admin_jobs import AdminJobsMixin
-from ._base_client import _INCLUDE_TEST_IGNORED, BaseScambusClient, _page_data, _to_rfc3339
+from ._base_client import (
+    _INCLUDE_TEST_IGNORED,
+    MAX_PAGE_SIZE,
+    BaseScambusClient,
+    _page_data,
+    _page_params,
+    _to_rfc3339,
+    _total_pages,
+)
 from ._identifier_lookups import deltachat_lookup
 from ._retry import (
     RETRY_BASE_DELAY,
@@ -2233,7 +2241,7 @@ class ScambusClient(
         Returns:
             List of JournalEntry objects
         """
-        params = {"page": page, "page_size": limit}
+        params = _page_params(page, limit)
         if entry_type:
             params["type"] = entry_type
 
@@ -2741,7 +2749,7 @@ class ScambusClient(
         Returns:
             List of Identifier objects
         """
-        params = {"page": page, "page_size": limit}
+        params = _page_params(page, limit)
         if identifier_type:
             params["type"] = identifier_type
 
@@ -3165,7 +3173,7 @@ class ScambusClient(
         """
         if include_test:
             warnings.warn(_INCLUDE_TEST_IGNORED, DeprecationWarning, stacklevel=2)
-        params = {"page": page, "page_size": limit}
+        params = _page_params(page, limit)
         if status:
             params["status"] = status
         if priority:
@@ -5483,10 +5491,11 @@ class ScambusClient(
         automations: List[Dict[str, Any]] = []
         page = 1
         while True:
-            # The backend caps page_size at 100.
-            response = self._request("GET", "/automations", params={"page": page, "page_size": 100})
+            response = self._request(
+                "GET", "/automations", params=_page_params(page, MAX_PAGE_SIZE)
+            )
             automations.extend(_page_data(response, "GET", "/automations"))
-            if page >= response.get("pagination", {}).get("total_pages", 0):
+            if page >= _total_pages(response, "/automations"):
                 return automations
             page += 1
 

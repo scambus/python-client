@@ -80,7 +80,10 @@ async def test_search_cases_raises_on_unexpected_shape(any_client):
 
 @pytest.mark.asyncio
 async def test_list_automations_returns_page_data(any_client):
-    any_client._request.return_value = {"data": [{"id": "a-1"}], "pagination": {}}
+    any_client._request.return_value = {
+        "data": [{"id": "a-1"}],
+        "pagination": {"page": 1, "page_size": 100, "total_items": 1, "total_pages": 1},
+    }
 
     assert await _call(any_client, "list_automations") == [{"id": "a-1"}]
 

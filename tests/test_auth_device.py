@@ -396,6 +396,28 @@ def test_get_user_info_reports_failure(manager, monkeypatch, fake_get, expected)
     assert expected in refresh_messages()[0]
 
 
+@pytest.mark.parametrize("args", [["login", "--api-key", "id:secret"], ["status"]])
+def test_auth_commands_show_entity_type(monkeypatch, args):
+    fake = Mock(config_file="config.json")
+    fake.api_key_login.return_value = "token"
+    fake.get_token_info.return_value = {
+        "type": "api_key",
+        "seconds_remaining": None,
+        "is_expired": False,
+        "has_refresh_token": False,
+    }
+    fake.get_user_info.return_value = {"name": "Bot", "entity_type": "automation"}
+    monkeypatch.setattr(cli, "DeviceAuthManager", lambda api_url: fake)
+    monkeypatch.setattr(cli, "console", Mock())
+    monkeypatch.setenv("SCAMBUS_URL", API_URL)
+
+    result = CliRunner().invoke(cli.auth, args)
+
+    assert result.exit_code == 0, result.output
+    panel = cli.console.print.call_args.args[0]
+    assert "Entity Type:[/bold] automation" in str(panel.renderable)
+
+
 class FollowClient:
     def __init__(self):
         self.deleted = []

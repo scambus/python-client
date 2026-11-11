@@ -26,14 +26,14 @@ _INCLUDE_TEST_IGNORED = (
 )
 
 
-def _page_data(response: Any, endpoint: str, key: Optional[str] = "data") -> List[Any]:
+def _page_data(response: Any, method: str, endpoint: str, key: Optional[str] = "data") -> List[Any]:
     """Return the list under KEY, or the response itself when KEY is None; raise when it is not a list."""
     items = response
     if key is not None:
         items = response.get(key) if isinstance(response, dict) else None
     if isinstance(items, list):
         return items
-    raise ScambusAPIError(f"Unexpected response from GET {endpoint}: {str(response)[:200]}")
+    raise ScambusAPIError(f"Unexpected response from {method} {endpoint}: {str(response)[:200]}")
 
 
 def _to_rfc3339(dt: datetime) -> str:

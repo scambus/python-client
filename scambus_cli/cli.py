@@ -145,7 +145,7 @@ def login(api_key):
                 status_lines.append(f"[bold]Name:[/bold] {user_info.get('name')}")
                 status_lines.append(f"[bold]Email:[/bold] {user_info.get('email')}")
                 status_lines.append(f"[bold]ID:[/bold] {user_info.get('id')}")
-                status_lines.append(f"[bold]Entity Type:[/bold] {user_info.get('entityType')}")
+                status_lines.append(f"[bold]Entity Type:[/bold] {user_info.get('entity_type')}")
                 status_lines.append(f"[bold]Role:[/bold] {user_info.get('role')}")
 
             # Show token info
@@ -210,7 +210,7 @@ def status():
         status_lines.append(f"[bold]Name:[/bold] {user_info.get('name')}")
         status_lines.append(f"[bold]Email:[/bold] {user_info.get('email')}")
         status_lines.append(f"[bold]ID:[/bold] {user_info.get('id')}")
-        status_lines.append(f"[bold]Entity Type:[/bold] {user_info.get('entityType')}")
+        status_lines.append(f"[bold]Entity Type:[/bold] {user_info.get('entity_type')}")
         status_lines.append(f"[bold]Role:[/bold] {user_info.get('role')}")
 
     # Show token info

@@ -74,7 +74,7 @@ async def test_search_cases_sends_backend_fields_and_reads_data(any_client):
 async def test_search_cases_raises_on_unexpected_shape(any_client):
     any_client._request.return_value = [CASE]
 
-    with pytest.raises(ScambusAPIError):
+    with pytest.raises(ScambusAPIError, match="from POST /search/cases"):
         await _call(any_client, "search_cases", query="fraud")
 
 
@@ -234,6 +234,18 @@ async def test_get_effective_tags_raises_on_unexpected_shape(any_client):
 
     with pytest.raises(ScambusAPIError):
         await _call(any_client, "get_effective_tags", "identifier", "i-1")
+
+
+@pytest.mark.asyncio
+async def test_get_identifier_tag_history_reads_entries(any_client):
+    any_client._request.return_value = {
+        "entries": [{"id": "je-1", "type": "tag_operation", "description": "d"}]
+    }
+
+    entries = await _call(any_client, "get_identifier_tag_history", "i-1")
+
+    assert any_client._request.call_args.args == ("GET", "/identifiers/i-1/tag-history")
+    assert [(e.id, e.type) for e in entries] == [("je-1", "tag_operation")]
 
 
 @pytest.mark.parametrize("args,expected", [(["--json"], '"notes": "n"'), ([], "Notes")])

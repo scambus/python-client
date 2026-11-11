@@ -2240,7 +2240,7 @@ class ScambusClient(
         response = self._request("GET", "/journal-entries", params=params)
         return [
             JournalEntry.from_dict(item["journal_entry"])
-            for item in _page_data(response, "/journal-entries")
+            for item in _page_data(response, "GET", "/journal-entries")
         ]
 
     def query_journal_entries(
@@ -2746,7 +2746,7 @@ class ScambusClient(
             params["type"] = identifier_type
 
         response = self._request("GET", "/identifiers", params=params)
-        return [Identifier.from_dict(item) for item in _page_data(response, "/identifiers")]
+        return [Identifier.from_dict(item) for item in _page_data(response, "GET", "/identifiers")]
 
     def get_identifier(self, identifier_id: str) -> Identifier:
         """
@@ -3174,7 +3174,7 @@ class ScambusClient(
             params["category"] = category
 
         response = self._request("GET", "/cases", params=params)
-        return [Case.from_dict(item) for item in _page_data(response, "/cases")]
+        return [Case.from_dict(item) for item in _page_data(response, "GET", "/cases")]
 
     def get_case(self, case_id: str) -> Case:
         """
@@ -4961,30 +4961,28 @@ class ScambusClient(
         """
         endpoint = f"/tags/effective/{entity_type}/{entity_id}"
         response = self._request("GET", endpoint)
-        return [] if response is None else _page_data(response, endpoint, None)
+        return [] if response is None else _page_data(response, "GET", endpoint, None)
 
-    def get_tag_history(self, entity_type: str, entity_id: str) -> List[JournalEntry]:
+    def get_identifier_tag_history(self, identifier_id: str) -> List[JournalEntry]:
         """
-        Get tag operation history for an entity.
+        Get the tag_operation journal entries for an identifier, newest first.
 
         Args:
-            entity_type: Entity type (identifier, evidence, case)
-            entity_id: Entity UUID
+            identifier_id: Identifier UUID
 
         Returns:
             List of JournalEntry objects
 
         Example:
             ```python
-            history = client.get_tag_history("identifier", "id-123")
+            history = client.get_identifier_tag_history("id-123")
             for entry in history:
                 print(f"Operation at {entry.performed_at}")
             ```
         """
-        response = self._request("GET", f"/tags/history/{entity_type}/{entity_id}")
-        if isinstance(response, list):
-            return [JournalEntry.from_dict(e) for e in response]
-        return []
+        endpoint = f"/identifiers/{identifier_id}/tag-history"
+        response = self._request("GET", endpoint)
+        return [JournalEntry.from_dict(e) for e in _page_data(response, "GET", endpoint, "entries")]
 
     # Search Methods
 
@@ -5131,7 +5129,7 @@ class ScambusClient(
             data["status"] = [status] if isinstance(status, str) else status
 
         response = self._request("POST", "/search/cases", json_data=data)
-        return [Case.from_dict(c) for c in _page_data(response, "/search/cases")]
+        return [Case.from_dict(c) for c in _page_data(response, "POST", "/search/cases")]
 
     # Notification Methods
 
@@ -5278,7 +5276,7 @@ class ScambusClient(
             ```
         """
         response = self._request("GET", "/sessions")
-        return [Session.from_dict(s) for s in _page_data(response, "/sessions", "sessions")]
+        return [Session.from_dict(s) for s in _page_data(response, "GET", "/sessions", "sessions")]
 
     def revoke_session(self, session_id: str) -> None:
         """
@@ -5309,7 +5307,7 @@ class ScambusClient(
             ```
         """
         response = self._request("GET", "/passkeys")
-        return [Passkey.from_dict(p) for p in _page_data(response, "/passkeys", None)]
+        return [Passkey.from_dict(p) for p in _page_data(response, "GET", "/passkeys", None)]
 
     def delete_passkey(self, passkey_id: str) -> None:
         """
@@ -5487,7 +5485,7 @@ class ScambusClient(
         while True:
             # The backend caps page_size at 100.
             response = self._request("GET", "/automations", params={"page": page, "page_size": 100})
-            automations.extend(_page_data(response, "/automations"))
+            automations.extend(_page_data(response, "GET", "/automations"))
             if page >= response.get("pagination", {}).get("total_pages", 0):
                 return automations
             page += 1

@@ -1026,7 +1026,7 @@ class AsyncScambusClient(BaseScambusClient):
         response = await self._request("GET", "/journal-entries", params=params)
         return [
             JournalEntry.from_dict(item["journal_entry"])
-            for item in _page_data(response, "/journal-entries")
+            for item in _page_data(response, "GET", "/journal-entries")
         ]
 
     async def query_journal_entries(
@@ -1308,7 +1308,7 @@ class AsyncScambusClient(BaseScambusClient):
             params["type"] = identifier_type
 
         response = await self._request("GET", "/identifiers", params=params)
-        return [Identifier.from_dict(item) for item in _page_data(response, "/identifiers")]
+        return [Identifier.from_dict(item) for item in _page_data(response, "GET", "/identifiers")]
 
     async def get_identifier(self, identifier_id: str) -> Identifier:
         """Get identifier by ID."""
@@ -1474,7 +1474,7 @@ class AsyncScambusClient(BaseScambusClient):
             params["category"] = category
 
         response = await self._request("GET", "/cases", params=params)
-        return [Case.from_dict(item) for item in _page_data(response, "/cases")]
+        return [Case.from_dict(item) for item in _page_data(response, "GET", "/cases")]
 
     async def get_case(self, case_id: str) -> Case:
         """Get case by ID."""
@@ -2345,14 +2345,13 @@ class AsyncScambusClient(BaseScambusClient):
         """Get effective tags for an entity."""
         endpoint = f"/tags/effective/{entity_type}/{entity_id}"
         response = await self._request("GET", endpoint)
-        return [] if response is None else _page_data(response, endpoint, None)
+        return [] if response is None else _page_data(response, "GET", endpoint, None)
 
-    async def get_tag_history(self, entity_type: str, entity_id: str) -> List[JournalEntry]:
-        """Get tag operation history for an entity."""
-        response = await self._request("GET", f"/tags/history/{entity_type}/{entity_id}")
-        if isinstance(response, list):
-            return [JournalEntry.from_dict(e) for e in response]
-        return []
+    async def get_identifier_tag_history(self, identifier_id: str) -> List[JournalEntry]:
+        """Get the tag_operation journal entries for an identifier, newest first."""
+        endpoint = f"/identifiers/{identifier_id}/tag-history"
+        response = await self._request("GET", endpoint)
+        return [JournalEntry.from_dict(e) for e in _page_data(response, "GET", endpoint, "entries")]
 
     # ── Search Methods ────────────────────────────────────────────────
 
@@ -2426,7 +2425,7 @@ class AsyncScambusClient(BaseScambusClient):
             data["status"] = [status] if isinstance(status, str) else status
 
         response = await self._request("POST", "/search/cases", json_data=data)
-        return [Case.from_dict(c) for c in _page_data(response, "/search/cases")]
+        return [Case.from_dict(c) for c in _page_data(response, "POST", "/search/cases")]
 
     # ── Notification Methods ──────────────────────────────────────────
 
@@ -2481,7 +2480,7 @@ class AsyncScambusClient(BaseScambusClient):
     async def list_sessions(self) -> List[Session]:
         """List current user's sessions."""
         response = await self._request("GET", "/sessions")
-        return [Session.from_dict(s) for s in _page_data(response, "/sessions", "sessions")]
+        return [Session.from_dict(s) for s in _page_data(response, "GET", "/sessions", "sessions")]
 
     async def revoke_session(self, session_id: str) -> None:
         """Revoke a session."""
@@ -2490,7 +2489,7 @@ class AsyncScambusClient(BaseScambusClient):
     async def list_passkeys(self) -> List[Passkey]:
         """List current user's passkeys."""
         response = await self._request("GET", "/passkeys")
-        return [Passkey.from_dict(p) for p in _page_data(response, "/passkeys", None)]
+        return [Passkey.from_dict(p) for p in _page_data(response, "GET", "/passkeys", None)]
 
     async def delete_passkey(self, passkey_id: str) -> None:
         """Delete a passkey."""
@@ -2572,7 +2571,7 @@ class AsyncScambusClient(BaseScambusClient):
             response = await self._request(
                 "GET", "/automations", params={"page": page, "page_size": 100}
             )
-            automations.extend(_page_data(response, "/automations"))
+            automations.extend(_page_data(response, "GET", "/automations"))
             if page >= response.get("pagination", {}).get("total_pages", 0):
                 return automations
             page += 1

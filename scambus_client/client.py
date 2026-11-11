@@ -5344,9 +5344,7 @@ class ScambusClient(
             ```
         """
         response = self._request("GET", "/sessions")
-        if isinstance(response, list):
-            return [Session.from_dict(s) for s in response]
-        return []
+        return [Session.from_dict(s) for s in _page_data(response, "/sessions", "sessions")]
 
     def revoke_session(self, session_id: str) -> None:
         """
@@ -5377,9 +5375,7 @@ class ScambusClient(
             ```
         """
         response = self._request("GET", "/passkeys")
-        if isinstance(response, list):
-            return [Passkey.from_dict(p) for p in response]
-        return []
+        return [Passkey.from_dict(p) for p in _page_data(response, "/passkeys", None)]
 
     def delete_passkey(self, passkey_id: str) -> None:
         """

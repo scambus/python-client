@@ -26,10 +26,13 @@ _INCLUDE_TEST_IGNORED = (
 )
 
 
-def _page_data(response: Any, endpoint: str) -> List[Any]:
-    """Return the data list of a paginated response, or raise when the response has none."""
-    if isinstance(response, dict) and isinstance(response.get("data"), list):
-        return response["data"]
+def _page_data(response: Any, endpoint: str, key: Optional[str] = "data") -> List[Any]:
+    """Return the list under KEY, or the response itself when KEY is None; raise when it is not a list."""
+    items = response
+    if key is not None:
+        items = response.get(key) if isinstance(response, dict) else None
+    if isinstance(items, list):
+        return items
     raise ScambusAPIError(f"Unexpected response from GET {endpoint}: {str(response)[:200]}")
 
 
@@ -141,6 +144,8 @@ class BaseScambusClient:
         try:
             error_data = response.json()
             error_message = error_data.get("error", response.text)
+            if error_data.get("detail"):
+                error_message = f"{error_message}: {error_data['detail']}"
         except (ValueError, Exception):
             error_data = None
             error_message = response.text or f"HTTP {response.status_code}"

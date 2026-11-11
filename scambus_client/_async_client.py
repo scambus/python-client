@@ -2543,9 +2543,7 @@ class AsyncScambusClient(BaseScambusClient):
     async def list_sessions(self) -> List[Session]:
         """List current user's sessions."""
         response = await self._request("GET", "/sessions")
-        if isinstance(response, list):
-            return [Session.from_dict(s) for s in response]
-        return []
+        return [Session.from_dict(s) for s in _page_data(response, "/sessions", "sessions")]
 
     async def revoke_session(self, session_id: str) -> None:
         """Revoke a session."""
@@ -2554,9 +2552,7 @@ class AsyncScambusClient(BaseScambusClient):
     async def list_passkeys(self) -> List[Passkey]:
         """List current user's passkeys."""
         response = await self._request("GET", "/passkeys")
-        if isinstance(response, list):
-            return [Passkey.from_dict(p) for p in response]
-        return []
+        return [Passkey.from_dict(p) for p in _page_data(response, "/passkeys", None)]
 
     async def delete_passkey(self, passkey_id: str) -> None:
         """Delete a passkey."""

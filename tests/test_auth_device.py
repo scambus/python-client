@@ -370,6 +370,32 @@ def test_missing_credentials_prints_not_authenticated(manager, monkeypatch):
     assert refresh_messages() == []
 
 
+@pytest.mark.parametrize(
+    "fake_get,expected",
+    [
+        (
+            lambda url, **kw: httpx.Response(
+                401, json={"error": "Unauthorized"}, request=httpx.Request("GET", url)
+            ),
+            "HTTP 401: Unauthorized",
+        ),
+        (
+            lambda url, **kw: (_ for _ in ()).throw(httpx.ConnectError("refused")),
+            "refused",
+        ),
+    ],
+)
+def test_get_user_info_reports_failure(manager, monkeypatch, fake_get, expected):
+    config = stored(manager)
+    config["auth"]["expires_at"] = time.time() + 3600
+    manager._save_config(config)
+    monkeypatch.setattr(auth_device.httpx, "get", fake_get)
+
+    assert manager.get_user_info() is None
+    assert len(refresh_messages()) == 1
+    assert expected in refresh_messages()[0]
+
+
 class FollowClient:
     def __init__(self):
         self.deleted = []

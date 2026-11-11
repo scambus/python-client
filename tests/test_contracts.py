@@ -7,6 +7,7 @@ import pytest
 from click.testing import CliRunner
 
 from scambus_cli.commands.automations import automations
+from scambus_cli.commands.cases import cases
 from scambus_client import AsyncScambusClient, ScambusAPIError, ScambusClient
 from scambus_client.models import Case, ConversationMessage, Evidence, Media
 
@@ -233,6 +234,17 @@ async def test_get_effective_tags_raises_on_unexpected_shape(any_client):
 
     with pytest.raises(ScambusAPIError):
         await _call(any_client, "get_effective_tags", "identifier", "i-1")
+
+
+@pytest.mark.parametrize("args,expected", [(["--json"], '"notes": "n"'), ([], "Notes")])
+def test_cli_cases_get_shows_notes(args, expected):
+    client = Mock()
+    client.get_case.return_value = Case(id="c-1", title="t", notes="n", status="open")
+
+    result = CliRunner().invoke(cases, ["get", "c-1", *args], obj=FakeContext(client))
+
+    assert result.exit_code == 0, result.output
+    assert expected in result.output
 
 
 def test_cli_create_key_combines_secret_id_and_key():

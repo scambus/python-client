@@ -90,7 +90,7 @@ def get(ctx, case_id, output_json):
                 {
                     "id": case.id,
                     "title": case.title,
-                    "description": case.description,
+                    "notes": case.notes,
                     "status": case.status,
                     "created_at": case.created_at.isoformat() if case.created_at else None,
                 }
@@ -100,7 +100,7 @@ def get(ctx, case_id, output_json):
                 {
                     "ID": case.id,
                     "Title": case.title,
-                    "Description": case.description or "N/A",
+                    "Notes": case.notes or "N/A",
                     "Status": case.status or "N/A",
                     "Created": case.created_at.isoformat() if case.created_at else "N/A",
                 },

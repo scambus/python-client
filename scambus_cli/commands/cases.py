@@ -199,3 +199,27 @@ def update(ctx, case_id, title, description, status, is_test):
     except Exception as e:
         print_error(f"Failed to update case: {e}")
         sys.exit(1)
+
+
+@cases.command()
+@click.argument("case_id")
+@click.option("--yes", is_flag=True, help="Skip confirmation")
+@click.pass_context
+def delete(ctx, case_id, yes):
+    """Delete a case.
+
+    Examples:
+        scambus cases delete <case-id>
+    """
+    if not yes:
+        click.confirm(f"Delete case {case_id}?", abort=True)
+
+    client = ctx.obj.get_client()
+
+    try:
+        client.delete_case(case_id)
+        print_success(f"Case deleted: {case_id}")
+
+    except Exception as e:
+        print_error(f"Failed to delete case: {e}")
+        sys.exit(1)

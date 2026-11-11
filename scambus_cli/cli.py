@@ -282,6 +282,7 @@ from .commands import (
     cases,
     exclusions,
     exports,
+    identifiers,
     journal,
     media,
     personas,
@@ -296,6 +297,7 @@ from .commands import (
 
 cli.add_command(journal.journal)
 cli.add_command(media.media)
+cli.add_command(identifiers.identifiers)
 cli.add_command(search.search)
 cli.add_command(streams.streams)
 cli.add_command(cases.cases)

@@ -2123,6 +2123,10 @@ class AsyncScambusClient(BaseScambusClient):
         )
         return response
 
+    async def rebuild_stream(self, stream_id: str) -> Dict[str, Any]:
+        """Clear a stream and rebuild it from its filter."""
+        return await self._request("POST", f"/export-streams/{stream_id}/rebuild")
+
     # ── File Export Methods ────────────────────────────────────────────
 
     async def create_file_export(

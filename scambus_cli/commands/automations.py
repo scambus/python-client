@@ -304,3 +304,28 @@ def delete_api_key(ctx, automation_id, key_id, yes):
     except Exception as e:
         print_error(f"Failed to delete API key: {e}")
         sys.exit(1)
+
+
+@automations.command("get")
+@click.argument("automation_id")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+@click.pass_context
+def get_automation(ctx, automation_id, output_json):
+    """Get automation details.
+
+    Examples:
+        scambus automations get <automation-id>
+    """
+    client = ctx.obj.get_client()
+
+    try:
+        automation = client.get_automation(automation_id)
+
+        if output_json:
+            print_json(automation)
+        else:
+            print_detail(automation, title=f"Automation: {automation.get('name', automation_id)}")
+
+    except Exception as e:
+        print_error(f"Failed to get automation: {e}")
+        sys.exit(1)

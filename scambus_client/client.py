@@ -4412,6 +4412,10 @@ class ScambusClient(
         )
         return response
 
+    def rebuild_stream(self, stream_id: str) -> Dict[str, Any]:
+        """Clear a stream and rebuild it from its filter."""
+        return self._request("POST", f"/export-streams/{stream_id}/rebuild")
+
     # File Export Methods
 
     def create_file_export(

@@ -60,3 +60,36 @@ def upload(ctx, file_path, notes, output_json):
     except Exception as e:
         print_error(f"Failed to upload media: {e}")
         sys.exit(1)
+
+
+@media.command()
+@click.argument("media_id")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON")
+@click.pass_context
+def get(ctx, media_id, output_json):
+    """Get media details.
+
+    Examples:
+        scambus media get <media-id>
+    """
+    client = ctx.obj.get_client()
+
+    try:
+        media = client.get_media(media_id)
+        details = {
+            "id": media.id,
+            "file_name": media.file_name,
+            "type": media.type,
+            "mime_type": media.mime_type,
+            "file_size": media.file_size,
+            "notes": media.notes,
+        }
+
+        if output_json:
+            print_json(details)
+        else:
+            print_detail(details, title="Media")
+
+    except Exception as e:
+        print_error(f"Failed to get media: {e}")
+        sys.exit(1)

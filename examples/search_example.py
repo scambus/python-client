@@ -34,7 +34,7 @@ def main():
 
     # Search by value
     print("\n   a) Search by phone number:")
-    results = client.search_identifiers(query="+1234567890")
+    results = client.search_identifiers(query="+1234567890")["data"]
     print(f"      Found {len(results)} identifiers")
     for identifier in results[:3]:
         print(
@@ -44,12 +44,12 @@ def main():
 
     # Search by email domain
     print("\n   b) Search by email domain:")
-    results = client.search_identifiers(query="@suspicious-domain.com", identifier_type="email")
+    results = client.search_identifiers(query="@suspicious-domain.com", types=["email"])["data"]
     print(f"      Found {len(results)} email identifiers")
 
     # Search by type only
     print("\n   c) List phone identifiers:")
-    results = client.search_identifiers(identifier_type="phone", limit=5)
+    results = client.search_identifiers(types=["phone"], limit=5)["data"]
     print(f"      Found {len(results)} phone identifiers")
     for identifier in results[:3]:
         print(f"      - {identifier.display_value} (confidence: {identifier.confidence})")
@@ -59,8 +59,8 @@ def main():
     # =========================================================================
     print("\n2. Listing identifiers with filters...")
 
-    identifiers = client.list_identifiers(identifier_type="email", min_confidence=0.8, limit=10)
-    print(f"   Found {len(identifiers)} high-confidence email identifiers")
+    identifiers = client.list_identifiers(identifier_type="email", limit=10)
+    print(f"   Found {len(identifiers)} email identifiers")
     for identifier in identifiers[:3]:
         print(f"   - {identifier.display_value}")
 
@@ -93,17 +93,17 @@ def main():
 
     # Basic search
     print("\n   a) Search journal entries by keyword:")
-    entries = client.query_journal_entries(search_query="suspicious", limit=10)
+    entries = client.query_journal_entries(search_query="suspicious")["data"]
     print(f"      Found {len(entries)} entries")
 
     # Filter by entry type
     print("\n   b) Search phone call entries:")
-    phone_entries = client.query_journal_entries(entry_type="phone_call", limit=5)
+    phone_entries = client.query_journal_entries(entry_type="phone_call")["data"]
     print(f"      Found {len(phone_entries)} phone call entries")
 
     # Filter by confidence
     print("\n   c) Search high-confidence detections:")
-    detections = client.query_journal_entries(entry_type="detection", min_confidence=0.9, limit=5)
+    detections = client.query_journal_entries(entry_type="detection", min_confidence=0.9)["data"]
     print(f"      Found {len(detections)} high-confidence detections")
     for entry in detections[:3]:
         print(f"      - {entry.description[:50]}...")
@@ -111,8 +111,8 @@ def main():
     # Filter by date range
     print("\n   d) Search entries from specific date range:")
     recent_entries = client.query_journal_entries(
-        performed_after="2025-01-01T00:00:00Z", performed_before="2025-12-31T23:59:59Z", limit=5
-    )
+        performed_after="2025-01-01T00:00:00Z", performed_before="2025-12-31T23:59:59Z"
+    )["data"]
     print(f"      Found {len(recent_entries)} entries in 2025")
 
     # Combined filters
@@ -122,8 +122,7 @@ def main():
         entry_type="phone_call",
         min_confidence=0.8,
         performed_after="2025-01-01T00:00:00Z",
-        limit=10,
-    )
+    )["data"]
     print(f"      Found {len(filtered_entries)} matching entries")
 
     print("\n✓ Search example completed!")
@@ -140,29 +139,28 @@ def search_patterns():
     # Pattern 1: Find all reports for a specific phone number
     print("\n1. Find all reports for a phone number:")
     print("   results = client.search_identifiers(query='+18005551234')")
-    print("   for identifier in results:")
-    print("       # Get journal entries linked to this identifier")
-    print("       entries = client.query_journal_entries(identifier_id=identifier.id)")
+    print("   for identifier in results['data']:")
+    print("       # Get journal entries that mention this identifier")
+    print("       entries = client.query_journal_entries(search_query=identifier.display_value)")
 
     # Pattern 2: Find high-confidence scams by type
     print("\n2. Find high-confidence email scams:")
     print("   entries = client.query_journal_entries(")
     print("       entry_type='email',")
     print("       min_confidence=0.9,")
-    print("       limit=100")
-    print("   )")
+    print("   )['data']")
 
     # Pattern 3: Find open investigations
     print("\n3. Find open investigations with activity:")
     print("   cases = client.search_cases(status='open')")
     print("   for case in cases:")
-    print("       # Get journal entries linked to case")
-    print("       entries = client.list_journal_entries(case_id=case.id)")
+    print("       # Get comments on the case")
+    print("       comments = client.get_case_comments(case.id)")
 
     # Pattern 4: Search across multiple identifier types
     print("\n4. Search for related identifiers:")
-    print("   emails = client.search_identifiers(query='scammer.com', identifier_type='email')")
-    print("   phones = client.search_identifiers(query='+1800', identifier_type='phone')")
+    print("   emails = client.search_identifiers(query='scammer.com', types=['email'])")
+    print("   phones = client.search_identifiers(query='+1800', types=['phone'])")
 
 
 if __name__ == "__main__":

@@ -36,8 +36,7 @@ def main():
     tags = client.list_tags()
     print(f"   Found {len(tags)} tags")
     for tag in tags[:10]:
-        tag_type = "valued" if tag.is_valued else "boolean"
-        print(f"   - {tag.name} ({tag_type})")
+        print(f"   - {tag.title} ({tag.tag_type})")
 
     # =========================================================================
     # Create Boolean Tag
@@ -46,11 +45,11 @@ def main():
 
     # Boolean tags are simple flags (true/false)
     bool_tag = client.create_tag(
-        name="HighPriority",
+        title="HighPriority",
+        tag_type="boolean",
         description="Marks high priority items for immediate attention",
-        is_valued=False,  # Boolean tag
     )
-    print(f"   ✓ Created boolean tag: {bool_tag.name}")
+    print(f"   ✓ Created boolean tag: {bool_tag.title}")
 
     # =========================================================================
     # Create Valued Tag
@@ -59,11 +58,12 @@ def main():
 
     # Valued tags can have associated values (like "ScamType:Phishing")
     valued_tag = client.create_tag(
-        name="ScamCategory",
+        title="ScamCategory",
+        tag_type="valued",
         description="Categorizes the type of scam",
-        is_valued=True,  # Valued tag
+        tag_values=[{"title": "Phishing"}, {"title": "Banking"}, {"title": "TechSupport"}],
     )
-    print(f"   ✓ Created valued tag: {valued_tag.name}")
+    print(f"   ✓ Created valued tag: {valued_tag.title}")
 
     # =========================================================================
     # Apply Tags to Journal Entry (Typed - Recommended)
@@ -115,10 +115,10 @@ def main():
         )
         print(f"   Effective tags for identifier {identifier_id}:")
         for tag in effective_tags:
-            if tag.get("value"):
-                print(f"   - {tag['name']}: {tag['value']}")
+            if tag.get("tag_value"):
+                print(f"   - {tag['tag']['title']}: {tag['tag_value']['title']}")
             else:
-                print(f"   - {tag['name']}")
+                print(f"   - {tag['tag']['title']}")
 
     # =========================================================================
     # Tag Management
@@ -127,7 +127,7 @@ def main():
 
     # Get tag details
     tag_details = client.get_tag(bool_tag.id)
-    print(f"   Tag: {tag_details.name}")
+    print(f"   Tag: {tag_details.title}")
     print(f"   Description: {tag_details.description}")
 
     # Update tag
@@ -145,13 +145,13 @@ def main():
     # Note: You may not be able to delete tags that are in use
     try:
         client.delete_tag(bool_tag.id)
-        print(f"   ✓ Deleted tag: {bool_tag.name}")
+        print(f"   ✓ Deleted tag: {bool_tag.title}")
     except Exception as e:
         print(f"   ! Could not delete tag (may be in use): {e}")
 
     try:
         client.delete_tag(valued_tag.id)
-        print(f"   ✓ Deleted tag: {valued_tag.name}")
+        print(f"   ✓ Deleted tag: {valued_tag.title}")
     except Exception as e:
         print(f"   ! Could not delete tag (may be in use): {e}")
 

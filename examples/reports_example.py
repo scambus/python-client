@@ -35,31 +35,32 @@ def main():
     print("\n1. Generating identifier report...")
 
     # First, find an identifier to report on
-    identifiers = client.search_identifiers(identifier_type="phone", limit=1)
+    identifiers = client.search_identifiers(types=["phone"], limit=1)["data"]
 
     if identifiers:
         identifier = identifiers[0]
         print(f"   Generating report for: {identifier.display_value}")
 
         report = client.generate_identifier_report(
-            identifier_id=identifier.id,
-            format="pdf",  # or "csv"
+            identifier_ids=[identifier.id],
             include_journal_entries=True,
-            include_tags=True,
         )
 
-        report_id = report.get("id")
+        report_id = report.id
         print(f"   ✓ Report queued: {report_id}")
 
         # Wait for report
         print("   Waiting for report generation...")
         completed_report = client.wait_for_report(report_id, timeout=60)
-        print(f"   ✓ Report ready: {completed_report.get('status')}")
+        if completed_report.is_failed:
+            print(f"   ✗ Report failed: {completed_report.error_message}")
+        else:
+            print(f"   ✓ Report ready: {completed_report.status}")
 
-        # Download report
-        output_path = f"identifier_report_{identifier.id[:8]}.pdf"
-        client.download_report(report_id, output_path)
-        print(f"   ✓ Downloaded: {output_path}")
+            # Download report
+            output_path = f"identifier_report_{identifier.id[:8]}.pdf"
+            client.download_report(report_id, output_path)
+            print(f"   ✓ Downloaded: {output_path}")
     else:
         print("   No identifiers found, skipping identifier report")
 
@@ -78,20 +79,22 @@ def main():
         print(f"   Generating report for entry: {entry_id[:8]}...")
 
         report = client.generate_journal_entry_report(
-            journal_entry_id=entry_id,
-            format="pdf",
+            journal_entry_ids=[entry_id],
             include_identifiers=True,
             include_evidence=True,
         )
 
-        report_id = report.get("id")
+        report_id = report.id
         print(f"   ✓ Report queued: {report_id}")
 
         # Wait and download
         completed_report = client.wait_for_report(report_id, timeout=60)
-        output_path = f"journal_entry_report_{entry_id[:8]}.pdf"
-        client.download_report(report_id, output_path)
-        print(f"   ✓ Downloaded: {output_path}")
+        if completed_report.is_failed:
+            print(f"   ✗ Report failed: {completed_report.error_message}")
+        else:
+            output_path = f"journal_entry_report_{entry_id[:8]}.pdf"
+            client.download_report(report_id, output_path)
+            print(f"   ✓ Downloaded: {output_path}")
     else:
         print("   No journal entries found, skipping entry report")
 
@@ -100,27 +103,26 @@ def main():
     # =========================================================================
     print("\n3. Generating report from a view...")
 
-    # Get available views
-    views = client.list_views()
+    # Get views that support reports
+    views = [v for v in client.list_views() if v.entity_type in ("identifiers", "journal")]
 
     if views:
         view = views[0]
         print(f"   Generating report for view: {view.name}")
 
-        report = client.generate_view_report(
-            view_id=view.id,
-            format="csv",  # CSV is good for bulk data
-            limit=100,  # Limit rows in report
-        )
+        report = client.generate_view_report(view_id=view.id)
 
-        report_id = report.get("id")
+        report_id = report.id
         print(f"   ✓ Report queued: {report_id}")
 
         # Wait and download
         completed_report = client.wait_for_report(report_id, timeout=120)
-        output_path = f"view_report_{view.id[:8]}.csv"
-        client.download_report(report_id, output_path)
-        print(f"   ✓ Downloaded: {output_path}")
+        if completed_report.is_failed:
+            print(f"   ✗ Report failed: {completed_report.error_message}")
+        else:
+            output_path = f"view_report_{view.id[:8]}.pdf"
+            client.download_report(report_id, output_path)
+            print(f"   ✓ Downloaded: {output_path}")
     else:
         print("   No views found, skipping view report")
 
@@ -133,21 +135,21 @@ def main():
 
     # Create a report
     if identifiers:
-        report = client.generate_identifier_report(identifier_id=identifiers[0].id, format="pdf")
-        report_id = report.get("id")
+        report = client.generate_identifier_report(identifier_ids=[identifiers[0].id])
+        report_id = report.id
 
         # Poll for status manually
         max_attempts = 10
         for attempt in range(max_attempts):
             status = client.get_report_status(report_id)
-            current_status = status.get("status")
+            current_status = status.status
             print(f"   Attempt {attempt + 1}: {current_status}")
 
             if current_status == "completed":
                 print("   ✓ Report is ready!")
                 break
             elif current_status == "failed":
-                print(f"   ✗ Report failed: {status.get('error')}")
+                print(f"   ✗ Report failed: {status.error_message}")
                 break
             else:
                 time.sleep(2)
@@ -167,18 +169,13 @@ def report_formats():
 
     print(
         """
-    Available formats:
+    Format:
 
     PDF:
     - Best for human-readable reports
     - Includes formatting and layout
     - Good for sharing and archiving
-
-    CSV:
-    - Best for data analysis
-    - Can be opened in Excel, Google Sheets
-    - Good for bulk exports
-    - Easier to process programmatically
+    - Can be digitally signed (sign_report=True)
 
     Report types:
 

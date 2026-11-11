@@ -7,7 +7,7 @@ properly typed details and optional media attachments.
 """
 
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 from scambus_client import IdentifierLookup, ScambusClient, TagLookup
 
@@ -32,7 +32,7 @@ def main():
         description="Phishing email impersonating PayPal requesting account verification",
         direction="inbound",
         subject="Urgent: Verify your PayPal account",
-        sent_at=datetime(2024, 1, 15, 9, 15),
+        sent_at=datetime(2024, 1, 15, 9, 15, tzinfo=timezone.utc),
         body="Dear customer,\n\nYour account requires immediate verification...",
         message_id="<12345@suspicious-domain.com>",
         headers={
@@ -61,7 +61,7 @@ def main():
         description="Reply to phishing email for investigation purposes",
         direction="outbound",
         subject="Re: Verify your PayPal account",
-        sent_at=datetime.now(),
+        sent_at=datetime.now(timezone.utc),
         body="I received your email and would like to verify my account details...",
         identifiers=[
             IdentifierLookup(type="email", value="security@paypa1.com", confidence=1.0),
@@ -78,7 +78,7 @@ def main():
         description="Business email compromise attempt",
         direction="inbound",
         subject="Urgent: Wire Transfer Request",
-        sent_at=datetime(2024, 1, 16, 11, 30),
+        sent_at=datetime(2024, 1, 16, 11, 30, tzinfo=timezone.utc),
         body="Please process this wire transfer immediately.",
         html_body="<html><body><p>Please process this <b>urgent</b> wire transfer...</p></body></html>",
         message_id="<wire-transfer-scam@fake-ceo.com>",
@@ -113,7 +113,7 @@ def main():
         description="Phishing email with screenshot",
         direction="inbound",
         subject="Account Verification Required",
-        sent_at=datetime.now(),
+        sent_at=datetime.now(timezone.utc),
         media=screenshot,  # Automatically creates evidence
         identifiers=[
             IdentifierLookup(type="email", value="scammer@example.com", confidence=0.95),

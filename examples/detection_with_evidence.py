@@ -8,10 +8,10 @@ with evidence attached.
 
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
-from scambus_client import DetectionDetails, Evidence, IdentifierLookup, ScambusClient
+from scambus_client import DetectionDetails, IdentifierLookup, ScambusClient
 
 # Configuration
 API_URL = os.getenv("SCAMBUS_API_URL", "http://localhost:8080/api")
@@ -55,14 +55,14 @@ def create_detection_with_screenshot(screenshot_path: str, url: str, identifiers
             },
         ),
         identifiers=identifiers,
-        evidence=Evidence(
-            type="screenshot",
-            title="Phishing Website Screenshot",
-            description=f"Screenshot showing fraudulent website at {url}",
-            source="Automated Web Scanner - PhishDetector v2.1",
-            collected_at=datetime.now(),
-            media_ids=[media.id],
-        ),
+        evidence={
+            "type": "screenshot",
+            "title": "Phishing Website Screenshot",
+            "description": f"Screenshot showing fraudulent website at {url}",
+            "source": "Automated Web Scanner - PhishDetector v2.1",
+            "collected_at": datetime.now(timezone.utc).isoformat(),
+            "media_ids": [media.id],
+        },
     )
 
     print(f"✓ Created journal entry: {entry.id}")

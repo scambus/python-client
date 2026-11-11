@@ -31,7 +31,7 @@ async def main():
             limit=5,
         )
         for identifier in result["data"]:
-            print(f"  {identifier.type}: {identifier.value}")
+            print(f"  {identifier.type}: {identifier.display_value}")
 
         # Create a detection
         entry = await client.create_detection(

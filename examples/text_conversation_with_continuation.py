@@ -50,8 +50,8 @@ def main():
         # Define identifiers for all participants
         # The 'ref' field is used to reference these in messages via sender_ref
         identifiers=[
-            IdentifierLookup(type="phone", value="+1555123456", ref="scammer", confidence=0.9),
-            IdentifierLookup(type="phone", value="+1555987654", ref="victim", confidence=1.0),
+            IdentifierLookup(type="phone", value="+15551234567", ref="scammer", confidence=0.9),
+            IdentifierLookup(type="phone", value="+15559876543", ref="victim", confidence=1.0),
         ],
     )
 
@@ -96,8 +96,8 @@ def main():
         messages=initial_messages,
         reason="initial import",
         identifiers=[
-            IdentifierLookup(type="phone", value="+1555123456", ref="scammer"),
-            IdentifierLookup(type="phone", value="+1555987654", ref="victim"),
+            IdentifierLookup(type="phone", value="+15551234567", ref="scammer"),
+            IdentifierLookup(type="phone", value="+15559876543", ref="victim"),
         ],
     )
 
@@ -135,8 +135,8 @@ def main():
         reason="additional messages",
         non_contiguous=True,  # Shows visual separator in UI
         identifiers=[
-            IdentifierLookup(type="phone", value="+1555123456", ref="scammer"),
-            IdentifierLookup(type="phone", value="+1555987654", ref="victim"),
+            IdentifierLookup(type="phone", value="+15551234567", ref="scammer"),
+            IdentifierLookup(type="phone", value="+15559876543", ref="victim"),
         ],
     )
 
@@ -150,10 +150,10 @@ def main():
 
     # When messages contain identifiers (phone numbers, emails, URLs),
     # use identifier_refs to mark their positions for clickable links in the UI
-    message_body = "Send the gift cards to this number: +1555999888. Or pay at https://scam-payment.example.com/pay"
+    message_body = "Send the gift cards to this number: +15559998888. Or pay at https://scam-payment.example.com/pay"
 
     # Calculate byte positions for identifiers
-    phone_in_msg = "+1555999888"
+    phone_in_msg = "+15559998888"
     url_in_msg = "https://scam-payment.example.com/pay"
 
     phone_position = message_body.encode("utf-8").find(phone_in_msg.encode("utf-8"))
@@ -195,11 +195,11 @@ def main():
         reason="payment request",
         non_contiguous=True,
         identifiers=[
-            IdentifierLookup(type="phone", value="+1555123456", ref="scammer"),
-            IdentifierLookup(type="phone", value="+1555987654", ref="victim"),
+            IdentifierLookup(type="phone", value="+15551234567", ref="scammer"),
+            IdentifierLookup(type="phone", value="+15559876543", ref="victim"),
             # New identifiers discovered in this message
             IdentifierLookup(
-                type="phone", value="+1555999888", ref="payment_phone", confidence=0.95
+                type="phone", value="+15559998888", ref="payment_phone", confidence=0.95
             ),
             IdentifierLookup(
                 type="url",
@@ -248,7 +248,7 @@ def main():
         ai_extract=True,  # AI will extract crypto wallet and email from message text
         identifiers=[
             # Still provide known participant identifiers
-            IdentifierLookup(type="phone", value="+1555123456", ref="scammer"),
+            IdentifierLookup(type="phone", value="+15551234567", ref="scammer"),
         ],
     )
 
@@ -291,19 +291,19 @@ def calculate_byte_position_example():
     print("=" * 70)
 
     # ASCII text - byte offset equals character offset
-    ascii_body = "Call me at +1555123456 please"
-    phone = "+1555123456"
+    ascii_body = "Call me at +15551234567 please"
+    phone = "+15551234567"
     position = ascii_body.encode("utf-8").find(phone.encode("utf-8"))
     length = len(phone.encode("utf-8"))
     print(f"\nASCII: '{ascii_body}'")
     print(f"  Phone '{phone}' at position={position}, length={length}")
 
     # Unicode text - byte offset differs from character offset!
-    unicode_body = "Message: 你好 call +1555123456"
-    position_unicode = unicode_body.encode("utf-8").find(b"+1555123456")
+    unicode_body = "Message: 你好 call +15551234567"
+    position_unicode = unicode_body.encode("utf-8").find(b"+15551234567")
     print(f"\nUnicode: '{unicode_body}'")
-    print(f"  Phone '+1555123456' at position={position_unicode}")
-    print("  (Note: position is 18, not 13, because '你好' is 6 bytes in UTF-8)")
+    print(f"  Phone '+15551234567' at position={position_unicode}")
+    print("  (Note: position is 21, not 17, because '你好' is 6 bytes in UTF-8)")
 
 
 if __name__ == "__main__":

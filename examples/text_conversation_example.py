@@ -47,12 +47,12 @@ def main():
 
     # Example 2: WhatsApp conversation
     print("\n2. Creating WhatsApp conversation entry...")
-    start = datetime.now(timezone.utc)
+    end = datetime.now(timezone.utc)
     entry = client.create_text_conversation(
         description="WhatsApp conversation with suspected cryptocurrency scammer",
         platform="WhatsApp",
-        start_time=start,
-        end_time=start + timedelta(hours=2),
+        start_time=end - timedelta(hours=2),
+        end_time=end,
         identifiers=[IdentifierLookup(type="phone", value="+12125551234", confidence=0.95)],
         tags=[
             TagLookup(tag_name="ScamType", tag_value="Crypto"),
@@ -118,12 +118,12 @@ def main():
     screenshot2 = client.upload_media("chat-screenshot-2.png")
 
     # Create conversation entry with screenshots and AI extraction
-    start = datetime.now()
+    end = datetime.now(timezone.utc)
     entry = client.create_text_conversation(
         description="WhatsApp scam conversation with screenshots",
         platform="WhatsApp",
-        start_time=start,
-        end_time=start + timedelta(hours=1),
+        start_time=end - timedelta(hours=1),
+        end_time=end,
         media=[screenshot1, screenshot2],  # Automatically creates evidence
         ai_extract=True,  # AI extracts identifiers from screenshots
         identifiers=[

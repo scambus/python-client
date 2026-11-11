@@ -34,9 +34,8 @@ async def main():
         print("\n" + "=" * 80)
         print("📬 New Notification")
         print("=" * 80)
-        print(f"Type: {notification.get('type', 'N/A')}")
-        print(f"Title: {notification.get('title', 'N/A')}")
-        print(f"Message: {notification.get('message', 'N/A')}")
+        print(f"Service: {notification.get('service', 'N/A')}")
+        print(f"Message: {notification.get('notification_text', 'N/A')}")
         print(f"Severity: {notification.get('severity', 'N/A')}")
         print(f"Created: {notification.get('created_at', 'N/A')}")
         print(f"Read: {notification.get('read', False)}")
@@ -56,7 +55,7 @@ async def main():
         # Start listening for notifications
         # This will run until interrupted (Ctrl+C)
         await ws_client.listen_notifications(handle_notification, handle_error)
-    except KeyboardInterrupt:
+    finally:
         print("\n\n👋 Disconnecting...")
         await ws_client.disconnect()
         print("✅ Disconnected successfully")

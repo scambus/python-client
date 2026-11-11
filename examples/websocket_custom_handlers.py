@@ -33,8 +33,8 @@ async def main():
 
     # Handler for notification events
     async def handle_notification(data):
-        print(f"\n📬 Notification: {data.get('title')}")
-        print(f"   Message: {data.get('message')}")
+        print(f"\n📬 Notification: {data.get('notification_text')}")
+        print(f"   Service: {data.get('service')}")
         print(f"   Severity: {data.get('severity', 'info')}")
 
     # Handler for stats updates
@@ -51,7 +51,7 @@ async def main():
     # Register event handlers
     print("Setting up event handlers...")
     unsubscribe_notification = ws_client.on("notifications", "notification", handle_notification)
-    unsubscribe_stats = ws_client.on("stats", "update", handle_stats)
+    unsubscribe_stats = ws_client.on("export_stream_stats", "streams", handle_stats)
     unsubscribe_wildcard = ws_client.on("notifications", "*", handle_all_notification_events)
 
     print(f"🔌 Connecting to WebSocket at {API_URL}/ws")
@@ -61,7 +61,7 @@ async def main():
     try:
         # Start the WebSocket client
         await ws_client.run()
-    except KeyboardInterrupt:
+    finally:
         print("\n\n👋 Disconnecting...")
         # Unsubscribe from events
         unsubscribe_notification()

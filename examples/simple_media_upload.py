@@ -32,7 +32,7 @@ def example_single_media(screenshot_path: str):
 
     entry = client.create_detection(
         description="Phishing website detected",
-        details=DetectionDetails(category="phishing", confidence=0.95),
+        details=DetectionDetails(data={"category": "phishing"}),
         identifiers=[
             IdentifierLookup(type="email", value="scammer@example.com", confidence=0.95),
             IdentifierLookup(type="phone", value="+12125551234", confidence=0.9),
@@ -70,7 +70,7 @@ def example_multiple_media():
         # Create detection with both media files
         entry = client.create_detection(
             description="Phishing email with multiple attachments",
-            details=DetectionDetails(category="phishing"),
+            details=DetectionDetails(data={"category": "phishing"}),
             identifiers=[
                 IdentifierLookup(type="email", value="phisher@scam.com", confidence=1.0),
             ],

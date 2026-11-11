@@ -64,9 +64,9 @@ def basic_sse_example():
     response = requests.get(url, headers=headers, params=params, stream=True)
     response.raise_for_status()
 
-    client = sseclient.SSEClient(response)
+    sse_client = sseclient.SSEClient(response)
 
-    for event in client.events():
+    for event in sse_client.events():
         try:
             if event.event == "connected":
                 info = json.loads(event.data)
@@ -122,10 +122,10 @@ def sse_with_reconnection():
             response = requests.get(url, headers=headers, params=params, stream=True)
             response.raise_for_status()
 
-            client = sseclient.SSEClient(response)
+            sse_client = sseclient.SSEClient(response)
             reconnect_delay = 1.0  # Reset backoff on successful connection
 
-            for event in client.events():
+            for event in sse_client.events():
                 try:
                     if event.event == "connected":
                         info = json.loads(event.data)
@@ -162,7 +162,7 @@ def sse_with_reconnection():
             reconnect_delay = min(reconnect_delay * 2, max_reconnect_delay)
 
         except requests.exceptions.HTTPError as e:
-            status = e.response.status_code if e.response else None
+            status = e.response.status_code if e.response is not None else None
             if status == 429:
                 print("Rate limited. Waiting 60 seconds...")
                 time.sleep(60)

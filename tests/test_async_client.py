@@ -352,7 +352,7 @@ class TestAsyncScambusClientSearch:
         """Test searching for cases."""
         mock_response = Mock()
         mock_response.status_code = 200
-        mock_response.json.return_value = [mock_case_data]
+        mock_response.json.return_value = {"data": [mock_case_data], "hasMore": False}
         async_client._client.request.return_value = mock_response
 
         results = await async_client.search_cases(query="phishing", status="open")

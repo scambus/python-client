@@ -46,7 +46,7 @@ def list_automations(ctx, output_json):
                 {
                     "ID": auto.get("id", "")[:8],
                     "Name": auto.get("name", "N/A"),
-                    "Active": "Yes" if auto.get("active") else "No",
+                    "Active": "Yes" if auto.get("is_active") else "No",
                     "Created": (
                         auto.get("created_at", "N/A")[:10] if auto.get("created_at") else "N/A"
                     ),
@@ -84,7 +84,7 @@ def create_automation(ctx, name, description, output_json):
             details = {
                 "ID": automation["id"],
                 "Name": automation["name"],
-                "Active": "Yes" if automation.get("active") else "No",
+                "Active": "Yes" if automation.get("is_active") else "No",
             }
             if automation.get("description"):
                 details["Description"] = automation["description"]
@@ -184,19 +184,10 @@ def create_api_key(ctx, automation_name_or_id, name, assume_identity, output_jso
         # Create the API key
         key_data = client.create_automation_api_key(automation_id, name)
 
-        access_key_id = key_data["accessKeyId"]
-        secret_access_key = key_data["secretAccessKey"]
-        combined_key = f"{access_key_id}:{secret_access_key}"
+        combined_key = f"{key_data['secret_id']}:{key_data['key']}"
 
         if output_json:
-            print_json(
-                {
-                    "apiKey": key_data["apiKey"],
-                    "accessKeyId": access_key_id,
-                    "secretAccessKey": secret_access_key,
-                    "combinedKey": combined_key,
-                }
-            )
+            print_json({**key_data, "combined_key": combined_key})
         else:
             print_success("API key created")
             print_info(f"\n⚠ Save this API key - it won't be shown again:\n{combined_key}\n")
@@ -248,7 +239,7 @@ def list_api_keys(ctx, automation_id, output_json):
                     "Created": (
                         key.get("created_at", "N/A")[:10] if key.get("created_at") else "N/A"
                     ),
-                    "Revoked": "Yes" if key.get("revoked") else "No",
+                    "Revoked": "No" if key.get("is_active") else "Yes",
                 }
                 for key in keys
             ]

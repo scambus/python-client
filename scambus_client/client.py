@@ -10,6 +10,10 @@ from typing import Any, Dict, List, Optional, Union
 
 import httpx
 
+from ._admin_access import AdminAccessMixin
+from ._admin_audit import AdminAuditMixin
+from ._admin_infra import AdminInfraMixin
+from ._admin_jobs import AdminJobsMixin
 from ._base_client import BaseScambusClient, _to_rfc3339
 from ._identifier_lookups import deltachat_lookup
 from ._retry import (
@@ -251,7 +255,9 @@ def build_combined_filter(
 logger = logging.getLogger(__name__)
 
 
-class ScambusClient(BaseScambusClient):
+class ScambusClient(
+    AdminAccessMixin, AdminAuditMixin, AdminJobsMixin, AdminInfraMixin, BaseScambusClient
+):
     """
     Client for the Scambus API.
 

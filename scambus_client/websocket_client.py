@@ -83,18 +83,9 @@ class ScambusWebSocketClient:
         self._running = False
         self._message_handlers: Dict[str, Dict[str, list]] = {}  # channel -> event -> [callbacks]
 
-        # Build WebSocket URL (convert http(s):// to ws(s)://)
-        # For production (scambus.net), use live.scambus.net subdomain for direct ALB access
-        # This bypasses CloudFront which doesn't support WebSocket on VPC Origins
         parsed = urlparse(self.api_url)
         ws_scheme = "wss" if parsed.scheme == "https" else "ws"
-
-        # Replace domain with live. subdomain for production WebSocket access
-        netloc = parsed.netloc
-        if "scambus.net" in netloc and not netloc.startswith("live."):
-            netloc = "live.scambus.net"
-
-        self.ws_url = f"{ws_scheme}://{netloc}{parsed.path}/ws"
+        self.ws_url = f"{ws_scheme}://{parsed.netloc}{parsed.path}/ws"
 
         # Set authentication headers
         if api_key_id and api_key_secret:
@@ -114,7 +105,6 @@ class ScambusWebSocketClient:
             }
 
             logger.info(f"Connecting to WebSocket: {self.ws_url}")
-            logger.debug(f"WebSocket headers: {additional_headers}")
             self._ws = await websockets.connect(
                 self.ws_url,
                 additional_headers=additional_headers,

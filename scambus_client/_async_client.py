@@ -5,13 +5,22 @@ Async Scambus API client.
 import asyncio
 import logging
 import time
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import httpx
 
-from ._base_client import BaseScambusClient, _to_rfc3339
+from ._base_client import (
+    _INCLUDE_TEST_IGNORED,
+    MAX_PAGE_SIZE,
+    BaseScambusClient,
+    _page_data,
+    _page_params,
+    _to_rfc3339,
+    _total_pages,
+)
 from ._identifier_lookups import deltachat_lookup
 from ._retry import (
     RETRY_BASE_DELAY,
@@ -62,6 +71,7 @@ from .models import (
     TextConversationDetails,
     URLConsolidationStatus,
     View,
+    _evidence_for_media,
 )
 from .types import (
     FilterCriteriaInput,
@@ -296,7 +306,7 @@ class AsyncScambusClient(BaseScambusClient):
         case_id: Optional[str] = None,
         identifier_lookups: Optional[List[Union[Dict[str, Any], IdentifierLookup]]] = None,
         our_identifier_lookups: Optional[List[Union[Dict[str, Any], IdentifierLookup]]] = None,
-        evidence: Optional[Union[Dict[str, Any], Evidence]] = None,
+        evidence: Optional[Union[Dict[str, Any], Evidence, List[Dict[str, Any]]]] = None,
         originator_type: Optional[str] = None,
         originator_identifier: Optional[str] = None,
         create_originator: bool = False,
@@ -441,26 +451,16 @@ class AsyncScambusClient(BaseScambusClient):
         """Create a 'detection' type journal entry."""
         if media is not None:
             media_list = media if isinstance(media, list) else [media]
-            media_ids = [m.id for m in media_list]
-
             if evidence is None:
                 evidence = {
                     "type": (
                         "screenshot" if media_list[0].mime_type.startswith("image/") else "file"
                     ),
-                    "title": "Detection Evidence",
                     "description": f"Evidence for detection: {description}",
                     "source": "Automated Detection",
                     "collected_at": _to_rfc3339(datetime.now(timezone.utc)),
-                    "media_ids": media_ids,
                 }
-            else:
-                if isinstance(evidence, Evidence):
-                    evidence.media_ids.extend(media_ids)
-                elif isinstance(evidence, dict):
-                    if "media_ids" not in evidence:
-                        evidence["media_ids"] = []
-                    evidence["media_ids"].extend(media_ids)
+            evidence = _evidence_for_media(evidence, [m.id for m in media_list])
 
         details_dict = details
         if isinstance(details, DetectionDetails):
@@ -534,8 +534,6 @@ class AsyncScambusClient(BaseScambusClient):
 
         if media is not None:
             media_list = media if isinstance(media, list) else [media]
-            media_ids = [m.id for m in media_list]
-
             if evidence is None:
                 evidence = {
                     "type": (
@@ -543,19 +541,11 @@ class AsyncScambusClient(BaseScambusClient):
                         if any(m.mime_type.startswith("audio/") for m in media_list)
                         else "file"
                     ),
-                    "title": "Phone Call Evidence",
                     "description": f"Evidence for phone call: {description}",
                     "source": "Phone Call Recording",
                     "collected_at": _to_rfc3339(start_time),
-                    "media_ids": media_ids,
                 }
-            else:
-                if isinstance(evidence, Evidence):
-                    evidence.media_ids.extend(media_ids)
-                elif isinstance(evidence, dict):
-                    if "media_ids" not in evidence:
-                        evidence["media_ids"] = []
-                    evidence["media_ids"].extend(media_ids)
+            evidence = _evidence_for_media(evidence, [m.id for m in media_list])
 
         return await self.create_journal_entry(
             entry_type="phone_call",
@@ -626,24 +616,14 @@ class AsyncScambusClient(BaseScambusClient):
 
         if media is not None:
             media_list = media if isinstance(media, list) else [media]
-            media_ids = [m.id for m in media_list]
-
             if evidence is None:
                 evidence = {
                     "type": "screenshot",
-                    "title": "Email Evidence",
                     "description": f"Evidence for email: {subject}",
                     "source": "Email Communication",
-                    "collectedAt": _to_rfc3339(sent_at),
-                    "media_ids": media_ids,
+                    "collected_at": _to_rfc3339(sent_at),
                 }
-            else:
-                if isinstance(evidence, Evidence):
-                    evidence.media_ids.extend(media_ids)
-                elif isinstance(evidence, dict):
-                    if "media_ids" not in evidence:
-                        evidence["media_ids"] = []
-                    evidence["media_ids"].extend(media_ids)
+            evidence = _evidence_for_media(evidence, [m.id for m in media_list])
 
         return await self.create_journal_entry(
             entry_type="email",
@@ -700,24 +680,14 @@ class AsyncScambusClient(BaseScambusClient):
 
         if media is not None:
             media_list = media if isinstance(media, list) else [media]
-            media_ids = [m.id for m in media_list]
-
             if evidence is None:
                 evidence = {
                     "type": "screenshot",
-                    "title": f"{platform} Conversation Evidence",
                     "description": f"Evidence for {platform} conversation: {description}",
                     "source": f"{platform} Communication",
-                    "collectedAt": _to_rfc3339(start_time),
-                    "media_ids": media_ids,
+                    "collected_at": _to_rfc3339(start_time),
                 }
-            else:
-                if isinstance(evidence, Evidence):
-                    evidence.media_ids.extend(media_ids)
-                elif isinstance(evidence, dict):
-                    if "media_ids" not in evidence:
-                        evidence["media_ids"] = []
-                    evidence["media_ids"].extend(media_ids)
+            evidence = _evidence_for_media(evidence, [m.id for m in media_list])
 
         return await self.create_journal_entry(
             entry_type="text_conversation",
@@ -792,25 +762,15 @@ class AsyncScambusClient(BaseScambusClient):
 
         if media is not None:
             media_list = media if isinstance(media, list) else [media]
-            media_ids = [m.id for m in media_list]
-
             if evidence is None:
                 evidence = {
                     "type": "screenshot",
-                    "title": "Conversation Continuation Evidence",
                     "description": f"Evidence for continuation: {description}",
                     "source": "Conversation Messages",
-                    "media_ids": media_ids,
                 }
                 if start_time:
-                    evidence["collectedAt"] = _to_rfc3339(start_time)
-            else:
-                if isinstance(evidence, Evidence):
-                    evidence.media_ids.extend(media_ids)
-                elif isinstance(evidence, dict):
-                    if "media_ids" not in evidence:
-                        evidence["media_ids"] = []
-                    evidence["media_ids"].extend(media_ids)
+                    evidence["collected_at"] = _to_rfc3339(start_time)
+            evidence = _evidence_for_media(evidence, [m.id for m in media_list])
 
         return await self.create_journal_entry(
             entry_type="conversation_continuation",
@@ -867,24 +827,14 @@ class AsyncScambusClient(BaseScambusClient):
 
         if media is not None:
             media_list = media if isinstance(media, list) else [media]
-            media_ids = [m.id for m in media_list]
-
             if evidence is None:
                 evidence = {
                     "type": "document",
-                    "title": "Note Evidence",
                     "description": f"Evidence for note: {description}",
                     "source": "Note Attachment",
                     "collected_at": _to_rfc3339(performed_at or datetime.now(timezone.utc)),
-                    "media_ids": media_ids,
                 }
-            else:
-                if isinstance(evidence, Evidence):
-                    evidence.media_ids.extend(media_ids)
-                elif isinstance(evidence, dict):
-                    if "media_ids" not in evidence:
-                        evidence["media_ids"] = []
-                    evidence["media_ids"].extend(media_ids)
+            evidence = _evidence_for_media(evidence, [m.id for m in media_list])
 
         return await self.create_journal_entry(
             entry_type="note",
@@ -1077,16 +1027,15 @@ class AsyncScambusClient(BaseScambusClient):
         limit: int = 20,
     ) -> List[JournalEntry]:
         """List journal entries."""
-        params = {"page": page, "limit": limit}
+        params = _page_params(page, limit)
         if entry_type:
             params["type"] = entry_type
 
         response = await self._request("GET", "/journal-entries", params=params)
-
-        if isinstance(response, dict) and "data" in response:
-            return [JournalEntry.from_dict(item["journal_entry"]) for item in response["data"]]
-        else:
-            return []
+        return [
+            JournalEntry.from_dict(item["journal_entry"])
+            for item in _page_data(response, "GET", "/journal-entries")
+        ]
 
     async def query_journal_entries(
         self,
@@ -1362,16 +1311,12 @@ class AsyncScambusClient(BaseScambusClient):
         limit: int = 20,
     ) -> List[Identifier]:
         """List identifiers."""
-        params = {"page": page, "limit": limit}
+        params = _page_params(page, limit)
         if identifier_type:
             params["type"] = identifier_type
 
         response = await self._request("GET", "/identifiers", params=params)
-
-        if isinstance(response, dict) and "data" in response:
-            return [Identifier.from_dict(identifier) for identifier in response["data"]]
-        else:
-            return []
+        return [Identifier.from_dict(item) for item in _page_data(response, "GET", "/identifiers")]
 
     async def get_identifier(self, identifier_id: str) -> Identifier:
         """Get identifier by ID."""
@@ -1526,22 +1471,18 @@ class AsyncScambusClient(BaseScambusClient):
         include_test: bool = False,
     ) -> List[Case]:
         """List cases with optional filtering."""
-        params = {"page": page, "limit": limit}
+        if include_test:
+            warnings.warn(_INCLUDE_TEST_IGNORED, DeprecationWarning, stacklevel=2)
+        params = _page_params(page, limit)
         if status:
             params["status"] = status
         if priority:
             params["priority"] = priority
         if category:
             params["category"] = category
-        if include_test:
-            params["includeTest"] = "true"
 
         response = await self._request("GET", "/cases", params=params)
-
-        if isinstance(response, dict) and "data" in response:
-            return [Case.from_dict(case) for case in response["data"]]
-        else:
-            return []
+        return [Case.from_dict(item) for item in _page_data(response, "GET", "/cases")]
 
     async def get_case(self, case_id: str) -> Case:
         """Get case by ID."""
@@ -2131,6 +2072,10 @@ class AsyncScambusClient(BaseScambusClient):
         )
         return response
 
+    async def rebuild_stream(self, stream_id: str) -> Dict[str, Any]:
+        """Clear a stream and rebuild it from its filter."""
+        return await self._request("POST", f"/export-streams/{stream_id}/rebuild")
+
     # ── File Export Methods ────────────────────────────────────────────
 
     async def create_file_export(
@@ -2406,17 +2351,15 @@ class AsyncScambusClient(BaseScambusClient):
 
     async def get_effective_tags(self, entity_type: str, entity_id: str) -> List[Dict[str, Any]]:
         """Get effective tags for an entity."""
-        response = await self._request("GET", f"/tags/effective/{entity_type}/{entity_id}")
-        if isinstance(response, list):
-            return response
-        return []
+        endpoint = f"/tags/effective/{entity_type}/{entity_id}"
+        response = await self._request("GET", endpoint)
+        return [] if response is None else _page_data(response, "GET", endpoint, None)
 
-    async def get_tag_history(self, entity_type: str, entity_id: str) -> List[JournalEntry]:
-        """Get tag operation history for an entity."""
-        response = await self._request("GET", f"/tags/history/{entity_type}/{entity_id}")
-        if isinstance(response, list):
-            return [JournalEntry.from_dict(e) for e in response]
-        return []
+    async def get_identifier_tag_history(self, identifier_id: str) -> List[JournalEntry]:
+        """Get the tag_operation journal entries for an identifier, newest first."""
+        endpoint = f"/identifiers/{identifier_id}/tag-history"
+        response = await self._request("GET", endpoint)
+        return [JournalEntry.from_dict(e) for e in _page_data(response, "GET", endpoint, "entries")]
 
     # ── Search Methods ────────────────────────────────────────────────
 
@@ -2479,20 +2422,18 @@ class AsyncScambusClient(BaseScambusClient):
     async def search_cases(
         self,
         query: Optional[str] = None,
-        status: Optional[str] = None,
+        status: Optional[Union[str, List[str]]] = None,
         limit: int = 50,
     ) -> List[Case]:
-        """Search cases."""
-        data = {"limit": limit}
+        """Search cases. Status is open, investigating or closed, or a list of these."""
+        data: Dict[str, Any] = {"limit": limit}
         if query:
-            data["query"] = query
+            data["searchQuery"] = query
         if status:
-            data["status"] = status
+            data["status"] = [status] if isinstance(status, str) else status
 
         response = await self._request("POST", "/search/cases", json_data=data)
-        if isinstance(response, list):
-            return [Case.from_dict(c) for c in response]
-        return []
+        return [Case.from_dict(c) for c in _page_data(response, "POST", "/search/cases")]
 
     # ── Notification Methods ──────────────────────────────────────────
 
@@ -2547,9 +2488,7 @@ class AsyncScambusClient(BaseScambusClient):
     async def list_sessions(self) -> List[Session]:
         """List current user's sessions."""
         response = await self._request("GET", "/sessions")
-        if isinstance(response, list):
-            return [Session.from_dict(s) for s in response]
-        return []
+        return [Session.from_dict(s) for s in _page_data(response, "GET", "/sessions", "sessions")]
 
     async def revoke_session(self, session_id: str) -> None:
         """Revoke a session."""
@@ -2558,9 +2497,7 @@ class AsyncScambusClient(BaseScambusClient):
     async def list_passkeys(self) -> List[Passkey]:
         """List current user's passkeys."""
         response = await self._request("GET", "/passkeys")
-        if isinstance(response, list):
-            return [Passkey.from_dict(p) for p in response]
-        return []
+        return [Passkey.from_dict(p) for p in _page_data(response, "GET", "/passkeys", None)]
 
     async def delete_passkey(self, passkey_id: str) -> None:
         """Delete a passkey."""
@@ -2612,10 +2549,9 @@ class AsyncScambusClient(BaseScambusClient):
         self,
         name: str,
         description: Optional[str] = None,
-        active: bool = True,
     ) -> Dict[str, Any]:
-        """Create a new automation identity."""
-        body = {"name": name, "active": active}
+        """Create a new automation identity. The server creates it active."""
+        body = {"name": name}
         if description:
             body["description"] = description
 
@@ -2627,16 +2563,25 @@ class AsyncScambusClient(BaseScambusClient):
         name: str,
         expires_at: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Create a new API key for an automation."""
+        """Create an API key for an automation; authenticate with f"{secret_id}:{key}"."""
         body = {"name": name}
         if expires_at:
-            body["expiresAt"] = expires_at
+            body["expires_at"] = expires_at
 
         return await self._request("POST", f"/automations/{automation_id}/api-keys", json_data=body)
 
     async def list_automations(self) -> List[Dict[str, Any]]:
         """List all automations for the organization."""
-        return await self._request("GET", "/automations")
+        automations: List[Dict[str, Any]] = []
+        page = 1
+        while True:
+            response = await self._request(
+                "GET", "/automations", params=_page_params(page, MAX_PAGE_SIZE)
+            )
+            automations.extend(_page_data(response, "GET", "/automations"))
+            if page >= _total_pages(response, "/automations"):
+                return automations
+            page += 1
 
     async def get_automation(self, automation_id: str) -> Dict[str, Any]:
         """Get automation details by ID."""

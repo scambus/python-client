@@ -61,8 +61,8 @@ def main():
 
     key_data = client.create_automation_api_key(automation_id=automation_id, name="Production Key")
 
-    access_key_id = key_data.get("accessKeyId")
-    secret_key = key_data.get("secretAccessKey")
+    access_key_id = key_data.get("id")
+    secret_key = key_data.get("key")
     api_key = f"{access_key_id}:{secret_key}"
 
     print("   ✓ Created API key")
@@ -79,8 +79,8 @@ def main():
     keys = client.list_automation_api_keys(automation_id)
     print(f"   Found {len(keys)} API keys")
     for key in keys:
-        status = "active" if key.get("isActive") else "revoked"
-        print(f"   - {key.get('name')} ({status}) - {key.get('accessKeyId')[:8]}...")
+        status = "active" if key.get("is_active") else "revoked"
+        print(f"   - {key.get('name')} ({status}) - {key.get('id')[:8]}...")
 
     # =========================================================================
     # Create Additional Key (for rotation)
@@ -90,7 +90,7 @@ def main():
     new_key_data = client.create_automation_api_key(
         automation_id=automation_id, name="Rotation Key"
     )
-    new_key_id = new_key_data.get("accessKeyId")
+    new_key_id = new_key_data.get("id")
     print(f"   ✓ Created new key: {new_key_id[:8]}...")
 
     # =========================================================================
@@ -107,8 +107,8 @@ def main():
     # Verify revocation
     keys = client.list_automation_api_keys(automation_id)
     for key in keys:
-        if key.get("accessKeyId") == old_key_id:
-            print(f"     Status: {'revoked' if not key.get('isActive') else 'still active'}")
+        if key.get("id") == old_key_id:
+            print(f"     Status: {'revoked' if not key.get('is_active') else 'still active'}")
 
     # =========================================================================
     # Delete Key Permanently
@@ -124,7 +124,7 @@ def main():
     print("\n8. Using automation credentials...")
 
     # Create a new client with automation credentials
-    new_api_key = f"{new_key_data.get('accessKeyId')}:{new_key_data.get('secretAccessKey')}"
+    new_api_key = f"{new_key_data.get('id')}:{new_key_data.get('key')}"
     print(f"   Combined key: {new_api_key[:8]}...")
 
     # Note: In practice, you would use the API key like this:
@@ -132,7 +132,7 @@ def main():
 
     print("   To use automation credentials in scripts:")
     print("   automation_client = ScambusClient(")
-    print(f"       api_key_id='{new_key_data.get('accessKeyId')[:8]}...',")
+    print(f"       api_key_id='{new_key_data.get('id')[:8]}...',")
     print("       api_key_secret='...'")
     print("   )")
 
@@ -142,7 +142,7 @@ def main():
     print("\n9. Cleaning up...")
 
     # Delete the remaining key
-    client.delete_automation_api_key(automation_id, new_key_data.get("accessKeyId"))
+    client.delete_automation_api_key(automation_id, new_key_data.get("id"))
     print("   ✓ Deleted remaining key")
 
     # Note: You may want to keep the automation for future use

@@ -7,7 +7,7 @@ import random
 import warnings
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from .config import get_api_key_id, get_api_key_secret, get_api_token, get_api_url
 from .exceptions import (
@@ -19,6 +19,39 @@ from .exceptions import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+_INCLUDE_TEST_IGNORED = (
+    "include_test is ignored: the server shows test data only to a client in test mode"
+)
+
+
+def _page_data(response: Any, method: str, endpoint: str, key: Optional[str] = "data") -> List[Any]:
+    """Return the list under KEY, or the response itself when KEY is None; raise when it is not a list."""
+    items = response
+    if key is not None:
+        items = response.get(key) if isinstance(response, dict) else None
+    if isinstance(items, list):
+        return items
+    raise ScambusAPIError(f"Unexpected response from {method} {endpoint}: {str(response)[:200]}")
+
+
+MAX_PAGE_SIZE = 100
+
+
+def _page_params(page: int, limit: int) -> Dict[str, int]:
+    """Return page query parameters; the server replaces a page size above MAX_PAGE_SIZE with its default."""
+    if not 1 <= limit <= MAX_PAGE_SIZE:
+        raise ValueError(f"limit must be between 1 and {MAX_PAGE_SIZE}, got {limit}")
+    return {"page": page, "page_size": limit}
+
+
+def _total_pages(response: Any, endpoint: str) -> int:
+    """Return pagination.total_pages of a paginated response, or raise when it is missing."""
+    pagination = response.get("pagination") if isinstance(response, dict) else None
+    if not isinstance(pagination, dict) or not isinstance(pagination.get("total_pages"), int):
+        raise ScambusAPIError(f"Response from GET {endpoint} has no pagination.total_pages")
+    return pagination["total_pages"]
 
 
 def _to_rfc3339(dt: datetime) -> str:
@@ -129,6 +162,8 @@ class BaseScambusClient:
         try:
             error_data = response.json()
             error_message = error_data.get("error", response.text)
+            if error_data.get("detail"):
+                error_message = f"{error_message}: {error_data['detail']}"
         except (ValueError, Exception):
             error_data = None
             error_message = response.text or f"HTTP {response.status_code}"

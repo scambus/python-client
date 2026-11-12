@@ -771,3 +771,29 @@ def delete(ctx, stream_id):
     except Exception as e:
         print_error(f"Failed to delete stream: {e}")
         sys.exit(1)
+
+
+@streams.command()
+@click.argument("stream_id")
+@click.option("--yes", is_flag=True, help="Skip confirmation")
+@click.pass_context
+def rebuild(ctx, stream_id, yes):
+    """Clear a stream and rebuild it from its filter.
+
+    The rebuild runs on the server; a notification reports when it ends.
+
+    Examples:
+        scambus streams rebuild <stream-id>
+    """
+    if not yes:
+        click.confirm(f"Clear and rebuild stream {stream_id}?", abort=True)
+
+    client = ctx.obj.get_client()
+
+    try:
+        result = client.rebuild_stream(stream_id)
+        print_success(result.get("message", f"Rebuild started for {stream_id}"))
+
+    except Exception as e:
+        print_error(f"Failed to rebuild stream: {e}")
+        sys.exit(1)

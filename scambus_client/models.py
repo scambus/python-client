@@ -4,7 +4,7 @@ Data models for the Scambus API.
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, tzinfo
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 
 def _local_tz() -> tzinfo:
@@ -470,28 +470,26 @@ class Identifier:
 @dataclass
 class Evidence:
     """
-    Evidence attached to a journal entry (read-only from API).
+    Evidence attached to a journal entry. Each evidence item holds one media item.
     Evidence is created through journal entries, not directly.
 
     Attributes:
-        id: Evidence UUID
         type: Type of evidence (screenshot, recording, document, etc.)
-        title: Evidence title
+        media_id: ID of the media item
         description: Detailed description
         source: Where/how evidence was obtained
         collected_at: When evidence was collected
-        media_ids: List of media IDs attached
+        id: Evidence UUID, set by the server
         created_at: Creation timestamp
         updated_at: Last update timestamp
     """
 
-    id: str
     type: str
-    title: str
+    media_id: Optional[str] = None
     description: Optional[str] = None
     source: Optional[str] = None
     collected_at: Optional[datetime] = None
-    media_ids: List[str] = field(default_factory=list)
+    id: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     is_test: bool = False  # Whether this is test/demo data (excluded from normal queries)
@@ -500,17 +498,41 @@ class Evidence:
     def from_dict(cls, data: Dict[str, Any]) -> "Evidence":
         """Create Evidence from API response."""
         return cls(
-            id=data["id"],
             type=data["type"],
-            title=data["title"],
+            media_id=data.get("media_id"),
             description=data.get("description"),
             source=data.get("source"),
             collected_at=Identifier._parse_datetime(data.get("collected_at")),
-            media_ids=data.get("media_ids", []),
+            id=data.get("id"),
             created_at=Identifier._parse_datetime(data.get("created_at")),
             updated_at=Identifier._parse_datetime(data.get("updated_at")),
             is_test=data.get("is_test", False),
         )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Return the evidence fields that a journal entry create request reads."""
+        data: Dict[str, Any] = {"type": self.type}
+        if self.media_id:
+            data["media_id"] = self.media_id
+        if self.description:
+            data["description"] = self.description
+        if self.source:
+            data["source"] = self.source
+        if self.collected_at:
+            data["collected_at"] = _dt_to_rfc3339(self.collected_at)
+        return data
+
+
+def _evidence_for_media(
+    evidence: Union[Dict[str, Any], Evidence], media_ids: List[str]
+) -> List[Dict[str, Any]]:
+    """Return one copy of EVIDENCE per distinct media ID, after the media EVIDENCE already holds."""
+    base = evidence.to_dict() if isinstance(evidence, Evidence) else dict(evidence)
+    held = base.pop("media_ids", None) or []
+    own = base.pop("media_id", None)
+    if own:
+        held = [own, *held]
+    return [{**base, "media_id": media_id} for media_id in dict.fromkeys([*held, *media_ids])]
 
 
 @dataclass

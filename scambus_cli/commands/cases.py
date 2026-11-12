@@ -90,7 +90,7 @@ def get(ctx, case_id, output_json):
                 {
                     "id": case.id,
                     "title": case.title,
-                    "description": case.description,
+                    "notes": case.notes,
                     "status": case.status,
                     "created_at": case.created_at.isoformat() if case.created_at else None,
                 }
@@ -100,7 +100,7 @@ def get(ctx, case_id, output_json):
                 {
                     "ID": case.id,
                     "Title": case.title,
-                    "Description": case.description or "N/A",
+                    "Notes": case.notes or "N/A",
                     "Status": case.status or "N/A",
                     "Created": case.created_at.isoformat() if case.created_at else "N/A",
                 },
@@ -198,4 +198,28 @@ def update(ctx, case_id, title, description, status, is_test):
 
     except Exception as e:
         print_error(f"Failed to update case: {e}")
+        sys.exit(1)
+
+
+@cases.command()
+@click.argument("case_id")
+@click.option("--yes", is_flag=True, help="Skip confirmation")
+@click.pass_context
+def delete(ctx, case_id, yes):
+    """Delete a case.
+
+    Examples:
+        scambus cases delete <case-id>
+    """
+    if not yes:
+        click.confirm(f"Delete case {case_id}?", abort=True)
+
+    client = ctx.obj.get_client()
+
+    try:
+        client.delete_case(case_id)
+        print_success(f"Case deleted: {case_id}")
+
+    except Exception as e:
+        print_error(f"Failed to delete case: {e}")
         sys.exit(1)

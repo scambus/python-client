@@ -15,14 +15,14 @@ Breaking Changes (v2.0.0):
 """
 
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
-from scambus_client import ScambusClient
+from scambus_client import IdentifierLookup, ScambusClient
 
 # Initialize client
 client = ScambusClient(
-    base_url=os.environ.get("SCAMBUS_URL", "http://localhost:3000"),
-    api_key=os.environ.get("SCAMBUS_API_KEY"),
+    api_url=os.environ.get("SCAMBUS_API_URL", "http://localhost:8080/api"),
+    api_token=os.environ.get("SCAMBUS_API_TOKEN"),
 )
 
 
@@ -34,7 +34,7 @@ def example_1_basic_in_progress_activity():
     activity = client.create_journal_entry(
         entry_type="phone_call",
         description="Customer support call with Jane Doe",
-        start_time=datetime.now(),
+        start_time=datetime.now(timezone.utc),
         in_progress=True,  # This will omit end_time from the request
     )
 
@@ -64,9 +64,9 @@ def example_3_complete_with_custom_time():
     print("\n=== Example 3: Complete with Custom End Time ===")
 
     # Start an activity 2 hours ago
-    start = datetime.now() - timedelta(hours=2)
+    start = datetime.now(timezone.utc) - timedelta(hours=2)
     activity = client.create_journal_entry(
-        entry_type="research",
+        entry_type="note",
         description="Investigating suspicious email pattern",
         start_time=start,
         in_progress=True,
@@ -83,7 +83,7 @@ def example_3_complete_with_custom_time():
     )
 
     print(f"✓ Activity completed: {completion.id}")
-    print(f"  Duration: {completion.details.get('durationSeconds')} seconds")
+    print(f"  Duration: {completion.details.get('duration_seconds')} seconds")
 
 
 def example_4_instant_completion():
@@ -95,7 +95,7 @@ def example_4_instant_completion():
     note = client.create_journal_entry(
         entry_type="note",
         description="Quick observation about the case",
-        start_time=datetime.now(),
+        start_time=datetime.now(timezone.utc),
         # No end_time and no in_progress means instant completion
     )
 
@@ -110,11 +110,13 @@ def example_5_phone_call_workflow():
     print("\n=== Example 5: Phone Call Workflow ===")
 
     # Start a phone call
+    start = datetime.now(timezone.utc)
     call = client.create_phone_call(
         description="Outbound call to verify account",
         direction="outbound",
-        start_time=datetime.now(),
-        identifiers=["phone:+15551234567"],
+        start_time=start,
+        end_time=start,  # Required but ignored when in_progress=True
+        identifiers=[IdentifierLookup(type="phone", value="+15551234567")],
         in_progress=True,
     )
 
@@ -131,8 +133,8 @@ def example_5_phone_call_workflow():
     )
 
     print(f"\n✓ Phone call completed: {completion.id}")
-    print(f"  Duration: {completion.details.get('durationSeconds')} seconds")
-    print(f"  Reason: {completion.details.get('completionReason')}")
+    print(f"  Duration: {completion.details.get('duration_seconds')} seconds")
+    print(f"  Reason: {completion.details.get('completion_reason')}")
 
 
 def example_6_text_conversation_workflow():
@@ -140,11 +142,13 @@ def example_6_text_conversation_workflow():
     print("\n=== Example 6: Text Conversation Workflow ===")
 
     # Start a text conversation
+    start = datetime.now(timezone.utc)
     conversation = client.create_text_conversation(
         description="SMS exchange with reported scammer",
         platform="sms",
-        start_time=datetime.now(),
-        identifiers=["phone:+15559876543"],
+        start_time=start,
+        end_time=start,  # Required but ignored when in_progress=True
+        identifiers=[IdentifierLookup(type="phone", value="+15559876543")],
         in_progress=True,
     )
 
@@ -158,7 +162,7 @@ def example_6_text_conversation_workflow():
     )
 
     print(f"✓ Conversation completed: {completion.id}")
-    print(f"  Reason: {completion.details.get('completionReason')}")
+    print(f"  Reason: {completion.details.get('completion_reason')}")
 
 
 def example_7_complete_by_id():
@@ -167,9 +171,9 @@ def example_7_complete_by_id():
 
     # Start an activity
     activity = client.create_journal_entry(
-        entry_type="analysis",
+        entry_type="note",
         description="Analyzing transaction patterns",
-        start_time=datetime.now(),
+        start_time=datetime.now(timezone.utc),
         in_progress=True,
     )
 
@@ -192,9 +196,9 @@ def example_8_get_in_progress_activities():
     activities = []
     for i in range(3):
         activity = client.create_journal_entry(
-            entry_type="observation",
+            entry_type="note",
             description=f"Ongoing observation #{i+1}",
-            start_time=datetime.now(),
+            start_time=datetime.now(timezone.utc),
             in_progress=True,
         )
         activities.append(activity)

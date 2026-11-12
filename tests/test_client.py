@@ -302,8 +302,7 @@ class TestScambusClientSearch:
 
         mock_response = Mock()
         mock_response.status_code = 200
-        # API returns a plain list, not wrapped in results/total
-        mock_response.json.return_value = [mock_case_data]
+        mock_response.json.return_value = {"data": [mock_case_data], "hasMore": False}
         client.session.request.return_value = mock_response
 
         results = client.search_cases(query="phishing", status="open")
@@ -656,8 +655,8 @@ class TestIsTestFiltering:
         params = call_args.kwargs.get("params", {})
         assert "includeTest" not in params
 
-    def test_list_cases_includes_test_when_specified(self, client, mock_case_data):
-        """Test that list_cases includes test data when include_test=True."""
+    def test_list_cases_warns_that_include_test_is_ignored(self, client, mock_case_data):
+        """Test that list_cases warns instead of sending a parameter the server ignores."""
         from unittest.mock import Mock
 
         mock_response = Mock()
@@ -665,12 +664,58 @@ class TestIsTestFiltering:
         mock_response.json.return_value = {"data": [mock_case_data]}
         client.session.request.return_value = mock_response
 
-        client.list_cases(include_test=True)
+        with pytest.warns(DeprecationWarning, match="include_test is ignored"):
+            client.list_cases(include_test=True)
 
-        # Verify the request was made with includeTest=true param
-        call_args = client.session.request.call_args
-        params = call_args.kwargs.get("params", {})
-        assert params.get("includeTest") == "true"
+        params = client.session.request.call_args.kwargs.get("params", {})
+        assert "includeTest" not in params
+
+
+class TestPaginatedLists:
+    """Test the page-numbered list methods against the server's pagination contract."""
+
+    @pytest.mark.parametrize(
+        ("method", "path", "item"),
+        [
+            ("list_cases", "/cases", {"id": "case-1", "title": "T"}),
+            ("list_identifiers", "/identifiers", {"id": "i-1", "type": "email"}),
+            (
+                "list_journal_entries",
+                "/journal-entries",
+                {"journal_entry": {"id": "e-1", "type": "note"}, "can_edit": True},
+            ),
+        ],
+    )
+    def test_sends_page_size(self, client, method, path, item):
+        """Test that the page size goes in page_size, the key the server reads."""
+        from unittest.mock import Mock
+
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"data": [item], "pagination": {}}
+        client.session.request.return_value = mock_response
+
+        result = getattr(client, method)(page=2, limit=50)
+
+        call = client.session.request.call_args.kwargs
+        assert call["url"].endswith(path)
+        assert call["params"]["page"] == 2
+        assert call["params"]["page_size"] == 50
+        assert "limit" not in call["params"]
+        assert len(result) == 1
+
+    @pytest.mark.parametrize("method", ["list_cases", "list_identifiers", "list_journal_entries"])
+    def test_unexpected_response_raises(self, client, method):
+        """Test that a response without a data list raises instead of returning nothing."""
+        from unittest.mock import Mock
+
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"items": []}
+        client.session.request.return_value = mock_response
+
+        with pytest.raises(ScambusAPIError, match="Unexpected response"):
+            getattr(client, method)()
 
     def test_search_identifiers_excludes_test_by_default(self, client, mock_identifier_data):
         """Test that search_identifiers excludes test data by default."""

@@ -20,9 +20,9 @@ def create_case_example():
     """Create a new case for tracking a fraud investigation."""
     case = client.create_case(
         title="Phishing Campaign - January 2025",
-        description="Large-scale phishing operation targeting financial institutions. "
+        notes="Large-scale phishing operation targeting financial institutions. "
         "Multiple victims reported email scams with fake bank portals.",
-        status="active",
+        status="open",
     )
 
     print(f"✓ Created case: {case.id}")
@@ -34,11 +34,11 @@ def create_case_example():
 
 
 def list_cases_example():
-    """List all active cases."""
-    # Get active cases only
-    cases = client.list_cases(status="active", limit=10)
+    """List all open cases."""
+    # Get open cases only
+    cases = client.list_cases(status="open", limit=10)
 
-    print(f"\n✓ Found {len(cases)} active cases:")
+    print(f"\n✓ Found {len(cases)} open cases:")
     for case in cases:
         print(f"  - {case.title} ({case.status})")
 
@@ -47,12 +47,12 @@ def update_case_example(case_id: str):
     """Update a case with new information."""
     updated_case = client.update_case(
         case_id=case_id,
-        description="Large-scale phishing operation targeting financial institutions. "
+        notes="Large-scale phishing operation targeting financial institutions. "
         "Investigation ongoing. 15 victims identified so far.",
     )
 
     print(f"\n✓ Updated case: {updated_case.id}")
-    print(f"  New description: {updated_case.description}")
+    print(f"  New notes: {updated_case.notes}")
 
 
 def get_case_details(case_id: str):
@@ -62,7 +62,7 @@ def get_case_details(case_id: str):
     print("\n✓ Case Details:")
     print(f"  ID: {case.id}")
     print(f"  Title: {case.title}")
-    print(f"  Description: {case.description}")
+    print(f"  Notes: {case.notes}")
     print(f"  Status: {case.status}")
     print(f"  Created: {case.created_at}")
     print(f"  Updated: {case.updated_at}")
@@ -83,7 +83,7 @@ def main():
     # Create a new case
     case_id = create_case_example()
 
-    # List all active cases
+    # List all open cases
     list_cases_example()
 
     # Update the case with more details

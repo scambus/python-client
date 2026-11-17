@@ -4641,10 +4641,14 @@ class ScambusClient(
                 print(f"{tag.title}: {tag.tag_type}")
             ```
         """
-        response = self._request("GET", "/tags")
-        if isinstance(response, list):
-            return [Tag.from_dict(t) for t in response]
-        return []
+        tags: List[Tag] = []
+        page = 1
+        while True:
+            response = self._request("GET", "/tags", params=_page_params(page, MAX_PAGE_SIZE))
+            tags.extend(Tag.from_dict(t) for t in _page_data(response, "GET", "/tags"))
+            if page >= _total_pages(response, "/tags"):
+                return tags
+            page += 1
 
     def get_tag(self, tag_id: str) -> Tag:
         """

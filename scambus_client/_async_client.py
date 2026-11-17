@@ -2197,10 +2197,14 @@ class AsyncScambusClient(BaseScambusClient):
 
     async def list_tags(self) -> List[Tag]:
         """List all tags."""
-        response = await self._request("GET", "/tags")
-        if isinstance(response, list):
-            return [Tag.from_dict(t) for t in response]
-        return []
+        tags: List[Tag] = []
+        page = 1
+        while True:
+            response = await self._request("GET", "/tags", params=_page_params(page, MAX_PAGE_SIZE))
+            tags.extend(Tag.from_dict(t) for t in _page_data(response, "GET", "/tags"))
+            if page >= _total_pages(response, "/tags"):
+                return tags
+            page += 1
 
     async def get_tag(self, tag_id: str) -> Tag:
         """Get tag by ID."""

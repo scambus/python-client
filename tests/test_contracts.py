@@ -108,6 +108,27 @@ async def test_list_automations_raises_on_unexpected_shape(any_client):
 
 
 @pytest.mark.asyncio
+async def test_list_tags_reads_every_page(any_client):
+    any_client._request.side_effect = [
+        {"data": [{"id": "t-1", "title": "A"}], "pagination": {"page": 1, "total_pages": 2}},
+        {"data": [{"id": "t-2", "title": "B"}], "pagination": {"page": 2, "total_pages": 2}},
+    ]
+
+    tags = await _call(any_client, "list_tags")
+
+    assert [t.title for t in tags] == ["A", "B"]
+    assert [c.kwargs["params"]["page"] for c in any_client._request.call_args_list] == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_list_tags_raises_on_unexpected_shape(any_client):
+    any_client._request.return_value = {"error": "nope"}
+
+    with pytest.raises(ScambusAPIError):
+        await _call(any_client, "list_tags")
+
+
+@pytest.mark.asyncio
 async def test_create_automation_api_key_sends_expires_at(any_client):
     any_client._request.return_value = {"id": "k-1", "key": "s", "secret_id": "k-1"}
 

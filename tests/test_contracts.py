@@ -129,6 +129,71 @@ async def test_list_tags_raises_on_unexpected_shape(any_client):
 
 
 @pytest.mark.asyncio
+async def test_list_views_reads_every_page(any_client):
+    any_client._request.side_effect = [
+        {
+            "data": [{"id": "v-1", "name": "A", "entity_type": "journal"}],
+            "pagination": {"page": 1, "total_pages": 2},
+        },
+        {
+            "data": [{"id": "v-2", "name": "B", "entity_type": "journal"}],
+            "pagination": {"page": 2, "total_pages": 2},
+        },
+    ]
+
+    views = await _call(any_client, "list_views")
+
+    assert [v.id for v in views] == ["v-1", "v-2"]
+    assert [c.kwargs["params"] for c in any_client._request.call_args_list] == [
+        {"page": 1, "limit": 100},
+        {"page": 2, "limit": 100},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_list_notifications_reads_notifications_key(any_client):
+    notification = {
+        "id": "n-1",
+        "user_id": "u-1",
+        "timestamp": "2026-11-17T12:00:00Z",
+        "notification_text": "Hello",
+        "service": "cases",
+    }
+    any_client._request.return_value = {
+        "notifications": [notification],
+        "total": 1,
+        "limit": 50,
+        "offset": 0,
+    }
+
+    notifications = await _call(any_client, "list_notifications")
+
+    assert [n.id for n in notifications] == ["n-1"]
+
+
+@pytest.mark.asyncio
+async def test_get_case_comments_reads_comments_key(any_client):
+    comment = {"id": "c-1", "case_id": "case-1", "author_id": "u-1", "content": "Hi"}
+    any_client._request.return_value = {"comments": [comment], "total": 1}
+
+    comments = await _call(any_client, "get_case_comments", "case-1")
+
+    assert [c.id for c in comments] == ["c-1"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "method,args",
+    [("list_views", ()), ("list_notifications", ()), ("get_case_comments", ("case-1",))],
+)
+async def test_list_methods_raise_on_unexpected_shape(any_client, method, args):
+    any_client._request.return_value = {"error": "nope"}
+
+    with pytest.raises(ScambusAPIError):
+        await _call(any_client, method, *args)
+
+
+@pytest.mark.asyncio
 async def test_create_automation_api_key_sends_expires_at(any_client):
     any_client._request.return_value = {"id": "k-1", "key": "s", "secret_id": "k-1"}
 

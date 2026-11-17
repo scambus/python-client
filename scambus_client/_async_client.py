@@ -1171,11 +1171,16 @@ class AsyncScambusClient(BaseScambusClient):
 
     async def list_views(self) -> List[View]:
         """List all available views."""
-        response = await self._request("GET", "/views")
-
-        if isinstance(response, list):
-            return [View.from_dict(view) for view in response]
-        return []
+        views: List[View] = []
+        page = 1
+        while True:
+            response = await self._request(
+                "GET", "/views", params={"page": page, "limit": MAX_PAGE_SIZE}
+            )
+            views.extend(View.from_dict(v) for v in _page_data(response, "GET", "/views"))
+            if page >= _total_pages(response, "/views"):
+                return views
+            page += 1
 
     async def get_view(self, view_id: str) -> View:
         """Get a specific view by ID."""
@@ -2158,10 +2163,9 @@ class AsyncScambusClient(BaseScambusClient):
 
     async def get_case_comments(self, case_id: str) -> List[CaseComment]:
         """Get comments for a case."""
-        response = await self._request("GET", f"/cases/{case_id}/comments")
-        if isinstance(response, list):
-            return [CaseComment.from_dict(c) for c in response]
-        return []
+        endpoint = f"/cases/{case_id}/comments"
+        response = await self._request("GET", endpoint)
+        return [CaseComment.from_dict(c) for c in _page_data(response, "GET", endpoint, "comments")]
 
     async def create_case_comment(
         self,
@@ -2457,9 +2461,10 @@ class AsyncScambusClient(BaseScambusClient):
             params["offset"] = offset
 
         response = await self._request("GET", "/notifications", params=params)
-        if isinstance(response, list):
-            return [Notification.from_dict(n) for n in response]
-        return []
+        return [
+            Notification.from_dict(n)
+            for n in _page_data(response, "GET", "/notifications", "notifications")
+        ]
 
     async def get_notification(self, notification_id: str) -> Notification:
         """Get notification by ID."""

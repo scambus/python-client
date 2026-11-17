@@ -31,6 +31,9 @@ def _page_data(response: Any, method: str, endpoint: str, key: Optional[str] = "
     items = response
     if key is not None:
         items = response.get(key) if isinstance(response, dict) else None
+        # The Go server encodes an empty nil slice as null.
+        if items is None and isinstance(response, dict) and key in response:
+            return []
     if isinstance(items, list):
         return items
     raise ScambusAPIError(f"Unexpected response from {method} {endpoint}: {str(response)[:200]}")

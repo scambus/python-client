@@ -32,6 +32,18 @@ def test_list_sessions_reads_sessions_key(client):
     assert [s.id for s in client.list_sessions()] == ["s-1"]
 
 
+def test_get_case_comments_reads_null_as_empty(client):
+    _respond(client, 200, {"comments": None, "total": 0})
+
+    assert client.get_case_comments("case-1") == []
+
+
+def test_list_cases_reads_null_data_as_empty(client):
+    _respond(client, 200, {"data": None, "pagination": {"page": 1, "total_pages": 0}})
+
+    assert client.list_cases() == []
+
+
 def test_list_sessions_raises_on_malformed_response(client):
     _respond(client, 200, [{"id": "s-1"}])
 

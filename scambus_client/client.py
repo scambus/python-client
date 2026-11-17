@@ -2488,11 +2488,14 @@ class ScambusClient(
         Returns:
             List of View objects
         """
-        response = self._request("GET", "/views")
-
-        if isinstance(response, list):
-            return [View.from_dict(view) for view in response]
-        return []
+        views: List[View] = []
+        page = 1
+        while True:
+            response = self._request("GET", "/views", params={"page": page, "limit": MAX_PAGE_SIZE})
+            views.extend(View.from_dict(v) for v in _page_data(response, "GET", "/views"))
+            if page >= _total_pages(response, "/views"):
+                return views
+            page += 1
 
     def get_view(self, view_id: str) -> View:
         """
@@ -4526,10 +4529,9 @@ class ScambusClient(
                 print(f"{comment.content} by {comment.author_id}")
             ```
         """
-        response = self._request("GET", f"/cases/{case_id}/comments")
-        if isinstance(response, list):
-            return [CaseComment.from_dict(c) for c in response]
-        return []
+        endpoint = f"/cases/{case_id}/comments"
+        response = self._request("GET", endpoint)
+        return [CaseComment.from_dict(c) for c in _page_data(response, "GET", endpoint, "comments")]
 
     def create_case_comment(
         self,
@@ -4641,10 +4643,14 @@ class ScambusClient(
                 print(f"{tag.title}: {tag.tag_type}")
             ```
         """
-        response = self._request("GET", "/tags")
-        if isinstance(response, list):
-            return [Tag.from_dict(t) for t in response]
-        return []
+        tags: List[Tag] = []
+        page = 1
+        while True:
+            response = self._request("GET", "/tags", params=_page_params(page, MAX_PAGE_SIZE))
+            tags.extend(Tag.from_dict(t) for t in _page_data(response, "GET", "/tags"))
+            if page >= _total_pages(response, "/tags"):
+                return tags
+            page += 1
 
     def get_tag(self, tag_id: str) -> Tag:
         """
@@ -5178,9 +5184,10 @@ class ScambusClient(
             params["offset"] = offset
 
         response = self._request("GET", "/notifications", params=params)
-        if isinstance(response, list):
-            return [Notification.from_dict(n) for n in response]
-        return []
+        return [
+            Notification.from_dict(n)
+            for n in _page_data(response, "GET", "/notifications", "notifications")
+        ]
 
     def get_notification(self, notification_id: str) -> Notification:
         """
